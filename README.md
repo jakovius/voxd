@@ -1,25 +1,26 @@
 # Whisp App
 
-> Talk and type with your voice, in any of your apps!
-> A minimal, fast, modular speech-to-text dictation tool using **whisper.cpp**, with **CLI**, **GUI**, tray/background mode (**"WHISP" mode**).
+**Talk and type** with your voice, in any of your apps on Linux!  
 
+Fast, modular speech-to-text dictation tool for Linux, using **whisper.cpp**  
+featuring **CLI**, **GUI**, **"WHISP" mode** (a tray/background mode).  
+  
 ---
 
-## ✨ Features
+## Features
 
-- 🎤 Fast microphone audio recording (using `sounddevice`)
-- 🧠 Transcription with whisper.cpp
-- 📋 Automatic clipboard copy of transcript
-- ⌨️ Simulated typing into any focused app (even on GNOME/Wayland)
+- 🧠 Fast transcription with **whisper.cpp**
+- 📋 Transcript automatically copied to clipboard
+- ⌨️ Immediate simulated typing into any focused app (even on GNOME/Wayland)
 - 🧾 Session logging with timestamps
-- 🧠 AI post-processing (optional via local Ollama or a remote LLM)
+- 🧠 AI post-processing (optional, via local Ollama or a remote LLM)
 - 📊 Benchmarking, diagnostics, performance CSV export
 - 🖥️ Multiple usage modes:
   - `HEAR`: one-off transcript (from CLI or integration)
   - `CLI`: interactive shell with hotkey and commands
   - `GUI`: minimal dark-mode UI with single button
   - `WHISP`: tray mode with global hotkey
-
+  - WHISP, CLI and GUI run in the background — can be used to voice-type in any app
 ---
 
 ## 📦 Installation
