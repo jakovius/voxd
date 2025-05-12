@@ -1,0 +1,81 @@
+import os
+import sys
+import argparse
+from whisp.core.config import AppConfig
+
+# Set working directory to the folder where this script is located
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+def check_hotkey(cfg, mode):
+    # Only check for hotkey in modes that require it
+    if mode in ("cli", "gui", "whisp"):
+        hotkey = getattr(cfg, "hotkey_record", None)
+        if not hotkey:
+            print(
+                "[Whisp App] ⚠️  No global hotkey configured for recording.\n"
+                "Please set up a system-wide shortcut for recording in your OS settings,\n"
+                "and add the shortcut (e.g., 'Ctrl+Shift+R') as 'hotkey_record' in your config.yaml.\n"
+                "See documentation for details."
+            )
+            # Optionally, continue with fallback (manual trigger), or exit:
+            # sys.exit(1)
+
+def main():
+    parser = argparse.ArgumentParser(description="Whisp App Entry Point")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["cli", "gui", "whisp", "hear"],
+        help="Override app_mode from config.yaml"
+    )
+    parser.add_argument(
+        "--trigger-record",
+        action="store_true",
+        help="(Internal) signal the running Whisp App to start recording"
+    )
+    parser.add_argument(
+        "--diagnose",
+        action="store_true",
+        help="Print configuration and hotkey status"
+    )
+    args = parser.parse_args()
+
+    # If we're just the hotkey sender, dispatch and exit immediately
+    if args.trigger_record:
+        from whisp.utils.ipc_client import send_trigger
+        send_trigger()
+        sys.exit(0)
+
+    cfg = AppConfig()
+    mode = args.mode or cfg.app_mode.lower()
+
+    if args.diagnose:
+        print(f"[Diagnose] Current mode: {mode}")
+        print(f"[Diagnose] Configured hotkey_record: {getattr(cfg, 'hotkey_record', None)}")
+        sys.exit(0)
+
+    print(f"[__main__] Launching Whisp App in '{mode}' mode...")
+
+    check_hotkey(cfg, mode)
+
+    if mode == "cli":
+        from whisp.cli.cli_main import cli_main
+        from whisp.core.logger import SessionLogger
+        import argparse as ap
+        logger = SessionLogger(cfg.log_enabled, cfg.log_file)
+        cli_main(cfg, logger, ap.Namespace(save_audio=False))
+    elif mode == "gui":
+        from whisp.gui.main import main as gui_main
+        gui_main()
+    elif mode == "whisp":
+        from whisp.whisp_mode.tray import main as tray_main
+        tray_main()
+    elif mode == "hear":
+        from whisp.utils.core_runner import run_core_process
+        run_core_process(cfg, preserve_audio=False, simulate_typing=False, apply_aipp=False)
+    else:
+        print(f"[__main__] ❌ Unknown app_mode: {mode}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
