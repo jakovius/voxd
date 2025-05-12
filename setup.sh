@@ -42,7 +42,7 @@ sys_deps="ffmpeg gcc make xdg-open git cmake build-essential"
 sys_deps+=" xclip xdotool xbindkeys"
 
 # Wayland-specific tools
-sys_deps+=" wtype wl-clipboard"
+sys_deps+=" wtype wl-copy"
 
 # Preemptively ask for sudo if needed for apt installs
 need_sudo=0
