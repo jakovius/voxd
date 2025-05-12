@@ -13,6 +13,8 @@ whisper.cpp
 *log.txt
 whisp_output/last_recording.txt
 
+#dev
+
 # Distribution / packaging
 .Python
 build/
