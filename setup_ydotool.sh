@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
+# If required at any point, this script can be a run to install ydotool for typing support.
 set -e
 
-echo "=== 🧰 ydotool Setup Script for Wayland (User-Level Daemon) ==="
+echo "=== 🧰 ydotool Setup Script (User-Level Daemon) ==="
+echo "Required by Whisp app for typing support. Required on Wayland and will work for X11 too."
 
 # 1. Install dependencies
 echo "🔧 Installing build dependencies..."
