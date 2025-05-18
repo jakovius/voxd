@@ -14,6 +14,7 @@ whisper.cpp
 whisp_output/last_recording.txt
 
 #dev
+cbx.py
 
 # Distribution / packaging
 .Python

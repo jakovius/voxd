@@ -12,6 +12,6 @@ log_file: ''
 performance_log_file: performance_data.csv
 simulate_typing: true
 typing_delay: 10
-verbosity: true
+verbosity: false
 whisper_binary: whisper.cpp/build/bin/whisper-cli
 model_path: whisper.cpp/models/ggml-base.en.bin

@@ -4,6 +4,8 @@ import wave
 from datetime import datetime
 from pathlib import Path
 import tempfile
+from whisp.utils.libw import verbo
+
 
 class AudioRecorder:
     def __init__(self, samplerate=16000, channels=1):
@@ -20,13 +22,13 @@ class AudioRecorder:
         return f"recording_{dt}.wav"
 
     def start_recording(self):
-        print("[recorder] Recording started...")
+        verbo("[recorder] Recording started...")
         self.is_recording = True
         self.recording = []
 
         def callback(indata, frames, time, status):
             if status:
-                print(f"[recorder] Warning: {status}")
+                verbo(f"[recorder] Warning: {status}")
             self.recording.append(indata.copy())
 
         self.stream = sd.InputStream(
@@ -40,7 +42,7 @@ class AudioRecorder:
         if not self.is_recording:
             return None
 
-        print("[recorder] Stopping recording...")
+        verbo("[recorder] Stopping recording...")
         self.stream.stop()
         self.stream.close()
         self.is_recording = False
@@ -56,7 +58,7 @@ class AudioRecorder:
         self._save_wav(audio_data, output_path)
         self.last_temp_file = output_path
 
-        print(f"[recorder] Saved to {output_path}")
+        verbo(f"[recorder] Saved to {output_path}")
         return output_path
 
     def _save_wav(self, data, path):
@@ -71,5 +73,5 @@ class AudioRecorder:
 
     def cleanup_temp(self):
         if self.last_temp_file and self.last_temp_file.exists():
-            print(f"[recorder] Cleaning up temporary file {self.last_temp_file}")
+            verbo(f"[recorder] Cleaning up temporary file {self.last_temp_file}")
             self.last_temp_file.unlink()

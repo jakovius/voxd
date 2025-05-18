@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from whisp.utils.libw import verbo
 
 
 class SessionLogger:
@@ -9,9 +10,9 @@ class SessionLogger:
         self.entries = []
 
         if not self.enabled:
-            print("[logger] Logging disabled.")
+            verbo("[logger] Logging disabled.")
         else:
-            print(f"[logger] Logging enabled. File: {self.log_file}")
+            verbo(f"[logger] Logging enabled. File: {self.log_file}")
 
     def _default_log_filename(self):
         ts = datetime.now().strftime("%Y-%m-%d %H%M")
@@ -24,7 +25,7 @@ class SessionLogger:
         timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
         entry = f"{timestamp} {text.strip()}"
         self.entries.append(entry)
-        print(f"[logger] Logged entry: {entry[:60]}...")
+        verbo(f"[logger] Logged entry: {entry[:60]}...")
 
     def save(self, path: str = None):
         if not self.enabled or not self.entries:
@@ -35,7 +36,7 @@ class SessionLogger:
             out_path.parent.mkdir(parents=True, exist_ok=True)
             with open(out_path, "a", encoding="utf-8") as f:
                 f.write("\n".join(self.entries) + "\n")
-            print(f"[logger] Saved log to {out_path}")
+            verbo(f"[logger] Saved log to {out_path}")
         except Exception as e:
             print(f"[logger] Failed to write log: {e}")
 

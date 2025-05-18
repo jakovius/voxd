@@ -4,6 +4,7 @@ import shutil
 import os
 import sys
 import select
+from whisp.utils.libw import verbo
 
 def detect_backend():
     # Try to detect the graphical backend (Wayland or X11)
@@ -21,7 +22,7 @@ class SimulatedTyper:
         self.backend = detect_backend()
         self.tool = None
         self.enabled = self._detect_typing_tool()
-        print(f"[typer] Typing {'enabled' if self.enabled else 'disabled'} (backend: {self.backend}, tool: {self.tool})")
+        verbo(f"[typer] Typing {'enabled' if self.enabled else 'disabled'} (backend: {self.backend}, tool: {self.tool})")
 
     def _detect_typing_tool(self):
         if self.backend == "wayland":
@@ -55,7 +56,7 @@ class SimulatedTyper:
 
         text = text.rstrip() # to eliminate any unwanted trailing characters added by the typer
 
-        print(f"[typer] Typing transcript using {self.tool}...")
+        verbo(f"[typer] Typing transcript using {self.tool}...")
         if self.tool == "ydotool":
             subprocess.run(["ydotool", "type", "-d", self.delay, text])
         elif self.tool == "xdotool":

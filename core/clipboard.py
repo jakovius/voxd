@@ -2,6 +2,7 @@ import pyperclip
 import subprocess
 import os
 import shutil
+from whisp.utils.libw import verbo
 
 
 class ClipboardManager:
@@ -19,7 +20,7 @@ class ClipboardManager:
             else:
                 self.backend = "pyperclip"
 
-        print(f"[clipboard] Using backend: {self.backend}")
+        verbo(f"[clipboard] Using backend: {self.backend}")
 
     def copy(self, text: str):
         if not text.strip():

@@ -14,7 +14,7 @@ def check_hotkey(cfg, mode):
             print(
                 "[Whisp App] ⚠️  No global hotkey configured for recording.\n"
                 "Please set up a system-wide shortcut for recording in your OS settings,\n"
-                "and add the shortcut (e.g., 'Ctrl+Shift+R') as 'hotkey_record' in your config.yaml.\n"
+                "and add the shortcut (e.g., 'ctrl+alt+r') as 'hotkey_record' in your config.yaml.\n"
                 "See documentation for details."
             )
             # Optionally, continue with fallback (manual trigger), or exit:
@@ -54,7 +54,7 @@ def main():
         print(f"[Diagnose] Configured hotkey_record: {getattr(cfg, 'hotkey_record', None)}")
         sys.exit(0)
 
-    print(f"[__main__] Launching Whisp App in '{mode}' mode...")
+    print(f"Launching Whisp app in '{mode}' mode...")
 
     check_hotkey(cfg, mode)
 

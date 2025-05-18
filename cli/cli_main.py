@@ -8,6 +8,7 @@ from whisp.core.logger import SessionLogger
 from whisp.core.transcriber import WhisperTranscriber
 from whisp.utils.core_runner import AudioRecorder, ClipboardManager, SimulatedTyper
 from whisp.utils.ipc_server import start_ipc_server
+from whisp.utils.libw import verbo
         
 def print_help():
     print("""
@@ -21,36 +22,34 @@ def print_help():
 """)
 
 def edit_config(config_path="config.yaml"):
-    print("[cli] Opening config file...")
+    verbo("[cli] Opening config file...")
     subprocess.run(["xdg-open", config_path])
 
 def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
     hotkey_event = threading.Event()
 
     def on_ipc_trigger():
-        print("\n[IPC] Hotkey trigger received.")
+        verbo("\n[IPC] Hotkey trigger received.")
         hotkey_event.set()
 
     # Start IPC server for hotkey triggers
     start_ipc_server(on_ipc_trigger)
 
-    print("🌀 Whisp CLI Mode — use system shortcut or type 'h' for help")
+    print("🌀 Whisp CLI Mode:\n--- ALWAYS picking up into clipboard\n--- Type 'h' for help")
 
     while True:
         cmd = input("\nwhisp> ").strip().lower()
-        print(f"---{cmd}---")
         if cmd == "r":
-            print("[cli] Starting core process...")
+            print(" Simple mode | Recording... (ENTER to stop and output into the terminal)")
             recorder = AudioRecorder()
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
             clipboard = ClipboardManager(backend=cfg.clipboard_backend)
             typer = SimulatedTyper(delay=cfg.typing_delay)
 
             recorder.start_recording()
-            print("[core_runner] Recording started...")
-            input("[core_runner] Press ENTER to stop recording...")
+            input()
             rec_path = recorder.stop_recording(preserve=args.save_audio)
-            print("[recorder] Stopping recording...")
+            verbo("Stopping recording...")
 
             tscript, orig_tscript = transcriber.transcribe(rec_path)
             if not tscript:
@@ -58,14 +57,12 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
                 continue
 
             clipboard.copy(tscript)
-            if cfg.simulate_typing:
-                typer.type(tscript)
             logger.log_entry(tscript)
             logger.save()
-            print("\n📝 Transcript:\n", tscript)
+            print(f"📝 ---> {tscript}")
 
         elif cmd == "rh":
-            print("[cli] Entering continuous hotkey recording mode (Ctrl+C to exit)...")
+            print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit\n*** You can now go to ANY other app to VOICE-TYPE - leave this active in the background ***")
             # Create reusable instances outside the loop
             recorder = AudioRecorder()
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
@@ -74,19 +71,18 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
 
             try:
                 while True:
-                    print("\n[cli] Awaiting hotkey to start recording...")
+                    verbo("\n[cli] Awaiting hotkey to start recording...")
                     hotkey_event.clear()
                     hotkey_event.wait()
-                    print("[cli] Hotkey received: starting recording.")
 
                     recorder.start_recording()
-                    print("[core_runner] Recording started... (stop with hotkey)")
+                    print("Recording...")
                     hotkey_event.clear()
                     hotkey_event.wait()
-                    print("[cli] Hotkey received: stopping recording.")
+                    verbo("[cli] Hotkey received: stopping recording.")
 
                     rec_path = recorder.stop_recording(preserve=args.save_audio)
-                    print("[recorder] Stopping recording...")
+                    verbo("[recorder] Stopping recording...")
 
                     tscript, orig_tscript = transcriber.transcribe(rec_path)
                     if not tscript:
@@ -94,11 +90,12 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
                         continue
 
                     clipboard.copy(tscript)
+                    print(f"\n📝 ---> ")
                     if cfg.simulate_typing:
                         typer.type(tscript)
+                    print()
                     logger.log_entry(tscript)
                     logger.save()
-                    print("\n📝 Transcript:\n", tscript)
 
             except KeyboardInterrupt:
                 print("\n[cli] Exiting continuous recording mode...")
@@ -116,7 +113,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
             print_help()
 
         elif cmd == "x":
-            print("[cli] Exiting.")
+            verbo("[cli] Exiting.")
             break
 
         elif cmd == "":
@@ -138,10 +135,10 @@ if __name__ == "__main__":
         if args.test_file:
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary)
             tscript, _ = transcriber.transcribe(args.test_file)
-            print("\n📝 Transcript:\n", tscript)
+            print(f"\n📝 ---> {tscript}")
             logger.log_entry(tscript)
             logger.save()
         else:
             cli_main(cfg, logger, args)
     except KeyboardInterrupt:
-        print("\n[cli] Interrupted. Exiting.")
+        verbo("\n[cli] Interrupted. Exiting.")

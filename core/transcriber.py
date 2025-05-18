@@ -2,6 +2,7 @@ import subprocess
 import os
 from pathlib import Path
 import re
+from whisp.utils.libw import verbo
 
 
 class WhisperTranscriber:
@@ -17,9 +18,9 @@ class WhisperTranscriber:
         if not audio_file.exists():
             raise FileNotFoundError(f"[transcriber] Audio file not found: {audio_file}")
 
-        print(f"[transcriber] Using binary: {self.binary_path}")
-        print(f"[transcriber] Using model: {self.model_path}")
-        print("[transcriber] Starting transcription...")
+        verbo(f"[transcriber] Using binary: {self.binary_path}")
+        verbo(f"[transcriber] Using model: {self.model_path}")
+        verbo("[transcriber] Starting transcription...")
 
         # Output prefix (no extension!)
         output_prefix = self.output_dir / audio_file.stem
@@ -33,7 +34,7 @@ class WhisperTranscriber:
             "-otxt"  # <-- THIS is necessary to actually generate the .txt file
         ]
 
-        print(f"[transcriber] Running command: {' '.join(cmd)}")
+        verbo(f"[transcriber] Running command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print("[transcriber] whisper.cpp failed:")
@@ -45,13 +46,13 @@ class WhisperTranscriber:
             print(f"[transcriber] Transcription failed: Expected output not found at {output_txt}")
             return None, None
 
-        print(f"[transcriber] Transcription complete: {output_txt}")
+        verbo(f"[transcriber] Transcription complete: {output_txt}")
 
         # Optionally delete the input audio
         if self.delete_input:
             try:
                 audio_file.unlink()
-                print(f"[transcriber] Deleted input file: {audio_file}")
+                verbo(f"[transcriber] Deleted input file: {audio_file}")
             except Exception as e:
                 print(f"[transcriber] Could not delete input file: {e}")
 

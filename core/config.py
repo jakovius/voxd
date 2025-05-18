@@ -4,20 +4,23 @@ from pathlib import Path
 from datetime import datetime
 
 DEFAULT_CONFIG = {
-    "app_mode": "cli",
-    "hotkey_record": "ctrl+alt+r",
-    "model_path": "whisper.cpp/models/ggml-base.en.bin",
-    "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
-    "simulate_typing": True,
-    "typing_delay": 10,
     "aipp_enabled": False,
+    "aipp_model": "llama2",
+    "aipp_prompt_alt": "",
+    "aipp_prompt_default": "Summarize the following text",
     "aipp_provider": "local",
-    "aipp_model": "default",
-    "aipp_prompt_default": "Summarize the text.",
+    "app_mode": "whisp",
     "clipboard_backend": "auto",
+    "collect_metrics": False,
+    "hotkey_record": "ctrl+alt+r",
     "log_enabled": True,
     "log_file": "",
-    "collect_metrics": False
+    "performance_log_file": "performance_data.csv",
+    "simulate_typing": True,
+    "typing_delay": 10,
+    "verbosity": True,
+    "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
+    "model_path": "whisper.cpp/models/ggml-base.en.bin"
 }
 
 CONFIG_PATH = Path("config.yaml")
