@@ -1,0 +1,32 @@
+# ---- pyproject.toml (put this at the top level of the repo) ----
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "whisp"
+version = "0.1.0"
+description = "Speech-to-text and clipboard whispering utility"
+authors = [{ name = "Jakov & ChatGPT", email = "jakov.iv@proton.me" }]
+readme = "README.md"
+requires-python = ">=3.9"
+
+# TODO: replace with your real runtime deps
+dependencies = [
+  "sounddevice",
+  "pyqt6",
+  "platformdirs",
+  "pyyaml",
+  "requests",
+  "pytest",
+  "pyperclip",
+  "psutil",
+  "openai",
+  "numpy",
+  "keyboard",
+]
+
+[project.scripts]
+whisp = "whisp.__main__:main"
+whisp-trigger = "whisp.whisp_trigger:main"
+# ----------------------------------------------------------------
