@@ -672,3 +672,195 @@ This works because:
 6. Repeat or Ctrl+C to exit hotkey mode
 
 ---
+
+2025-05-20
+
+a big refactor:
+
+Below is a pragmatic “internal code-review” of **Whisp** with the two targets called out:
+
+1. **“Works-anywhere” installation** (pip/pipx, Poetry, virtualenvs, system deps).
+2. **Running the app from *inside* the project directory (or after `pip install`) instead of *one directory up*.**
+
+---
+
+## 1  Current root-layout & import situation
+
+```
+whisp/                   ← project root *and* the Python package name
+  core/
+  cli/
+  gui/
+  utils/
+  whisp_mode/
+  __main__.py
+  setup.sh …
+```
+
+* • There is **no `__init__.py`** anywhere, so each sub-dir is an *implicit* namespace package.
+* • Every file imports with an **absolute, “double-whisp” path**:
+
+  ```py
+  from whisp.core.config import AppConfig
+  from whisp.cli.cli_main import cli_main
+  ```
+
+When you sit **one level above** the folder and run
+
+```bash
+python -m whisp           # or python -m whisp.cli.cli_main
+```
+
+Python happily finds a *top-level* package called `whisp` (the directory
+it sees on `sys.path`).
+But the moment you `cd whisp` and try to run `python -m cli.cli_main`,
+the interpreter now thinks *that directory itself* is the *root of the
+import tree* and promptly fails to find a sibling “whisp” top-level
+package → `ModuleNotFoundError: whisp.core …`.
+
+---
+
+## 2  Fixing the layout
+
+| 🔥 Today                                                                   | ✅ Proposed                                                                                           | Why it helps                                                                     |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| The repository directory **is** the importable package.                    | Make the repo root “just a repo”, and put all code under **`src/whisp/`** (PEP 420 “src-layout”).    | • No more path confusion. <br>• Editable installs (`pip install -e .`) work.     |
+| No `__init__.py` files → implicit namespace pkgs.                          | Add **`src/whisp/__init__.py`** (can be empty) *plus* `__init__.py` in each first-level sub-package. | Explicit is better than implicit; tools (mypy, IDEs, zipapps) behave.            |
+| Imports are *hard-wired absolute* (`from whisp.core…`).                    | **Keep** absolute imports (they’re fine) *but* the dir hierarchy now matches them.                   | No code changes needed except moving files.                                      |
+| Scripts run via `python -m whisp …` only if parent dir is on `PYTHONPATH`. | Ship **console-scripts entry-points** in `pyproject.toml`:<br>`whisp = "whisp.__main__:main"`        | `pipx install .` gives the user a global `whisp` command; no more path juggling. |
+
+> **Minimal folder diff**
+
+```
+repo_root/
+  pyproject.toml
+  README.md
+  src/
+    whisp/
+      __init__.py
+      __main__.py
+      core/
+      cli/
+      gui/
+      utils/
+      whisp_mode/
+  tests/
+  assets/
+```
+
+*(You can literally `git mv` the five code directories into `src/whisp/`
+and add the missing `__init__.py` files.)*
+
+---
+
+## 3  Packaging for painless installation
+
+### 3-line `pyproject.toml` (PEP 621 + Hatchling example)
+
+```toml
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "whisp"
+version = "0.1.0"
+dependencies = [  # copy requirements.txt here
+  "pyqt6", "sounddevice", ...                       # ← keep it short; pin *ranges* not exact versions
+]
+[project.scripts]
+whisp = "whisp.__main__:main"
+```
+
+* `pip install .` (or `pipx install .`) now:
+
+  * adds *whisp* to `site-packages`, so absolute imports resolve anywhere;
+  * drops a **`whisp` CLI** in `$PATH`;
+  * means users never touch `PYTHONPATH`.
+* Keep the **C++ whisper.cpp build** separate:
+
+  * treat it as an **optional extra** (`pip install whisp[cpp]`) that runs
+    a build hook, or
+  * just detect the binary at runtime (your current `setup_utils`
+    already does that).
+
+### What to do with `setup.sh`
+
+* Split the “pure Python” install (handled by pip) from the **system
+  extras** (ffmpeg, xdotool/ydotool, CMake, whisper.cpp compile).
+* Convert `setup.sh` into a **helper** that prints the apt lines *but
+  doesn’t insist on being run inside the repo*.
+
+---
+
+## 4  Runtime paths that break after installation
+
+| Code                                            | Problem after `pip install`                           | Quick fix                                                                                   |
+| ----------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `CONFIG_PATH = Path("config.yaml")`             | Looks in the *current working dir*.                   | Use **`platformdirs`** (`user_config_dir("whisp")`) and copy a default config on first run. |
+| Assets (`assets/icon.png`)                      | Relative paths fail when launched from anywhere else. | Bundle with **`importlib.resources`** (`files("whisp.assets").joinpath("icon.png")`).       |
+| Whisper model default `"whisper.cpp/models/…"`. | Same issue.                                           | Let the user set `WHISP_MODEL_PATH` env var or config; fall back to an XDG cache directory. |
+| `open("whisp_output/…")`                        | Creates dirs all over CWDs.                           | Move to XDG `user_cache_dir("whisp")`.                                                      |
+
+---
+
+## 5  Step-by-step migration plan
+
+1. **Move code into `src/whisp/`, add `__init__.py`.**
+   All imports keep working because the package name stays **whisp**.
+
+2. **Add `pyproject.toml` + 1-line `hatch build` smoke test.**
+
+3. **Replace ad-hoc `python -m whisp …` docs** with:
+
+   ```bash
+   # dev install
+   pip install -e .
+   whisp --mode cli
+   ```
+
+4. **Refactor path-sensitive code**
+
+   * minimise `os.chdir` (in `__main__.py`) – it masks path bugs;
+   * switch to `platformdirs` + `importlib.resources`.
+
+5. **CI sanity-check:**
+
+   * `python -m pip install .`
+   * `whisp --diagnose` (make sure no ModuleNotFoundError, assets OK).
+
+6. **Mark shell helpers optional:**
+
+   * rename `setup.sh` → `extras/linux_setup.sh`;
+   * print “run me if you want clipboard typing on Wayland”.
+
+---
+
+## 6  Tiny but high-impact code tweaks
+
+| File            | Change                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `__main__.py`   | Delete `os.chdir`, rely on resource paths.                                                                                                 |
+| `utils/libw.py` | Replace `from whisp.core.config import AppConfig` with lazy import inside `verbo` to avoid importing full config during package discovery. |
+| Every directory | Add `__all__ = [...]` in `__init__.py` for IDE auto-complete.                                                                              |
+| Tests           | Move interactive scripts in `utils/test.py` under `tests/` and turn them into pytest functions – they’ll run in CI after `pip install`.    |
+
+---
+
+## 7  What this buys you
+
+* **`pipx install whisp`** → users get a self-contained CLI/GUI in one command.
+* You can publish **wheels** to PyPI; no manual git clone & `setup.sh`.
+* Contributors can `pytest` or run the GUI from anywhere without import gymnastics.
+* Linux-distro packagers get a textbook src-layout; no “cd one folder up” hacks.
+
+---
+
+### Final thought
+
+The codebase is already nicely modular; the *only* major blocker to
+smooth adoption is the **package/distribution story**.
+Reshaping the folder tree and shipping a minimalist `pyproject.toml`
+turns Whisp from “it works on my box if I set PYTHONPATH” into a
+standard Python application that can live in virtualenvs, containers,
+or global brew/pip installs with zero surprises.

@@ -28,5 +28,4 @@ dependencies = [
 
 [project.scripts]
 whisp = "whisp.__main__:main"
-whisp-trigger = "whisp.whisp_trigger:main"
 # ----------------------------------------------------------------
