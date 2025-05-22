@@ -15,8 +15,9 @@ class SessionLogger:
             verbo(f"[logger] Logging enabled. File: {self.log_file}")
 
     def _default_log_filename(self):
+        from whisp.paths import LOG_DIR
         ts = datetime.now().strftime("%Y-%m-%d %H%M")
-        return f"{ts} whisp_log.txt"
+        return str((LOG_DIR / f"{ts} whisp_log.txt").resolve())
 
     def log_entry(self, text: str):
         if not self.enabled:

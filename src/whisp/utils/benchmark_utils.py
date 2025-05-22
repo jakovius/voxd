@@ -2,8 +2,8 @@ import csv
 from pathlib import Path
 from datetime import datetime
 
-PERF_CSV = Path("performance_data.csv")
-
+from whisp.paths import CACHE_DIR
+PERF_CSV = CACHE_DIR / "performance_data.csv"
 
 def write_perf_entry(entry: dict):
     """

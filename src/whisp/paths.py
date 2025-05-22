@@ -18,6 +18,9 @@ CONFIG_FILE = CONFIG_DIR / "config.yaml"
 CACHE_DIR = Path(user_cache_dir("whisp"))
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+OUTPUT_DIR = CACHE_DIR / "whisp_output"
+OUTPUT_DIR.mkdir(exist_ok=True)
+
 # ----- read-only package data ------------------------------------------------
 ASSETS = files("whisp.assets")          # a Traversable object
 

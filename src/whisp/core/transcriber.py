@@ -10,8 +10,8 @@ class WhisperTranscriber:
         self.model_path = model_path
         self.binary_path = binary_path
         self.delete_input = delete_input
-        self.output_dir = Path("whisp_output")
-        self.output_dir.mkdir(exist_ok=True)
+        from whisp.paths import OUTPUT_DIR
+        self.output_dir = OUTPUT_DIR
 
     def transcribe(self, audio_path):
         audio_file = Path(audio_path)

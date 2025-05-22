@@ -49,9 +49,11 @@ class AudioRecorder:
 
         audio_data = np.concatenate(self.recording, axis=0)
 
+        from whisp.paths import OUTPUT_DIR
         if preserve:
-            Path("recordings").mkdir(exist_ok=True)
-            output_path = Path("recordings") / self._timestamped_filename()
+            rec_dir = OUTPUT_DIR / "recordings"
+            rec_dir.mkdir(exist_ok=True)
+            output_path = rec_dir / self._timestamped_filename()
         else:
             output_path = self.temp_dir / "last_recording.wav"
 
