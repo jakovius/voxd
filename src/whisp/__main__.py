@@ -1,10 +1,15 @@
-import os
 import sys
 import argparse
 from whisp.core.config import AppConfig
 
-# Set working directory to the folder where this script is located
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+from whisp.paths import CONFIG_FILE, resource_path
+import shutil, yaml
+
+def ensure_user_config() -> dict:
+    if not CONFIG_FILE.exists():
+        default_tpl = resource_path("defaults/config.yaml")
+        shutil.copy(default_tpl, CONFIG_FILE)
+    return yaml.safe_load(CONFIG_FILE.read_text())
 
 def check_hotkey(cfg, mode):
     # Only check for hotkey in modes that require it
