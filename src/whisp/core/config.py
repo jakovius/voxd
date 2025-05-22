@@ -1,6 +1,10 @@
 import yaml
 import os
 from pathlib import Path
+import yaml, shutil, os
+from pathlib import Path
+from platformdirs import user_config_dir
+from importlib.resources import files
 from datetime import datetime
 
 DEFAULT_CONFIG = {
@@ -23,8 +27,13 @@ DEFAULT_CONFIG = {
     "model_path": "whisper.cpp/models/ggml-base.en.bin"
 }
 
-CONFIG_PATH = Path("config.yaml")
-
+CONFIG_DIR = Path(user_config_dir("whisp"))
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+CONFIG_PATH = CONFIG_DIR / "config.yaml"
+_TPL = files("whisp.defaults").joinpath("config.yaml")
+# first run?  copy pristine template
+if not CONFIG_PATH.exists():
+    shutil.copy(_TPL, CONFIG_PATH)
 
 def default_log_filename():
     ts = datetime.now().strftime("%Y-%m-%d %H%M")
