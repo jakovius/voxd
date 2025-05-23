@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 import yaml
-from core.config import AppConfig
+from whisp.core.config import AppConfig
 import tempfile
 import platform
 
