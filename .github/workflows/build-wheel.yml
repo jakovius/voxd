@@ -2,8 +2,8 @@ name: Build wheels
 
 on:
   push:
-    tags: [ 'v*' ]        # publish wheels on version tags
-  pull_request:
+    tags: [ 'v*' ]          # publish wheels on version tags
+  pull_request:             # just build-test on PRs
   workflow_dispatch:
 
 concurrency:
@@ -11,6 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+# ─────────────────────────────────────────────────────────────────────
   wheel:
     name: wheel (${{ matrix.arch }})
     runs-on: ubuntu-24.04
@@ -41,7 +42,6 @@ jobs:
     - name: Patch out “-march=native” when cross-compiling
       if: matrix.arch == 'aarch64'
       run: |
-        # Any occurrence of -march=native upsets the cross compiler.
         grep -Rl -- '-march=native' whisper.cpp/ggml | \
           xargs sed -i 's/-march=native/-march=armv8-a/g'
 
@@ -61,7 +61,6 @@ jobs:
         else
           cmake -S whisper.cpp -B build -DCMAKE_BUILD_TYPE=Release
         fi
-
         cmake --build build -j$(nproc)
 
     # ────────────────────────────────────────────────────────────────
@@ -84,3 +83,29 @@ jobs:
       with:
         name: whisp-linux_${{ matrix.arch }}
         path: dist/*.whl
+
+# ─────────────────────────────────────────────────────────────────────
+  publish:
+    needs: wheel
+    if: startsWith(github.ref, 'refs/tags/v')   # run only on a tag
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Download all wheel artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: dist-collect
+
+    - name: Gather wheels into ./dist
+      run: |
+        mkdir dist
+        find dist-collect -name '*.whl' -exec mv {} dist/ \;
+        ls -l dist
+
+    - name: Upload to PyPI
+      uses: pypa/gh-action-pypi-publish@v1.8.11
+      with:
+        # set this in your repo’s Secrets (classic) or Variables (Org/Env)
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        # uncomment to publish to TestPyPI first
+        # repository_url: https://test.pypi.org/legacy/
