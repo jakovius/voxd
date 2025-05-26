@@ -3,9 +3,9 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
-  concurrency:
-    group: build-wheels-${{ github.ref }}   # one queue per branch/tag
-    cancel-in-progress: true                # auto-cancel older runs
+concurrency:
+  group: build-wheels-${{ github.ref }}   # one queue per branch/tag
+  cancel-in-progress: true                # auto-cancel older runs
 
 jobs:
   wheel:
