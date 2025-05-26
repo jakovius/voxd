@@ -1,9 +1,8 @@
 name: build-wheels
-
 on:
   push:
-    tags: ["v*"]        # build on version tags
-  workflow_dispatch:    # or manual run
+    tags: ["v*"]
+  workflow_dispatch:
 
 jobs:
   wheel:
@@ -13,28 +12,34 @@ jobs:
         arch: [x86_64, aarch64]
         include:
           - arch: x86_64
-            triplet: x86_64-linux-gnu
             subdir: linux_x86_64
           - arch: aarch64
-            triplet: aarch64-linux-gnu
             subdir: linux_aarch64
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install toolchain
+      # --- NEW: pull whisper.cpp source --------------------------
+      - name: Fetch whisper.cpp
+        run: git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+      # -----------------------------------------------------------
+
+      - name: Install tool-chain
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build \
-                                   crossbuild-essential-${{ matrix.arch }}
+          sudo apt-get install -y build-essential cmake ninja-build
+          # cross tools only for the ARM job
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu crossbuild-essential-arm64
+          fi
 
       - name: Build whisper.cpp (${{ matrix.arch }})
         run: |
           mkdir -p build
           cmake -S whisper.cpp -B build \
                 -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
-                -DCMAKE_C_COMPILER=${{ matrix.triplet }}-gcc \
-                -DCMAKE_CXX_COMPILER=${{ matrix.triplet }}-g++
+                $( [ "${{ matrix.arch }}" = "aarch64" ] && \
+                   echo "-DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++" )
           cmake --build build -j
           ls -R build/bin
 
@@ -44,7 +49,6 @@ jobs:
           mkdir -p "$dst"
           cp build/bin/whisper-cli "$dst/"
           chmod +x "$dst/whisper-cli"
-          echo "Copied binary to $dst"
 
       - name: Build wheel
         run: |
@@ -56,7 +60,6 @@ jobs:
           name: whisp-${{ matrix.subdir }}
           path: dist/*.whl
 
-  # optional: combine wheels & publish
   publish:
     needs: wheel
     runs-on: ubuntu-latest
@@ -65,12 +68,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist-collect
-
-      - name: Merge wheel files
+      - name: Combine wheels
         run: |
           mkdir dist
           find dist-collect -name '*.whl' -exec mv {} dist/ \;
-
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@v1.8.11
         with:
