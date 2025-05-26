@@ -1,104 +1,86 @@
-name: build-wheels
+name: Build wheels
 
 on:
   push:
-    tags: ["v*"]          # build on version tags like v0.3.0
-  workflow_dispatch:      # allow manual runs
+    tags: [ 'v*' ]        # publish wheels on version tags
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-wheels-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   wheel:
-    runs-on: ubuntu-latest
+    name: wheel (${{ matrix.arch }})
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
-        arch: [x86_64, aarch64]
-        include:
-          - arch: x86_64
-            subdir: linux_x86_64
-          - arch: aarch64
-            subdir: linux_aarch64
+        arch: [ x86_64, aarch64 ]
 
     steps:
-      - uses: actions/checkout@v4
+    # ────────────────────────────────────────────────────────────────
+    - name: Checkout repo
+      uses: actions/checkout@v4
 
-      # --------------------------------------------------------------------
-      # 1. OS packages – cross compilers only when we’re in the ARM job
-      # --------------------------------------------------------------------
-      - name: Install build tool-chain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build
-          # cross-compile support only for the ARM job
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            sudo apt-get install -y \
-                 gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-                 crossbuild-essential-arm64
-          fi
+    # ────────────────────────────────────────────────────────────────
+    - name: System dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake ninja-build
+        if [ "${{ matrix.arch }}" = "aarch64" ]; then
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+                                   crossbuild-essential-arm64
+        fi
 
-      # --------------------------------------------------------------------
-      # 2. Fetch and build whisper.cpp
-      # --------------------------------------------------------------------
-      - name: Build whisper.cpp (${{ matrix.arch }})
-        run: |
-          git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
-          mkdir -p build
+    # ────────────────────────────────────────────────────────────────
+    - name: Fetch whisper.cpp (runtime)
+      run: git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
 
-          # Extra flags ONLY on the ARM job — avoid “-march=native”
-          EXTRA_FLAGS=""
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            EXTRA_FLAGS="-DCMAKE_C_FLAGS=-march=armv8-a -DCMAKE_CXX_FLAGS=-march=armv8-a"
-          fi
+    # ────────────────────────────────────────────────────────────────
+    - name: Patch out “-march=native” when cross-compiling
+      if: matrix.arch == 'aarch64'
+      run: |
+        # Any occurrence of -march=native upsets the cross compiler.
+        grep -Rl -- '-march=native' whisper.cpp/ggml | \
+          xargs sed -i 's/-march=native/-march=armv8-a/g'
 
+    # ────────────────────────────────────────────────────────────────
+    - name: Configure & build whisper.cpp
+      run: |
+        mkdir -p build
+        if [ "${{ matrix.arch }}" = "aarch64" ]; then
           cmake -S whisper.cpp -B build \
-                -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
-                $( [ "${{ matrix.arch }}" = "aarch64" ] && \
-                   echo "-DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++" ) \
-                $EXTRA_FLAGS
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+            -DCMAKE_C_FLAGS='-march=armv8-a' \
+            -DCMAKE_CXX_FLAGS='-march=armv8-a'
+        else
+          cmake -S whisper.cpp -B build -DCMAKE_BUILD_TYPE=Release
+        fi
 
-          cmake --build build -j
-          ls -R build/bin
+        cmake --build build -j$(nproc)
 
-      # --------------------------------------------------------------------
-      # 3. Copy the built whisper-cli into the runtime package
-      # --------------------------------------------------------------------
-      - name: Bundle binary in runtime pkg
-        run: |
-          dst=src/whisp_cpp_runtime/bin/${{ matrix.subdir }}
-          mkdir -p "$dst"
-          cp build/bin/whisper-cli "$dst/"
-          chmod +x "$dst/whisper-cli"
-          echo "Copied binary to $dst"
+    # ────────────────────────────────────────────────────────────────
+    - name: Stage CLI binary inside Python package
+      run: |
+        dst="src/whisp_cpp_runtime/bin/linux_${{ matrix.arch }}"
+        mkdir -p "$dst"
+        cp build/bin/whisper-cli "$dst/"
+        chmod +x "$dst/whisper-cli"
 
-      # --------------------------------------------------------------------
-      # 4. Build the wheel
-      # --------------------------------------------------------------------
-      - name: Build Python wheel
-        run: |
-          pipx run build --wheel
-          ls dist
+    # ────────────────────────────────────────────────────────────────
+    - name: Build wheel
+      run: |
+        pipx run build --wheel
+        ls dist
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: whisp-${{ matrix.subdir }}
-          path: dist/*.whl
-
-  # ------------------------------------------------------------------------
-  # Combine wheels and (on a tag) publish to PyPI
-  # ------------------------------------------------------------------------
-  publish:
-    needs: wheel
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist-collect
-
-      - name: Merge wheel files
-        run: |
-          mkdir dist
-          find dist-collect -name '*.whl' -exec mv {} dist/ \;
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.8.11
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+    # ────────────────────────────────────────────────────────────────
+    - name: Upload wheel artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: whisp-linux_${{ matrix.arch }}
+        path: dist/*.whl
