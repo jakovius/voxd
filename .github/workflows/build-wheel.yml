@@ -1,52 +1,62 @@
-name: Build wheels
+name: Build & Publish wheels
 
 on:
   push:
-    tags: [ 'v*' ]          # publish wheels on version tags
-  pull_request:             # just build-test on PRs
+    tags: ['v*']            # publish on version tags (v0.1.0 …)
+  pull_request:             # build wheels for PRs so we know they compile
   workflow_dispatch:
 
+# one run per ref; if you re-push the same tag the old run is cancelled
 concurrency:
   group: build-wheels-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-# ─────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────
+# 1.  build →   wheels for x86_64 and aarch64  →  upload as artifacts
+# 2.  publish → download those artifacts       →  twine upload
+# ──────────────────────────────────────────────────────────────────────
   wheel:
     name: wheel (${{ matrix.arch }})
     runs-on: ubuntu-24.04
+
     strategy:
       matrix:
-        arch: [ x86_64, aarch64 ]
+        arch: [x86_64, aarch64]
 
     steps:
-    # ────────────────────────────────────────────────────────────────
+
     - name: Checkout repo
       uses: actions/checkout@v4
 
-    # ────────────────────────────────────────────────────────────────
+    # ---------------------------------------------------------------
+    # Build deps
     - name: System dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential cmake ninja-build
         if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-                                   crossbuild-essential-arm64
+          sudo apt-get install -y \
+               gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+               crossbuild-essential-arm64
         fi
 
-    # ────────────────────────────────────────────────────────────────
+    # ---------------------------------------------------------------
+    # Pull the C/C++ runtime
     - name: Fetch whisper.cpp (runtime)
       run: git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
 
-    # ────────────────────────────────────────────────────────────────
-    - name: Patch out “-march=native” when cross-compiling
+    # ---------------------------------------------------------------
+    # Patch −march=native when we cross-compile for ARM
+    - name: Patch out “-march=native” for ARM job
       if: matrix.arch == 'aarch64'
       run: |
         grep -Rl -- '-march=native' whisper.cpp/ggml | \
           xargs sed -i 's/-march=native/-march=armv8-a/g'
 
-    # ────────────────────────────────────────────────────────────────
-    - name: Configure & build whisper.cpp
+    # ---------------------------------------------------------------
+    # Configure & build whisper.cpp
+    - name: Build whisper.cpp
       run: |
         mkdir -p build
         if [ "${{ matrix.arch }}" = "aarch64" ]; then
@@ -61,51 +71,68 @@ jobs:
         else
           cmake -S whisper.cpp -B build -DCMAKE_BUILD_TYPE=Release
         fi
-        cmake --build build -j$(nproc)
+        cmake --build build -j"$(nproc)"
 
-    # ────────────────────────────────────────────────────────────────
-    - name: Stage CLI binary inside Python package
+    # ---------------------------------------------------------------
+    # Stage binary into the Python package
+    - name: Stage CLI binary
       run: |
         dst="src/whisp_cpp_runtime/bin/linux_${{ matrix.arch }}"
         mkdir -p "$dst"
         cp build/bin/whisper-cli "$dst/"
         chmod +x "$dst/whisper-cli"
 
-    # ────────────────────────────────────────────────────────────────
+    # ---------------------------------------------------------------
+    # Build the wheel – give it a platform-specific tag so
+    # filenames are unique and don’t collide later
     - name: Build wheel
       run: |
-        pipx run build --wheel
-        ls dist
+        if [ "${{ matrix.arch }}" = "x86_64" ]; then
+          plat="--config-setting=--plat-name=manylinux_2_17_x86_64"
+        else
+          plat="--config-setting=--plat-name=manylinux_2_17_aarch64"
+        fi
 
-    # ────────────────────────────────────────────────────────────────
+        pipx run build --wheel $plat
+        twine check dist/*.whl     # fail early if wheel is broken
+        ls -l dist
+
+    # ---------------------------------------------------------------
+    # Upload each wheel as an artifact
     - name: Upload wheel artifact
       uses: actions/upload-artifact@v4
       with:
         name: whisp-linux_${{ matrix.arch }}
         path: dist/*.whl
 
-# ─────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────
   publish:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}   # only on tag pushes
     needs: wheel
-    if: startsWith(github.ref, 'refs/tags/v')   # run only on a tag
     runs-on: ubuntu-24.04
+    permissions:
+      id-token: write          # for Trusted Publisher (optional)
+      contents: read
 
     steps:
-    - name: Download all wheel artifacts
+    # ---------------------------------------------------------------
+    # Download every wheel artifact into dist-collect/
+    - name: Download wheel artifacts
       uses: actions/download-artifact@v4
       with:
         path: dist-collect
 
-    - name: Gather wheels into ./dist
-      run: |
-        mkdir dist
-        find dist-collect -name '*.whl' -exec mv {} dist/ \;
-        ls -l dist
+    # ---------------------------------------------------------------
+    # Show what we got (debug)
+    - name: List wheels
+      run: find dist-collect -name '*.whl' -print
 
-    - name: Upload to PyPI
-      uses: pypa/gh-action-pypi-publish@v1.8.11
+    # ---------------------------------------------------------------
+    # Publish → PyPI  (set PYPI_API_TOKEN in repo → Settings → Secrets)
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@v1
       with:
-        # set this in your repo’s Secrets (classic) or Variables (Org/Env)
         password: ${{ secrets.PYPI_API_TOKEN }}
-        # uncomment to publish to TestPyPI first
-        # repository_url: https://test.pypi.org/legacy/
+        user: __token__
+        packages_dir: dist-collect         # the action recurses automatically
+        skip-existing: false               # change to true for re-tagging
