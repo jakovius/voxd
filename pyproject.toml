@@ -30,7 +30,7 @@ whisp = "whisp.__main__:main"
 
 [tool.hatch.build]
 packages = [
-  "src/whisp",            # your existing code
-  "src/whisp_cpp_runtime" # the new helper package
+  "src/whisp",
+  "src/whisp_cpp_runtime"
 ]
 
