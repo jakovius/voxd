@@ -81,7 +81,7 @@ jobs:
         mkdir -p "$dst"
         cp build/bin/whisper-cli "$dst/"
         chmod +x "$dst/whisper-cli"
-
+    
     # ---------------------------------------------------------------
     # Build the wheel – give it a platform-specific tag so
     # filenames are unique and don’t collide later
@@ -94,7 +94,7 @@ jobs:
         fi
 
         pipx run build --wheel $plat
-        twine check dist/*.whl     # fail early if wheel is broken
+        pipx run twine twine check dist/*.whl
         ls -l dist
 
     # ---------------------------------------------------------------
