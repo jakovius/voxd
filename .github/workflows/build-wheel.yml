@@ -1,11 +1,9 @@
 name: build-wheels
+
 on:
   push:
-    tags: ["v*"]
-  workflow_dispatch:
-concurrency:
-  group: build-wheels-${{ github.ref }}   # one queue per branch/tag
-  cancel-in-progress: true                # auto-cancel older runs
+    tags: ["v*"]          # build on version tags like v0.3.0
+  workflow_dispatch:      # allow manual runs
 
 jobs:
   wheel:
@@ -22,38 +20,58 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- NEW: pull whisper.cpp source --------------------------
-      - name: Fetch whisper.cpp
-        run: git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
-      # -----------------------------------------------------------
-
-      - name: Install tool-chain
+      # --------------------------------------------------------------------
+      # 1. OS packages – cross compilers only when we’re in the ARM job
+      # --------------------------------------------------------------------
+      - name: Install build tool-chain
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build
-          # cross tools only for the ARM job
+          # cross-compile support only for the ARM job
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu crossbuild-essential-arm64
+            sudo apt-get install -y \
+                 gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+                 crossbuild-essential-arm64
           fi
 
+      # --------------------------------------------------------------------
+      # 2. Fetch and build whisper.cpp
+      # --------------------------------------------------------------------
       - name: Build whisper.cpp (${{ matrix.arch }})
         run: |
+          git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
           mkdir -p build
+
+          # Extra flags ONLY on the ARM job — avoid “-march=native”
+          EXTRA_FLAGS=""
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            EXTRA_FLAGS="-DCMAKE_C_FLAGS=-march=armv8-a -DCMAKE_CXX_FLAGS=-march=armv8-a"
+          fi
+
           cmake -S whisper.cpp -B build \
                 -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
                 $( [ "${{ matrix.arch }}" = "aarch64" ] && \
-                   echo "-DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++" )
+                   echo "-DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++" ) \
+                $EXTRA_FLAGS
+
           cmake --build build -j
           ls -R build/bin
 
-      - name: Copy into runtime package
+      # --------------------------------------------------------------------
+      # 3. Copy the built whisper-cli into the runtime package
+      # --------------------------------------------------------------------
+      - name: Bundle binary in runtime pkg
         run: |
           dst=src/whisp_cpp_runtime/bin/${{ matrix.subdir }}
           mkdir -p "$dst"
           cp build/bin/whisper-cli "$dst/"
           chmod +x "$dst/whisper-cli"
+          echo "Copied binary to $dst"
 
-      - name: Build wheel
+      # --------------------------------------------------------------------
+      # 4. Build the wheel
+      # --------------------------------------------------------------------
+      - name: Build Python wheel
         run: |
           pipx run build --wheel
           ls dist
@@ -63,6 +81,9 @@ jobs:
           name: whisp-${{ matrix.subdir }}
           path: dist/*.whl
 
+  # ------------------------------------------------------------------------
+  # Combine wheels and (on a tag) publish to PyPI
+  # ------------------------------------------------------------------------
   publish:
     needs: wheel
     runs-on: ubuntu-latest
@@ -71,10 +92,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist-collect
-      - name: Combine wheels
+
+      - name: Merge wheel files
         run: |
           mkdir dist
           find dist-collect -name '*.whl' -exec mv {} dist/ \;
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@v1.8.11
         with:
