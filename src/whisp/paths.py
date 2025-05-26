@@ -27,3 +27,34 @@ ASSETS = files("whisp.assets")          # a Traversable object
 def resource_path(name: str) -> Path:
     """Return a Path to a file shipped inside whisp.assets/ …"""
     return ASSETS.joinpath(name)
+
+# ----- whisper-cli discovery -------------------------------------------------
+from shutil import which
+
+def find_whisper_cli() -> Path | None:
+    """
+    Resolution order:
+      1. Explicit path in config.yaml
+      2. System-wide whisper-cli in $PATH
+      3. Bundled binary from whisp_cpp_runtime
+      4. None (caller will trigger fallback build)
+    """
+    from whisp.core.config import AppConfig   # local import to avoid cycles
+    cfg = AppConfig()
+
+    # 1. config
+    if cfg.whisper_binary and Path(cfg.whisper_binary).is_file():
+        return Path(cfg.whisper_binary)
+
+    # 2. system PATH
+    sys_bin = which("whisper-cli")
+    if sys_bin:
+        return Path(sys_bin)
+
+    # 3. bundled wheel
+    try:
+        from whisp_cpp_runtime import binary_path
+        return binary_path()
+    except ImportError:
+        return None
+

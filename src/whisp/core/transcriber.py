@@ -3,12 +3,13 @@ import os
 from pathlib import Path
 import re
 from whisp.utils.libw import verbo
+from whisp.paths import find_whisper_cli
 
 
 class WhisperTranscriber:
     def __init__(self, model_path, binary_path, delete_input=True):
         self.model_path = model_path
-        self.binary_path = binary_path
+        self.binary_path = binary_path or find_whisper_cli()
         self.delete_input = delete_input
         from whisp.paths import OUTPUT_DIR
         self.output_dir = OUTPUT_DIR
