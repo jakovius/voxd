@@ -672,3 +672,379 @@ This works because:
 6. Repeat or Ctrl+C to exit hotkey mode
 
 ---
+
+2025-05-20
+
+a big refactor:
+
+Below is a pragmatic “internal code-review” of **Whisp** with the two targets called out:
+
+1. **“Works-anywhere” installation** (pip/pipx, Poetry, virtualenvs, system deps).
+2. **Running the app from *inside* the project directory (or after `pip install`) instead of *one directory up*.**
+
+---
+
+## 1  Current root-layout & import situation
+
+```
+whisp/                   ← project root *and* the Python package name
+  core/
+  cli/
+  gui/
+  utils/
+  whisp_mode/
+  __main__.py
+  setup.sh …
+```
+
+* • There is **no `__init__.py`** anywhere, so each sub-dir is an *implicit* namespace package.
+* • Every file imports with an **absolute, “double-whisp” path**:
+
+  ```py
+  from whisp.core.config import AppConfig
+  from whisp.cli.cli_main import cli_main
+  ```
+
+When you sit **one level above** the folder and run
+
+```bash
+python -m whisp           # or python -m whisp.cli.cli_main
+```
+
+Python happily finds a *top-level* package called `whisp` (the directory
+it sees on `sys.path`).
+But the moment you `cd whisp` and try to run `python -m cli.cli_main`,
+the interpreter now thinks *that directory itself* is the *root of the
+import tree* and promptly fails to find a sibling “whisp” top-level
+package → `ModuleNotFoundError: whisp.core …`.
+
+---
+
+## 2  Fixing the layout
+
+| 🔥 Today                                                                   | ✅ Proposed                                                                                           | Why it helps                                                                     |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| The repository directory **is** the importable package.                    | Make the repo root “just a repo”, and put all code under **`src/whisp/`** (PEP 420 “src-layout”).    | • No more path confusion. <br>• Editable installs (`pip install -e .`) work.     |
+| No `__init__.py` files → implicit namespace pkgs.                          | Add **`src/whisp/__init__.py`** (can be empty) *plus* `__init__.py` in each first-level sub-package. | Explicit is better than implicit; tools (mypy, IDEs, zipapps) behave.            |
+| Imports are *hard-wired absolute* (`from whisp.core…`).                    | **Keep** absolute imports (they’re fine) *but* the dir hierarchy now matches them.                   | No code changes needed except moving files.                                      |
+| Scripts run via `python -m whisp …` only if parent dir is on `PYTHONPATH`. | Ship **console-scripts entry-points** in `pyproject.toml`:<br>`whisp = "whisp.__main__:main"`        | `pipx install .` gives the user a global `whisp` command; no more path juggling. |
+
+> **Minimal folder diff**
+
+```
+repo_root/
+  pyproject.toml
+  README.md
+  src/
+    whisp/
+      __init__.py
+      __main__.py
+      core/
+      cli/
+      gui/
+      utils/
+      whisp_mode/
+  tests/
+  assets/
+```
+
+*(You can literally `git mv` the five code directories into `src/whisp/`
+and add the missing `__init__.py` files.)*
+
+---
+
+## 3  Packaging for painless installation
+
+### 3-line `pyproject.toml` (PEP 621 + Hatchling example)
+
+```toml
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "whisp"
+version = "0.1.0"
+dependencies = [  # copy requirements.txt here
+  "pyqt6", "sounddevice", ...                       # ← keep it short; pin *ranges* not exact versions
+]
+[project.scripts]
+whisp = "whisp.__main__:main"
+```
+
+* `pip install .` (or `pipx install .`) now:
+
+  * adds *whisp* to `site-packages`, so absolute imports resolve anywhere;
+  * drops a **`whisp` CLI** in `$PATH`;
+  * means users never touch `PYTHONPATH`.
+* Keep the **C++ whisper.cpp build** separate:
+
+  * treat it as an **optional extra** (`pip install whisp[cpp]`) that runs
+    a build hook, or
+  * just detect the binary at runtime (your current `setup_utils`
+    already does that).
+
+### What to do with `setup.sh`
+
+* Split the “pure Python” install (handled by pip) from the **system
+  extras** (ffmpeg, xdotool/ydotool, CMake, whisper.cpp compile).
+* Convert `setup.sh` into a **helper** that prints the apt lines *but
+  doesn’t insist on being run inside the repo*.
+
+---
+
+## 4  Runtime paths that break after installation
+
+| Code                                            | Problem after `pip install`                           | Quick fix                                                                                   |
+| ----------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `CONFIG_PATH = Path("config.yaml")`             | Looks in the *current working dir*.                   | Use **`platformdirs`** (`user_config_dir("whisp")`) and copy a default config on first run. |
+| Assets (`assets/icon.png`)                      | Relative paths fail when launched from anywhere else. | Bundle with **`importlib.resources`** (`files("whisp.assets").joinpath("icon.png")`).       |
+| Whisper model default `"whisper.cpp/models/…"`. | Same issue.                                           | Let the user set `WHISP_MODEL_PATH` env var or config; fall back to an XDG cache directory. |
+| `open("whisp_output/…")`                        | Creates dirs all over CWDs.                           | Move to XDG `user_cache_dir("whisp")`.                                                      |
+
+---
+
+## 5  Step-by-step migration plan
+
+1. **Move code into `src/whisp/`, add `__init__.py`.**
+   All imports keep working because the package name stays **whisp**.
+
+2. **Add `pyproject.toml` + 1-line `hatch build` smoke test.**
+
+3. **Replace ad-hoc `python -m whisp …` docs** with:
+
+   ```bash
+   # dev install
+   pip install -e .
+   whisp --mode cli
+   ```
+
+4. **Refactor path-sensitive code**
+
+   * minimise `os.chdir` (in `__main__.py`) – it masks path bugs;
+   * switch to `platformdirs` + `importlib.resources`.
+
+5. **CI sanity-check:**
+
+   * `python -m pip install .`
+   * `whisp --diagnose` (make sure no ModuleNotFoundError, assets OK).
+
+6. **Mark shell helpers optional:**
+
+   * rename `setup.sh` → `extras/linux_setup.sh`;
+   * print “run me if you want clipboard typing on Wayland”.
+
+---
+
+## 6  Tiny but high-impact code tweaks
+
+| File            | Change                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `__main__.py`   | Delete `os.chdir`, rely on resource paths.                                                                                                 |
+| `utils/libw.py` | Replace `from whisp.core.config import AppConfig` with lazy import inside `verbo` to avoid importing full config during package discovery. |
+| Every directory | Add `__all__ = [...]` in `__init__.py` for IDE auto-complete.                                                                              |
+| Tests           | Move interactive scripts in `utils/test.py` under `tests/` and turn them into pytest functions – they’ll run in CI after `pip install`.    |
+
+---
+
+## 7  What this buys you
+
+* **`pipx install whisp`** → users get a self-contained CLI/GUI in one command.
+* You can publish **wheels** to PyPI; no manual git clone & `setup.sh`.
+* Contributors can `pytest` or run the GUI from anywhere without import gymnastics.
+* Linux-distro packagers get a textbook src-layout; no “cd one folder up” hacks.
+
+---
+
+### Final thought
+
+The codebase is already nicely modular; the *only* major blocker to
+smooth adoption is the **package/distribution story**.
+Reshaping the folder tree and shipping a minimalist `pyproject.toml`
+turns Whisp from “it works on my box if I set PYTHONPATH” into a
+standard Python application that can live in virtualenvs, containers,
+or global brew/pip installs with zero surprises.
+
+===
+
+2025-05-26
+
+Below is a road-map that addresses some concerns:
+- whisper.cpp is a dependency that stems from repository:
+https://github.com/ggml-org/whisper.cpp
+and it can be built by obtaining from there
+- are there any legal or ethical concerns by having it prepackaged to desired degree inside the whisp app?
+- is it the most practical way for average user to have its basic prebuilt instance ready to use, packaged inside the whisp app?
+- if it can be prepackaged, how to make it customizable in the easiest way for an average user, particularly with respect to the default speech-to-text model selection and so that other models can be easily obtained and used
+
+
+The following shows exactly **how to wire Whisp + whisper.cpp so a first-time Linux user types `pipx install whisp` and starts dictating in seconds**.
+
+---
+
+## TL;DR
+
+* **Licensing is MIT end-to-end** – whisper.cpp is MIT-licensed  and the original Whisper code *and weights* are MIT-licensed as well . Pre-packaging is therefore legal provided you (a) keep the LICENSE files and (b) state that the models come from OpenAI.
+* You **can** ship pre-built binaries – projects such as **`whisper.cpp-cli`** already publish wheels that contain a compiled `whisper-cli` for x86-64/macOS/arm64  and Python wrappers like **`pywhispercpp`** do the same .
+* **The models are the size problem, not the C binary.**
+  *The smallest “base” model is 142 MB* , while PyPI caps any single upload at **100 MB** .
+  So you can pre-package the CLI, but you still have to pull the model at runtime or distribute it outside PyPI (AppImage, Flatpak, .deb, etc.).
+* **Best UX pattern seen in the wild**:
+
+  1. Wheel installs a ready-to-run `whisper-cli`.
+  2. On first run, the program checks `~/.cache/whisp/models/` and offers to download the user’s chosen model (progress-bar, checksum).
+  3. Advanced users can drop in other ggml models manually or via a `whisp models download <name>` helper.
+
+---
+
+## 1  Legal / ethical check-list
+
+| Item                                                           | Status                         | Notes                                                            |
+| -------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------------- |
+| **whisper.cpp code**                                           | MIT                            | Permissive; allows redistribution, modification, commercial use. |
+| **OpenAI Whisper repo**                                        | MIT for *code **and** weights* | You must keep the copyright notice.                              |
+| **Down-stream bindings** (pywhispercpp, whisper.cpp-cli, etc.) | Also MIT                       | Practical precedent for binary-and-wheel shipping.               |
+
+**Conclusion:** you’re free to embed the C sources, a pre-built `.so`, or even the 142 MB model as long as you:
+
+* bundle the MIT LICENSE files;
+* mention OpenAI & ggml-org in your NOTICE / README.
+
+---
+
+## 2  Three shipping strategies
+
+| Strategy                      | How it works                                                                                                 | Pros                                                       | Cons                                                                                            |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **A. Pre-built wheels**       | Build `whisper-cli` for each arch (x86-64, aarch64, arm64 mac) and include it in the wheel (`package_data`). | *Zero tool-chain* for users; fastest start-up.             | Need a CI matrix and delve into `auditwheel`/`delocate`.  Wheel still < 10 MB so fine for PyPI. |
+| **B. “Compile-on-first-run”** | Wheel only contains C sources; on first import, run `cmake && make` in a temp dir then cache the binary.     | Single universal wheel; no CI cross-compiling.             | Requires `gcc`, `cmake`, and 1–2 min compile time on arm laptops.                               |
+| **C. System package**         | Keep whisper.cpp separate (AUR, deb, rpm). Whisp just checks `PATH`.                                         | Linux-distro maintainers like it; no binary blobs in PyPI. | Casual users have an extra manual step.                                                         |
+
+**Recommended combo for “ease of installation”**
+
+* **Wheel = strategy A** (small, multi-arch).
+  Works for the majority of users who just run `pipx install whisp`.
+* **Fallback = strategy B** when no compatible binary is found (e.g. exotic CPU).
+* **Optionally** detect a system-wide `whisper-cli` first.
+
+Examples to crib from: *whisper.cpp-cli*  (pure CLI) and *pywhispercpp*  (Python bindings).
+
+---
+
+## 3  Handling the speech models
+
+### Why not bundle them?
+
+* 142 MB (base.en) > PyPI’s 100 MB file limit .
+* Multiple models (tiny … large) would bloat each wheel into gigabytes.
+
+### User-friendly pattern
+
+1. **Lazy download on first use**
+
+   ```python
+   # whisp/model_store.py
+   from platformdirs import user_cache_dir
+   MODELS = {"base.en": "https://…/ggml-base.en.bin", ...}
+
+   def ensure_model(name="base.en"):
+       path = Path(user_cache_dir("whisp")) / "models" / f"ggml-{name}.bin"
+       if not path.exists():
+           download_with_progress(MODELS[name], path)
+       return path
+   ```
+
+2. **`whisp models` sub-command**
+
+   * `list` – prints local + remote availability.
+   * `download small.en` – fetches and verifies checksum.
+   * `purge` – remove models to save disk.
+
+3. **Expose the path in `config.yaml`**
+
+   ```yaml
+   model_name: base.en        # friendly name
+   model_path: null           # auto-filled if user points to a custom ggml
+   ```
+
+---
+
+## 4  Implementation sketch
+
+### `pyproject.toml` (binary-plus-wheel pattern)
+
+```toml
+[build-system]
+requires = ["hatchling", "cmake", "scikit-build-core"]
+build-backend = "hatchling.build"
+
+[project]
+name = "whisp"
+version = "0.4.0"
+dependencies = ["sounddevice", "pyqt6", "platformdirs", "pyperclip", "psutil"]
+
+[project.scripts]
+whisp = "whisp.__main__:main"
+
+[tool.hatch.build]
+include = [
+  "src/whisp/**",
+  "licenses/**",
+  "bin/linux_x86_64/whisper-cli",
+  # other arches …
+]
+```
+
+* **CI job**: build `whisper-cli` once per arch, drop into `bin/<tag>/`.
+* On import, `whisp.paths.find_cli()` picks the right binary (or triggers “compile-on-first-run”).
+
+### First-run flow
+
+```
+whisp.__main__ → paths.find_cli()        # binary present?
+              → model_store.ensure()     # downloads base.en if absent
+              → run the CLI
+```
+
+Because both steps can print a spinner or `tqdm` bar, the first run still feels interactive.
+
+---
+
+## 5  Customisation for ordinary users
+
+| Need                     | UX proposal                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| **Switch model**         | `whisp models download small.en` → `whisp config set model_name small.en`    |
+| **Add a local ggml**     | `whisp config set model_path /mnt/ssd/ggml-medium.bin` (path wins over name) |
+| **Check disk footprint** | `whisp models list --sizes`                                                  |
+| **Remove models**        | `whisp models purge tiny.*`                                                  |
+
+Power-users keep full control; beginners just accept the default 142 MB download.
+
+---
+
+## 6  Next milestone & “freeze”
+
+1. **Finish the packaging skeleton** (wheel with embedded binary + model-manager).
+2. Tag this as `v0.5.0` and push to PyPI test index.
+3. Add `whisp --self-check` that runs a 2-sec audio sanity test and prints versions.
+4. Create a GitHub *release branch `v0.5-maint`* so you can keep iterating on dev while others pick up a stable installer.
+
+> **Snapshot recommendation** – after step 2, cut a release on GitHub and attach:
+>
+> * the universal wheel(s),
+> * an AppImage that contains both wheel + base model for “one-file” fans,
+> * SHA256 sums.
+>   Users can download and run even if PyPI is blocked.
+
+---
+
+## 7  Why this is practical
+
+* Users get an immediate, **no-compiler install** (pre-built wheels).
+* The heavy asset (model) is pulled *once* into an XDG cache – no disk spam.
+* Licences are preserved, and redistribution is compliant with MIT.
+* Advanced users and distro maintainers still have a clear opt-out (build themselves or point to system whisper-cli).
+
+With those pieces in place, *“works-anywhere installation”* is solved, and this set of mods can be merged.
+

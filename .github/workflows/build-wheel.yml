@@ -1,0 +1,77 @@
+name: build-wheels
+
+on:
+  push:
+    tags: ["v*"]        # build on version tags
+  workflow_dispatch:    # or manual run
+
+jobs:
+  wheel:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+        include:
+          - arch: x86_64
+            triplet: x86_64-linux-gnu
+            subdir: linux_x86_64
+          - arch: aarch64
+            triplet: aarch64-linux-gnu
+            subdir: linux_aarch64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build \
+                                   crossbuild-essential-${{ matrix.arch }}
+
+      - name: Build whisper.cpp (${{ matrix.arch }})
+        run: |
+          mkdir -p build
+          cmake -S whisper.cpp -B build \
+                -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
+                -DCMAKE_C_COMPILER=${{ matrix.triplet }}-gcc \
+                -DCMAKE_CXX_COMPILER=${{ matrix.triplet }}-g++
+          cmake --build build -j
+          ls -R build/bin
+
+      - name: Copy into runtime package
+        run: |
+          dst=src/whisp_cpp_runtime/bin/${{ matrix.subdir }}
+          mkdir -p "$dst"
+          cp build/bin/whisper-cli "$dst/"
+          chmod +x "$dst/whisper-cli"
+          echo "Copied binary to $dst"
+
+      - name: Build wheel
+        run: |
+          pipx run build --wheel
+          ls dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: whisp-${{ matrix.subdir }}
+          path: dist/*.whl
+
+  # optional: combine wheels & publish
+  publish:
+    needs: wheel
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist-collect
+
+      - name: Merge wheel files
+        run: |
+          mkdir dist
+          find dist-collect -name '*.whl' -exec mv {} dist/ \;
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.8.11
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
