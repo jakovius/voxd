@@ -9,6 +9,15 @@ from __future__ import annotations
 from pathlib import Path
 from importlib.resources import files
 from platformdirs import user_config_dir, user_cache_dir
+from functools import lru_cache
+from whisp_cpp_runtime import binary_path as _bin_path
+
+@lru_cache(maxsize=1)
+def bundled_cli_lazy() -> Path | None:
+    try:
+        return _bin_path()
+    except ImportError:
+        return None
 
 # ----- user-writable locations (follow XDG spec) ----------------------------
 CONFIG_DIR = Path(user_config_dir("whisp"))
@@ -51,10 +60,8 @@ def find_whisper_cli() -> Path | None:
     if sys_bin:
         return Path(sys_bin)
 
-    # 3. bundled wheel
-    try:
-        from whisp_cpp_runtime import binary_path
-        return binary_path()
-    except ImportError:
-        return None
+    # 3. bundled (or auto-built) binary
+    b = bundled_cli_lazy()
+    if b:
+        return b
 

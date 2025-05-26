@@ -23,6 +23,7 @@ dependencies = [
   "openai",
   "numpy",
   "keyboard",
+  "gitpython>=3.1",
 ]
 
 [project.scripts]

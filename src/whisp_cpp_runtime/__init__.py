@@ -19,10 +19,34 @@ def binary_path() -> Path:
     elif plat == "darwin" and arch == "arm64":
         subdir = "macos_arm64"
     else:
-        raise ImportError("no embedded whisper-cli for this platform")
-
+       raise ImportError("no embedded whisper-cli for this platform")
     exe = files(__package__).joinpath(f"bin/{subdir}/whisper-cli")
-    if not exe.is_file():
-        raise ImportError("embedded whisper-cli missing")
+    if exe.is_file():
+        return Path(exe)
 
-    return Path(exe)
+    # ---- Fallback : build whisper.cpp in user cache -----------------
+    from subprocess import check_call, CalledProcessError
+    from platformdirs import user_cache_dir
+    cache_dir = Path(user_cache_dir("whisp")) / "whisper.cpp"
+
+    built_bin = cache_dir / "build/bin/whisper-cli"
+    if built_bin.is_file():
+        return built_bin
+
+    print("[whisp] No bundled whisper-cli for this CPU – building whisper.cpp once…")
+    try:
+        import git, shutil                            # gitpython, stdlib
+    except ImportError:
+        raise ImportError("whisper-cli missing and gitpython not installed")
+
+    repo = cache_dir
+    if not repo.exists():
+        check_call(["git", "clone", "--depth=1",
+                    "https://github.com/ggml-org/whisper.cpp", str(repo)])
+    # minimal build
+    check_call(["cmake", "-B", "build"], cwd=repo)
+    check_call(["cmake", "--build", "build", "-j"], cwd=repo)
+
+    if built_bin.is_file():
+        return built_bin
+    raise ImportError("auto-build of whisper.cpp failed")
