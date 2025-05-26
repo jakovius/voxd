@@ -1,7 +1,7 @@
 name: build-wheels
 on:
   push:
-    tags: ["v*"]          # build on version tags
+    tags: ["v*"]
   workflow_dispatch:
 
 jobs:
@@ -19,11 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # --- NEW: pull whisper.cpp source --------------------------
+      - name: Fetch whisper.cpp
+        run: git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+      # -----------------------------------------------------------
+
       - name: Install tool-chain
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build
-          # Only add cross tools when building the ARM wheel
+          # cross tools only for the ARM job
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
             sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu crossbuild-essential-arm64
           fi
@@ -33,7 +38,8 @@ jobs:
           mkdir -p build
           cmake -S whisper.cpp -B build \
                 -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
-                $( [ "${{ matrix.arch }}" = "aarch64" ] && echo "-DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++" )
+                $( [ "${{ matrix.arch }}" = "aarch64" ] && \
+                   echo "-DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++" )
           cmake --build build -j
           ls -R build/bin
 
