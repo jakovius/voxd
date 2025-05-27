@@ -105,34 +105,40 @@ jobs:
         name: whisp-linux_${{ matrix.arch }}
         path: dist/*.whl
 
-# ──────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
   publish:
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}   # only on tag pushes
+    if: startsWith(github.ref, 'refs/tags/v') # only on tag pushes
     needs: wheel
     runs-on: ubuntu-24.04
     permissions:
-      id-token: write          # for Trusted Publisher (optional)
+      id-token: write    # (optional) for future Trusted-Publisher flows
       contents: read
 
     steps:
-    # ---------------------------------------------------------------
-    # Download every wheel artifact into dist-collect/
-    - name: Download wheel artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: dist-collect
+      # ---------------------------------------------------------------
+      # 1. Download every wheel artifact into dist-collect/
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-collect                # keep default directory layout
 
-    # ---------------------------------------------------------------
-    # Show what we got (debug)
-    - name: List wheels
-      run: find dist-collect -name '*.whl' -print
+      # ---------------------------------------------------------------
+      # 2. Flatten the directory → dist/
+      - name: Collect wheels into dist/
+        run: |
+          mkdir -p dist
+          find dist-collect -name '*.whl' -exec mv {} dist/ \;
 
-    # ---------------------------------------------------------------
-    # Publish → PyPI  (set PYPI_API_TOKEN in repo → Settings → Secrets)
-    - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@v1.8.12
-      with:
-        password: ${{ secrets.PYPI_API_TOKEN }}
-        user: __token__
-        packages_dir: dist-collect         # the action recurses automatically
-        skip-existing: false               # change to true for re-tagging
+      # (optional) show what was grabbed
+      - name: List wheels
+        run: ls -l dist
+
+      # ---------------------------------------------------------------
+      # 3. Upload to PyPI
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.8.12
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist           # <── flattened dir
+          verify-metadata: true        # (default; keeps twine check)
