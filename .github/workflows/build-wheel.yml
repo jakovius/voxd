@@ -94,7 +94,7 @@ jobs:
         fi
 
         pipx run build --wheel $plat
-        pipx run twine twine check dist/*.whl
+        pipx run twine check dist/*.whl
         ls -l dist
 
     # ---------------------------------------------------------------
