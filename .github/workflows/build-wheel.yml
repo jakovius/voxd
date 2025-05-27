@@ -107,13 +107,22 @@ jobs:
       id-token: write
 
     steps:
-    # -----------------------------------------------------------
-    - name: Download wheel artefacts
+    # ─────────────────────────────────────────────────────────────
+    # Download each artefact *sequentially* to avoid clobber races
+    # that corrupt the wheel file when names collide.
+    # ─────────────────────────────────────────────────────────────
+    - name: Download x86_64 wheel
       uses: actions/download-artifact@v4
       with:
-        merge-multiple: true     # <── wheels are dropped straight into…
-        path: dist               # …this directory
+        name: whisp-linux_x86_64
+        path: dist
 
+    - name: Download aarch64 wheel
+      uses: actions/download-artifact@v4
+      with:
+        name: whisp-linux_aarch64
+        path: dist
+        
     - name: List & double-check wheels
       run: |
         ls -lh dist
