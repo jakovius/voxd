@@ -2,47 +2,57 @@ name: Build & Publish wheels
 
 on:
   push:
-    tags: ['v*']            # publish on version tags (v0.1.0 …)
-  pull_request:             # build wheels for PRs
+    tags: ['v*']               # publish only on version tags  (v0.1.0 …)
+  pull_request:                # build wheels for PRs
   workflow_dispatch:
 
-# Global permissions — enable OIDC for PyPI Trusted Publishing
+# ────────────────────────────────────────────────────────────────
+# Global permissions – enable OIDC for PyPI “Trusted Publishers”
+# ────────────────────────────────────────────────────────────────
 permissions:
   contents: read
-  id-token: write
+  id-token: write            # required for OIDC login at publish step
 
 concurrency:
   group: build-wheels-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  TAG_X86_64:   manylinux_2_17_x86_64
+  TAG_AARCH64:  manylinux_2_17_aarch64
+
 jobs:
 # ────────────────────────────────────────────────────────────────
-# 1) wheel   → build x86_64 + aarch64 wheels, upload artefacts
-# 2) publish → download wheels, twine check, Trusted-upload to PyPI
+# 1) wheel  → build two wheels → upload artefacts
+# 2) publish → download artefacts → twine/Trusted-Publisher upload
 # ────────────────────────────────────────────────────────────────
   wheel:
     name: wheel (${{ matrix.arch }})
     runs-on: ubuntu-24.04
-
     strategy:
       matrix:
         arch: [x86_64, aarch64]
 
     steps:
     # -----------------------------------------------------------
-    - uses: actions/checkout@v4
+    - name: Checkout repo
+      uses: actions/checkout@v4
 
     - name: System dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential cmake ninja-build
         if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          sudo apt-get install -y \
-               gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-               crossbuild-essential-arm64
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+                                   crossbuild-essential-arm64
         fi
 
-    - name: Fetch whisper.cpp (runtime)
+    - name: Install packaging tools (build & twine)
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install --upgrade build twine   # fixes “No module named build”
+
+    - name: Fetch whisper.cpp source
       run: git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
 
     - name: Patch “-march=native” for ARM build
@@ -51,18 +61,18 @@ jobs:
         grep -Rl -- '-march=native' whisper.cpp/ggml | \
           xargs sed -i 's/-march=native/-march=armv8-a/g'
 
-    - name: Build whisper.cpp
+    - name: Build whisper.cpp (runtime)
       run: |
         mkdir -p build
         if [ "${{ matrix.arch }}" = "aarch64" ]; then
           cmake -S whisper.cpp -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_SYSTEM_NAME=Linux \
-            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
-            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
-            -DCMAKE_C_FLAGS='-march=armv8-a' \
-            -DCMAKE_CXX_FLAGS='-march=armv8-a'
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_SYSTEM_NAME=Linux \
+                -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+                -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+                -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+                -DCMAKE_C_FLAGS='-march=armv8-a' \
+                -DCMAKE_CXX_FLAGS='-march=armv8-a'
         else
           cmake -S whisper.cpp -B build -DCMAKE_BUILD_TYPE=Release
         fi
@@ -75,20 +85,17 @@ jobs:
         cp build/bin/whisper-cli "$dst/"
         chmod +x "$dst/whisper-cli"
 
-    - name: Build wheel (adds proper platform tag)
-      env:
-        TAG_X86_64: manylinux_2_17_x86_64
-        TAG_AARCH64: manylinux_2_17_aarch64
+    - name: Build wheel
       run: |
         if [ "${{ matrix.arch }}" = "x86_64" ]; then
-          PLAT="$TAG_X86_64"
+          PLAT=$TAG_X86_64
         else
-          PLAT="$TAG_AARCH64"
+          PLAT=$TAG_AARCH64
         fi
-        # --build-option is honoured by the setuptools backend
+        # PEP-517 build with explicit platform tag
         python -m build --wheel --no-isolation \
-          --config-setting="--build-option=--plat-name=$PLAT"
-        python -m pip install --upgrade twine
+               --config-setting="--build-option=--plat-name=$PLAT"
+
         twine check dist/*.whl
         ls -lh dist
 
@@ -106,26 +113,32 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      id-token: write   # PyPI Trusted Publishing
+      id-token: write          # OIDC token for “Trusted Publisher”
 
     steps:
-    # -----------------------------------------------------------
-    - name: Download wheel artefacts
+    # download each artefact separately to avoid filename clobbering
+    - name: Download x86_64 wheel
       uses: actions/download-artifact@v4
       with:
-        merge-multiple: true   # wheels land side-by-side in dist/
+        name: whisp-linux_x86_64
         path: dist
 
-    - name: List & double-check wheels
+    - name: Download aarch64 wheel
+      uses: actions/download-artifact@v4
+      with:
+        name: whisp-linux_aarch64
+        path: dist
+
+    - name: Final wheel sanity-check
       run: |
         ls -lh dist
-        python -m pip install --upgrade twine
         twine check dist/*.whl
 
-    - name: Publish to PyPI (Trusted Publisher)
+    - name: Publish to PyPI (OIDC)
       uses: pypa/gh-action-pypi-publish@v1.8.12
       with:
-        packages-dir: dist
+        packages-dir: dist          # wheels only
         verify-metadata: true
-        skip-existing: false    # fail if the version already exists
-        # no user/password needed – OIDC token is exchanged automatically
+        skip-existing: false        # fail if version already on PyPI
+        # ✨ No password needed – the action exchanges the OIDC token for a
+        #    short-lived PyPI upload token automatically.
