@@ -2,14 +2,11 @@ name: Build & Publish wheels
 
 on:
   push:
-    tags: ['v*']          # publish on version tags (v0.1.0 …)
-  pull_request:           # build wheels for PRs
+    tags: ['v*']            # publish on version tags (v0.1.0 …)
+  pull_request:             # build wheels for PRs
   workflow_dispatch:
 
-# ────────────────────────────────────────────────────────────────
-# Global permissions – enable OIDC for PyPI “Trusted Publishers”
-# (jobs can still override/extend these)
-# ────────────────────────────────────────────────────────────────
+# Global permissions — enable OIDC for PyPI Trusted Publishing
 permissions:
   contents: read
   id-token: write
@@ -20,20 +17,20 @@ concurrency:
 
 jobs:
 # ────────────────────────────────────────────────────────────────
-# 1) build → wheels for x86_64 + aarch64 → upload as artefacts
-# 2) publish → download wheels → twine upload     (only on tag)
+# 1) wheel   → build x86_64 + aarch64 wheels, upload artefacts
+# 2) publish → download wheels, twine check, Trusted-upload to PyPI
 # ────────────────────────────────────────────────────────────────
   wheel:
     name: wheel (${{ matrix.arch }})
     runs-on: ubuntu-24.04
 
     strategy:
-      matrix: { arch: [x86_64, aarch64] }
+      matrix:
+        arch: [x86_64, aarch64]
 
     steps:
     # -----------------------------------------------------------
-    - name: Checkout repo
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
     - name: System dependencies
       run: |
@@ -78,15 +75,21 @@ jobs:
         cp build/bin/whisper-cli "$dst/"
         chmod +x "$dst/whisper-cli"
 
-    - name: Build wheel
+    - name: Build wheel (adds proper platform tag)
+      env:
+        TAG_X86_64: manylinux_2_17_x86_64
+        TAG_AARCH64: manylinux_2_17_aarch64
       run: |
         if [ "${{ matrix.arch }}" = "x86_64" ]; then
-          plat="--config-setting=--plat-name=manylinux_2_17_x86_64"
+          PLAT="$TAG_X86_64"
         else
-          plat="--config-setting=--plat-name=manylinux_2_17_aarch64"
+          PLAT="$TAG_AARCH64"
         fi
-        pipx run build --wheel $plat
-        pipx run twine check dist/*.whl
+        # --build-option is honoured by the setuptools backend
+        python -m build --wheel --no-isolation \
+          --config-setting="--build-option=--plat-name=$PLAT"
+        python -m pip install --upgrade twine
+        twine check dist/*.whl
         ls -lh dist
 
     - name: Upload wheel artefact
@@ -98,41 +101,31 @@ jobs:
 
 # ────────────────────────────────────────────────────────────────
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')   # only on tagged pushes
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: wheel
     runs-on: ubuntu-24.04
-    # job-level permissions (redundant but explicit)
     permissions:
       contents: read
-      id-token: write
+      id-token: write   # PyPI Trusted Publishing
 
     steps:
-    # ─────────────────────────────────────────────────────────────
-    # Download each artefact *sequentially* to avoid clobber races
-    # that corrupt the wheel file when names collide.
-    # ─────────────────────────────────────────────────────────────
-    - name: Download x86_64 wheel
+    # -----------------------------------------------------------
+    - name: Download wheel artefacts
       uses: actions/download-artifact@v4
       with:
-        name: whisp-linux_x86_64
+        merge-multiple: true   # wheels land side-by-side in dist/
         path: dist
 
-    - name: Download aarch64 wheel
-      uses: actions/download-artifact@v4
-      with:
-        name: whisp-linux_aarch64
-        path: dist
-        
     - name: List & double-check wheels
       run: |
         ls -lh dist
-        pipx run twine check dist/*.whl
+        python -m pip install --upgrade twine
+        twine check dist/*.whl
 
-    # -----------------------------------------------------------
-    - name: Publish to PyPI
+    - name: Publish to PyPI (Trusted Publisher)
       uses: pypa/gh-action-pypi-publish@v1.8.12
       with:
         packages-dir: dist
         verify-metadata: true
-        skip-existing: false
-        # (no credentials needed – the action will use OIDC)
+        skip-existing: false    # fail if the version already exists
+        # no user/password needed – OIDC token is exchanged automatically
