@@ -2,23 +2,23 @@ name: Build & Publish wheels
 
 on:
   push:
-    tags: ["v*"]          # publish only on version tags (v0.1.0, v0.1.1, …)
+    tags: ["v*"]          # publish on version tags (v0.1.0 …)
   pull_request:           # build wheels for PRs
   workflow_dispatch:
 
 permissions:
   contents: read          # allow checkout
-  id-token: write         # OIDC token for PyPI
+  id-token:  write        # PyPI OIDC token
 
 concurrency:
   group: build-wheels-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-# ──────────────────────────────────────────────────────────────
-# 1) wheel   – build x86_64 + aarch64 wheels, upload artefacts
-# 2) publish – download artefacts, twine upload (tags only)
-# ──────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
+# 1) wheel   – build, test & upload artefacts
+# 2) publish – twine upload to PyPI (tag only)
+# ──────────────────────────────────────────────
   wheel:
     name: wheel (${{ matrix.arch }})
     runs-on: ubuntu-24.04
@@ -30,8 +30,7 @@ jobs:
       TAG_AARCH64: manylinux_2_17_aarch64
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: System deps
         run: |
@@ -76,25 +75,23 @@ jobs:
           cp build/bin/whisper-cli "$dst/"
           chmod +x "$dst/whisper-cli"
 
-      # ---- install build backend so --no-isolation is not needed
+      # ←———— the critical change is here
       - name: Install Python build tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --upgrade build hatchling
+          python -m pip install --upgrade build hatchling twine
+          echo "$HOME/.local/bin" >> $GITHUB_PATH   # ensure Twine is visible
 
       - name: Build wheel
         run: |
           PLAT="${{ env.TAG_X86_64 }}"
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            PLAT="${{ env.TAG_AARCH64 }}"
-          fi
+          [ "${{ matrix.arch }}" = "aarch64" ] && PLAT="${{ env.TAG_AARCH64 }}"
           python -m build --wheel --no-isolation \
                  --config-setting="--build-option=--plat-name=$PLAT"
-          twine check dist/*.whl
+          python -m twine check dist/*.whl
           ls -lh dist
 
-      - name: Upload artefact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: whisp-linux_${{ matrix.arch }}
           path: dist/*.whl
@@ -109,22 +106,20 @@ jobs:
       id-token: write
 
     steps:
-      - name: Download wheels
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           pattern: whisp-linux_*
-          path: dist                # wheels land directly here
+          path: dist
           merge-multiple: true
 
-      - name: Final sanity-check with latest Twine
+      - name: Verify wheels
         run: |
-          python -m pip install --upgrade twine
-          twine check dist/*.whl
           ls -lh dist
+          python -m pip install --upgrade twine
+          python -m twine check dist/*.whl     # keeps metadata guard in place
 
-      - name: Upload to PyPI (OIDC)
-        uses: pypa/gh-action-pypi-publish@release/v1   # ← newest image
+      - uses: pypa/gh-action-pypi-publish@v1.8.12
         with:
           packages-dir: dist
-          verify-metadata: true        # safe again on Twine ≥ 6
+          verify-metadata: true
           skip-existing: false
