@@ -2,20 +2,19 @@ name: Build & Publish wheels
 
 on:
   push:
-    tags: ['v*']            # publish on version tags (v0.1.0 …)
-  pull_request:             # build wheels for PRs so we know they compile
+    tags: ['v*']          # publish on version tags (v0.1.0 …)
+  pull_request:           # build wheels for PRs
   workflow_dispatch:
 
-# one run per ref; if you re-push the same tag the old run is cancelled
 concurrency:
   group: build-wheels-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-# ──────────────────────────────────────────────────────────────────────
-# 1.  build →   wheels for x86_64 and aarch64  →  upload as artifacts
-# 2.  publish → download those artifacts       →  twine upload
-# ──────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
+# 1) build → wheels for x86_64 + aarch64 → upload as artefacts
+# 2) publish → download wheels → twine upload     (only on tag)
+# ────────────────────────────────────────────────────────────────
   wheel:
     name: wheel (${{ matrix.arch }})
     runs-on: ubuntu-24.04
@@ -25,12 +24,11 @@ jobs:
         arch: [x86_64, aarch64]
 
     steps:
-
+    # -----------------------------------------------------------
     - name: Checkout repo
       uses: actions/checkout@v4
 
-    # ---------------------------------------------------------------
-    # Build deps
+    # -----------------------------------------------------------
     - name: System dependencies
       run: |
         sudo apt-get update
@@ -41,21 +39,18 @@ jobs:
                crossbuild-essential-arm64
         fi
 
-    # ---------------------------------------------------------------
-    # Pull the C/C++ runtime
+    # -----------------------------------------------------------
     - name: Fetch whisper.cpp (runtime)
       run: git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
 
-    # ---------------------------------------------------------------
-    # Patch −march=native when we cross-compile for ARM
-    - name: Patch out “-march=native” for ARM job
+    # -----------------------------------------------------------
+    - name: Patch “-march=native” for ARM build
       if: matrix.arch == 'aarch64'
       run: |
         grep -Rl -- '-march=native' whisper.cpp/ggml | \
           xargs sed -i 's/-march=native/-march=armv8-a/g'
 
-    # ---------------------------------------------------------------
-    # Configure & build whisper.cpp
+    # -----------------------------------------------------------
     - name: Build whisper.cpp
       run: |
         mkdir -p build
@@ -73,18 +68,15 @@ jobs:
         fi
         cmake --build build -j"$(nproc)"
 
-    # ---------------------------------------------------------------
-    # Stage binary into the Python package
-    - name: Stage CLI binary
+    # -----------------------------------------------------------
+    - name: Stage CLI binary into package
       run: |
         dst="src/whisp_cpp_runtime/bin/linux_${{ matrix.arch }}"
         mkdir -p "$dst"
         cp build/bin/whisper-cli "$dst/"
         chmod +x "$dst/whisper-cli"
-    
-    # ---------------------------------------------------------------
-    # Build the wheel – give it a platform-specific tag so
-    # filenames are unique and don’t collide later
+
+    # -----------------------------------------------------------
     - name: Build wheel
       run: |
         if [ "${{ matrix.arch }}" = "x86_64" ]; then
@@ -92,53 +84,49 @@ jobs:
         else
           plat="--config-setting=--plat-name=manylinux_2_17_aarch64"
         fi
-
         pipx run build --wheel $plat
+        # fail fast on a bad wheel
         pipx run twine check dist/*.whl
-        ls -l dist
+        ls -lh dist
 
-    # ---------------------------------------------------------------
-    # Upload each wheel as an artifact
-    - name: Upload wheel artifact
+    # -----------------------------------------------------------
+    - name: Upload wheel artefact
       uses: actions/upload-artifact@v4
       with:
         name: whisp-linux_${{ matrix.arch }}
         path: dist/*.whl
+        if-no-files-found: error
 
-# ─────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
   publish:
-    if: startsWith(github.ref, 'refs/tags/v') # only on tag pushes
+    if: startsWith(github.ref, 'refs/tags/v')   # only on tagged pushes
     needs: wheel
     runs-on: ubuntu-24.04
     permissions:
-      id-token: write    # (optional) for future Trusted-Publisher flows
-      contents: read
+      id-token: write        # for PyPI Trusted Publisher (optional)
+      contents:  read
 
     steps:
-      # ---------------------------------------------------------------
-      # 1. Download every wheel artifact into dist-collect/
-      - name: Download wheel artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist-collect                # keep default directory layout
+    # -----------------------------------------------------------
+    - name: Download wheel artefacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: '*.whl'      # grab only wheel files
+        merge-multiple: true  # put every file directly into target dir
+        path: dist            # <── this now holds *only* wheels
 
-      # ---------------------------------------------------------------
-      # 2. Flatten the directory → dist/
-      - name: Collect wheels into dist/
-        run: |
-          mkdir -p dist
-          find dist-collect -name '*.whl' -exec mv {} dist/ \;
+    # (optional) inspect what was pulled & double-check metadata
+    - name: List wheels
+      run: |
+        ls -lh dist
+        pipx run twine check dist/*.whl
 
-      # (optional) show what was grabbed
-      - name: List wheels
-        run: ls -l dist
-
-      # ---------------------------------------------------------------
-      # 3. Upload to PyPI
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.8.12
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          packages-dir: dist           # <── flattened dir
-          verify-metadata: true        # (default; keeps twine check)
+    # -----------------------------------------------------------
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@v1.8.12
+      with:
+        user: __token__
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        packages-dir: dist
+        verify-metadata: true
+        skip-existing: false
