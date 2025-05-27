@@ -20,15 +20,13 @@ jobs:
     runs-on: ubuntu-24.04
 
     strategy:
-      matrix:
-        arch: [x86_64, aarch64]
+      matrix: { arch: [x86_64, aarch64] }
 
     steps:
     # -----------------------------------------------------------
     - name: Checkout repo
       uses: actions/checkout@v4
 
-    # -----------------------------------------------------------
     - name: System dependencies
       run: |
         sudo apt-get update
@@ -39,18 +37,15 @@ jobs:
                crossbuild-essential-arm64
         fi
 
-    # -----------------------------------------------------------
     - name: Fetch whisper.cpp (runtime)
       run: git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
 
-    # -----------------------------------------------------------
     - name: Patch “-march=native” for ARM build
       if: matrix.arch == 'aarch64'
       run: |
         grep -Rl -- '-march=native' whisper.cpp/ggml | \
           xargs sed -i 's/-march=native/-march=armv8-a/g'
 
-    # -----------------------------------------------------------
     - name: Build whisper.cpp
       run: |
         mkdir -p build
@@ -68,7 +63,6 @@ jobs:
         fi
         cmake --build build -j"$(nproc)"
 
-    # -----------------------------------------------------------
     - name: Stage CLI binary into package
       run: |
         dst="src/whisp_cpp_runtime/bin/linux_${{ matrix.arch }}"
@@ -76,7 +70,6 @@ jobs:
         cp build/bin/whisper-cli "$dst/"
         chmod +x "$dst/whisper-cli"
 
-    # -----------------------------------------------------------
     - name: Build wheel
       run: |
         if [ "${{ matrix.arch }}" = "x86_64" ]; then
@@ -85,11 +78,9 @@ jobs:
           plat="--config-setting=--plat-name=manylinux_2_17_aarch64"
         fi
         pipx run build --wheel $plat
-        # fail fast on a bad wheel
         pipx run twine check dist/*.whl
         ls -lh dist
 
-    # -----------------------------------------------------------
     - name: Upload wheel artefact
       uses: actions/upload-artifact@v4
       with:
@@ -111,12 +102,10 @@ jobs:
     - name: Download wheel artefacts
       uses: actions/download-artifact@v4
       with:
-        pattern: '*.whl'      # grab only wheel files
-        merge-multiple: true  # put every file directly into target dir
-        path: dist            # <── this now holds *only* wheels
+        merge-multiple: true     # <── wheels are dropped straight into…
+        path: dist               # …this directory
 
-    # (optional) inspect what was pulled & double-check metadata
-    - name: List wheels
+    - name: List & double-check wheels
       run: |
         ls -lh dist
         pipx run twine check dist/*.whl
