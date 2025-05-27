@@ -2,38 +2,39 @@ name: Build & Publish wheels
 
 on:
   push:
-    tags: ["v*"]           # publish on version tags (v0.1.0 …)
-  pull_request:            # build wheels for PRs
+    tags: ["v*"]          # publish on version tags (v0.1.0 …)
+  pull_request:           # build wheels for PRs
   workflow_dispatch:
 
+# Global permissions – allow checkout and OIDC for PyPI
 permissions:
-  contents: read           # allow checkout
-  id-token:  write         # PyPI OIDC token
+  contents: read
+  id-token: write
 
 concurrency:
   group: build-wheels-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  TAG_X86_64:  manylinux_2_17_x86_64
+  TAG_AARCH64: manylinux_2_17_aarch64
+
 jobs:
 # ────────────────────────────────────────────────────────────────
-# 1) wheel  – build x86_64 + aarch64, upload artefacts
+# 1) wheel   – build x86_64 + aarch64, upload artefacts
 # 2) publish – download artefacts, twine upload (only on tag)
 # ────────────────────────────────────────────────────────────────
   wheel:
     name: wheel (${{ matrix.arch }})
     runs-on: ubuntu-24.04
     strategy:
-      matrix: {arch: [x86_64, aarch64]}
-
-    env:
-      TAG_X86_64: manylinux_2_17_x86_64
-      TAG_AARCH64: manylinux_2_17_aarch64
+      matrix: { arch: [x86_64, aarch64] }
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: System deps
+      - name: System dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build
@@ -46,7 +47,7 @@ jobs:
       - name: Fetch whisper.cpp
         run: git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
 
-      - name: Patch “-march=native” for ARM
+      - name: Patch “-march=native” for ARM build
         if: matrix.arch == 'aarch64'
         run: |
           grep -Rl -- '-march=native' whisper.cpp/ggml | \
@@ -76,11 +77,10 @@ jobs:
           cp build/bin/whisper-cli "$dst/"
           chmod +x "$dst/whisper-cli"
 
-      # ---- NEW: install build backend so --no-isolation is not needed
       - name: Install Python build tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --upgrade build twine hatchling   # <- key line
+          python -m pip install --upgrade build twine hatchling   # hatchling = backend
 
       - name: Build wheel
         run: |
@@ -94,7 +94,7 @@ jobs:
           twine check dist/*.whl
           ls -lh dist
 
-      - name: Upload artefact
+      - name: Upload wheel artefact
         uses: actions/upload-artifact@v4
         with:
           name: whisp-linux_${{ matrix.arch }}
@@ -102,19 +102,20 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v')     # only on tagged pushes
     needs: wheel
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      id-token: write
+      id-token: write        # for PyPI trusted-publisher via OIDC
 
     steps:
       - name: Download wheels
         uses: actions/download-artifact@v4
         with:
-          pattern: whisp-linux_*
+          pattern: whisp-linux_*   # grab both wheels
           path: dist
+          merge-multiple: true     # <-- IMPORTANT: put all files directly in dist/
 
       - name: Verify wheels
         run: |
@@ -122,7 +123,7 @@ jobs:
           python -m pip install --upgrade twine
           twine check dist/*.whl
 
-      - name: Upload to PyPI (OIDC)
+      - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@v1.8.12
         with:
           packages-dir: dist
