@@ -1,125 +1,98 @@
-name: Build & Publish wheels
+name: Build & publish wheels
 
 on:
   push:
-    tags: ["v*"]          # publish on version tags (v0.1.0 …)
-  pull_request:           # build wheels for PRs
-  workflow_dispatch:
+    tags: ["v*"]         # publish only on version tags
+  workflow_dispatch:      # or manual trigger
 
-permissions:
-  contents: read          # allow checkout
-  id-token:  write        # PyPI OIDC token
-
-concurrency:
-  group: build-wheels-${{ github.ref }}
-  cancel-in-progress: true
+env:
+  PYTHON_VERSION: "3.12"
 
 jobs:
-# ──────────────────────────────────────────────
-# 1) wheel   – build, test & upload artefacts
-# 2) publish – twine upload to PyPI (tag only)
-# ──────────────────────────────────────────────
+###############################################################################
+# 1 ────────────────────────────────────────────────────────── build wheels  ──#
+###############################################################################
   wheel:
-    name: wheel (${{ matrix.arch }})
-    runs-on: ubuntu-24.04
+    name: wheel (${{ matrix.plat }})
+    runs-on: ubuntu-latest
     strategy:
-      matrix: {arch: [x86_64, aarch64]}
-
-    env:
-      TAG_X86_64: manylinux_2_17_x86_64
-      TAG_AARCH64: manylinux_2_17_aarch64
+      matrix:
+        plat: [manylinux_2_17_x86_64, manylinux_2_17_aarch64]
 
     steps:
-      - uses: actions/checkout@v4
+    # ── check out the tag ────────────────────────────────────────────────────
+    - uses: actions/checkout@v4
 
-      - name: System deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            sudo apt-get install -y \
-                 gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-                 crossbuild-essential-arm64
-          fi
+    # ── system deps (cmake, ninja, compilers, …) ─────────────────────────────
+    - name: Install build toolchain
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake ninja-build \
+             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu crossbuild-essential-arm64
+      if: matrix.plat == 'manylinux_2_17_aarch64'
 
-      - name: Fetch whisper.cpp
-        run: git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+    - name: Install build toolchain (x86 only)
+      run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build
+      if: matrix.plat == 'manylinux_2_17_x86_64'
 
-      - name: Patch “-march=native” for ARM
-        if: matrix.arch == 'aarch64'
-        run: |
-          grep -Rl -- '-march=native' whisper.cpp/ggml | \
-            xargs sed -i 's/-march=native/-march=armv8-a/g'
+    # ── build whisper.cpp once per arch; copy the binary into package dir ────
+    - name: Build whisper.cpp
+      run: |
+        git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+        mkdir -p build
+        cmake -S whisper.cpp -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build -j"$(nproc)"
+        dst="src/whisp_cpp_runtime/bin/linux_${{ matrix.plat }}"
+        mkdir -p "$dst"
+        cp build/bin/whisper-cli "$dst/"
+        chmod +x "$dst/whisper-cli"
 
-      - name: Build whisper.cpp
-        run: |
-          mkdir -p build
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            cmake -S whisper.cpp -B build \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_SYSTEM_NAME=Linux \
-              -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-              -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
-              -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
-              -DCMAKE_C_FLAGS='-march=armv8-a' \
-              -DCMAKE_CXX_FLAGS='-march=armv8-a'
-          else
-            cmake -S whisper.cpp -B build -DCMAKE_BUILD_TYPE=Release
-          fi
-          cmake --build build -j"$(nproc)"
+    # ── python build requirements ────────────────────────────────────────────
+    - name: Install Python build deps
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install --upgrade build hatchling
 
-      - name: Stage CLI binary in package
-        run: |
-          dst="src/whisp_cpp_runtime/bin/linux_${{ matrix.arch }}"
-          mkdir -p "$dst"
-          cp build/bin/whisper-cli "$dst/"
-          chmod +x "$dst/whisper-cli"
+    # ── build the wheel & rename with platform tag ───────────────────────────
+    - name: Build wheel and tag with platform
+      run: |
+        python -m build --wheel --no-isolation
+        WHEEL=$(ls dist/*.whl)
+        mv "$WHEEL" "${WHEEL/.whl/}-${{ matrix.plat }}.whl"
 
-      # ←———— the critical change is here
-      - name: Install Python build tools
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade build hatchling twine
-          echo "$HOME/.local/bin" >> $GITHUB_PATH   # ensure Twine is visible
+    # ── upload artefact (one wheel per artefact) ─────────────────────────────
+    - uses: actions/upload-artifact@v4
+      with:
+        name: whisp-linux_${{ matrix.plat }}
+        path: dist/*.whl
+        retention-days: 7
 
-      - name: Build wheel
-        run: |
-          PLAT="${{ env.TAG_X86_64 }}"
-          [ "${{ matrix.arch }}" = "aarch64" ] && PLAT="${{ env.TAG_AARCH64 }}"
-          python -m build --wheel --no-isolation \
-                 --config-setting="--build-option=--plat-name=$PLAT"
-          python -m twine check dist/*.whl
-          ls -lh dist
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: whisp-linux_${{ matrix.arch }}
-          path: dist/*.whl
-          if-no-files-found: error
-
+###############################################################################
+# 2 ──────────────────────────────────────────────────────────── publish  ────#
+###############################################################################
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: wheel
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      id-token: write
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: whisp-linux_*
-          path: dist
-          merge-multiple: true
+    - uses: actions/download-artifact@v4
+      with:
+        path: dist                     # no merge-multiple
 
-      - name: Verify wheels
-        run: |
-          ls -lh dist
-          python -m pip install --upgrade twine
-          python -m twine check dist/*.whl     # keeps metadata guard in place
+    - name: Show wheels
+      run: ls -lh dist
 
-      - uses: pypa/gh-action-pypi-publish@v1.8.12
-        with:
-          packages-dir: dist
-          verify-metadata: true
-          skip-existing: false
+    - name: Install & run Twine check
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install twine==6.1.0
+        python -m twine check dist/*.whl
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@v1.8.12
+      with:
+        user: __token__
+        password: ${{ secrets.PYPI_TOKEN }}
+        packages-dir: dist
+        skip-existing: true            # idempotent
+        verify-metadata: true
