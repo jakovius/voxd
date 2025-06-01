@@ -1,71 +1,94 @@
 #!/usr/bin/env bash
-# 
-# Whisp installer – phase-0 skeleton
-# Runs diagnostics only; no packages are installed yet.
-# Safe to run repeatedly.
+# =============================================================================
+#  Whisp – interactive installer for a fresh git-clone
+#
+#  • Installs system packages via apt/dnf/pacman (auto-detect)
+#  • Creates / re-uses a local Python venv  (.venv)
+#  • Installs Python deps from requirements.txt
+#  • Clones + builds whisper.cpp   → whisper.cpp/build/bin/whisper-cli
+#  • (Wayland) builds & enables ydotool if it isn’t on the system
+#
+#  Idempotent: re-running does nothing if everything is already in place.
+# =============================================================================
+set -euo pipefail
 
-set -e
+# ANSI colours
+YEL='\033[1;33m'; GRN='\033[1;32m'; RED='\033[0;31m'; NC='\033[0m'
+# print utility – %b lets escape-sequences inside $* take effect
+msg() { printf "${YEL}==>${NC} %b\n" "$*"; }
+die() { printf "${RED}error:${NC} %s\n" "$*" >&2; exit 1; }
 
-PHASE() { echo -e "\n\033[1;36m==> $*\033[0m"; }
-STEP () { echo "   • $*"; }
+[[ $EUID == 0 ]] && die "Run this as a normal user, not root."
 
-# --------------------------------------------------------------------
-PHASE "0. Preconditions"
-
-# 0a – Refuse sudo
-if [ "$EUID" = 0 ]; then
-  echo "❌  Do NOT run this script with sudo."
-  exit 1
-fi
-
-# 0b – Python ≥3.9
-PY_OK=$(python3 - <<'PY'
-import sys, shutil
-print(int(sys.version_info >= (3,9)))
-PY
-)
-if [ "$PY_OK" -ne 1 ]; then
-  echo "❌  Python ≥ 3.9 not found.  Install it first."
-  exit 1
-fi
-STEP "Python $(python3 -V) ✅"
-
-# 0c – Detect session type
-SESSION=${XDG_SESSION_TYPE:-${WAYLAND_DISPLAY:+wayland}}
-STEP "Desktop backend: ${SESSION:-unknown}"
-
-# --------------------------------------------------------------------
-PHASE "1. Create / activate .venv"
-
-if [ ! -d ".venv" ]; then
-  STEP "python -m venv .venv"
-  STEP "source .venv/bin/activate"
-  STEP "pip install --upgrade pip"
-else
-  STEP "source .venv/bin/activate (already exists)"
-fi
-
-STEP "pip install -e .   # (placeholder – no deps yet)"
-
-# --------------------------------------------------------------------
-PHASE "2. whisper.cpp build diagnostics"
-
-if [ -x whisper.cpp/build/bin/whisper-cli ]; then
-  STEP "Existing build found → skip"
-else
-  STEP "Would clone & build whisper.cpp here"
-fi
-
-# --------------------------------------------------------------------
-PHASE "3. Wayland helper"
-
-if [ "$SESSION" = "wayland" ]; then
-  if command -v ydotool &>/dev/null; then
-    STEP "ydotool present ✅"
-  else
-    STEP "Would offer to run setup_ydotool.sh"
+# -----------------------------------------------------------------------------#
+# 0. Detect package manager
+detect_pkg() {
+  if   command -v apt   >/dev/null; then PM=apt;   INSTALL="sudo apt install -y"
+  elif command -v dnf   >/dev/null; then PM=dnf;   INSTALL="sudo dnf install -y"
+  elif command -v pacman>/dev/null; then PM=pacman;INSTALL="sudo pacman -S --noconfirm"
+  else die "Unsupported distro – need apt, dnf or pacman."
   fi
+}
+detect_pkg;  msg "Package manager: $PM"
+
+# -----------------------------------------------------------------------------#
+# 1. System packages
+SYS_DEPS=(git ffmpeg gcc make cmake curl build-essential)
+
+if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && ! command -v ydotool >/dev/null; then
+  NEED_YDOTOOL=1
+  SYS_DEPS+=(libevdev-dev libudev-dev libconfig++-dev libboost-program-options-dev)
 fi
 
-PHASE "DONE (dry-run)"
-echo "🎉  Skeleton ran without errors."
+msg "Installing system deps: ${SYS_DEPS[*]}"
+$INSTALL "${SYS_DEPS[@]}"
+
+# -----------------------------------------------------------------------------#
+# 2. Python virtual environment
+if [[ ! -d .venv ]]; then
+  msg "Creating virtualenv (.venv)…"
+  python3 -m venv .venv
+fi
+source .venv/bin/activate
+
+pip install --upgrade pip
+msg "Installing Python dependencies…"
+pip install -r requirements.txt
+
+# -----------------------------------------------------------------------------#
+# 3. Clone + build whisper.cpp  (local to repo)
+if [[ ! -d whisper.cpp ]]; then
+  msg "Cloning whisper.cpp…"
+  git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+fi
+
+if [[ ! -x whisper.cpp/build/bin/whisper-cli ]]; then
+  msg "Building whisper.cpp (first time only)…"
+  cmake -S whisper.cpp -B whisper.cpp/build
+  cmake --build whisper.cpp/build -j"$(nproc)"
+else
+  msg "whisper.cpp already built."
+fi
+
+# -----------------------------------------------------------------------------#
+# 4. Optional: ydotool on Wayland
+if [[ ${NEED_YDOTOOL:-0} == 1 ]]; then
+  msg "Wayland detected and ydotool missing – building from source…"
+  tmpd=$(mktemp -d)
+  git clone https://github.com/ReimuNotMoe/ydotool.git "$tmpd/ydotool"
+  cmake -S "$tmpd/ydotool" -B "$tmpd/ydotool/build"
+  sudo cmake --build "$tmpd/ydotool/build" --target install -j"$(nproc)"
+  sudo groupadd -f input
+  sudo usermod -aG input "$USER"
+  printf 'KERNEL=="uinput", MODE="0660", GROUP="input"\n' |
+      sudo tee /etc/udev/rules.d/99-uinput.rules
+  sudo udevadm control --reload-rules && sudo udevadm trigger
+  rm -rf "$tmpd"
+  msg "ydotool installed – log out & back in for group changes."
+fi
+
+# -----------------------------------------------------------------------------#
+# 5. Done
+msg "${GRN}Setup complete!${NC}"
+echo "Activate venv:   source .venv/bin/activate"
+echo "Run GUI mode:    python -m whisp --mode gui"
