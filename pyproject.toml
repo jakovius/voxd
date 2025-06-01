@@ -1,26 +1,22 @@
+# pyproject.toml  — new, complete file
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
 name = "whisp"
-version = "0.1.0"
-description = "Speech-to-text and clipboard whispering utility"
-authors = [{ name = "Jakov & ChatGPT", email = "jakov.iv@proton.me" }]
-readme = "README.md"
+version = "0.2.0"
+description = "Speech-to-text dictation tool that self-builds whisper.cpp on first run"
+authors = [{ name = "Jakov", email = "jakov.iv@proton.me" }]
 requires-python = ">=3.9"
-
-# TODO: replace with your real runtime deps
 dependencies = [
   "sounddevice",
   "pyqt6",
   "platformdirs",
   "pyyaml",
   "requests",
-  "pytest",
   "pyperclip",
   "psutil",
-  "openai",
   "numpy",
   "keyboard",
   "gitpython>=3.1",
@@ -28,10 +24,3 @@ dependencies = [
 
 [project.scripts]
 whisp = "whisp.__main__:main"
-
-[tool.hatch.build]
-packages = [
-  "src/whisp",
-  "src/whisp_cpp_runtime"
-]
-
