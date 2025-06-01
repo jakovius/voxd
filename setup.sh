@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#
+# 
 # Whisp installer – phase-0 skeleton
 # Runs diagnostics only; no packages are installed yet.
 # Safe to run repeatedly.
