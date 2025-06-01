@@ -6,8 +6,16 @@ Runtime helper that returns the path of the embedded whisper.cpp binary
 from importlib.resources import files
 from platform import machine, system
 from pathlib import Path
+import os
 
 def binary_path() -> Path:
+    # 0. Explicit override for tests / advanced users
+    if "WHISP_REPO_ROOT" in os.environ:
+        root = Path(os.environ["WHISP_REPO_ROOT"]).expanduser()
+        cand = root / "whisper.cpp" / "build" / "bin" / "whisper-cli"
+        if cand.is_file():
+            return cand
+
     plat = system().lower()       # "linux", "darwin", "windows"
     arch = machine().lower()      # "x86_64", "aarch64", "arm64", …
 
@@ -23,6 +31,12 @@ def binary_path() -> Path:
     exe = files(__package__).joinpath(f"bin/{subdir}/whisper-cli")
     if exe.is_file():
         return Path(exe)
+
+    # ---- 1. project-local build (repo_root/whisper.cpp/…) ------------
+    repo_root = Path(__file__).resolve().parents[3]
+    local_bin = repo_root / "whisper.cpp" / "build" / "bin" / "whisper-cli"
+    if local_bin.is_file():
+        return local_bin
 
     # ---- Fallback : build whisper.cpp in user cache -----------------
     from subprocess import check_call, CalledProcessError
