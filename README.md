@@ -34,11 +34,7 @@ cd whisp
 ./setup.sh               # builds whisper.cpp + checks OS dependencies
 pipx install .   # ⏱️ <15 s → drops ~/.local/bin/whisp
 # if you are developing/hacking, consider instead: `pipx install --editable .`
-````
-
-*Why pipx?*
-`pipx` builds its **own** isolated venv under `~/.local/pipx/venvs/whisp/` and writes a tiny shim script to `~/.local/bin/whisp`.
-You never have to remember “`source .venv/bin/activate`” again — just run `whisp` like any normal program.
+```
 
 If you don’t have pipx yet:
 
@@ -47,6 +43,9 @@ sudo apt install -y pipx          # Debian/Ubuntu – use dnf / pacman on other 
 pipx ensurepath                    # makes sure ~/.local/bin is on your $PATH
 logout && login                    # or: source ~/.bashrc
 ```
+*Why pipx?*
+`pipx` builds its **own** isolated venv under `~/.local/pipx/venvs/whisp/` and writes a tiny shim script to `~/.local/bin/whisp`.
+You never have to remember “`source .venv/bin/activate`” again — just run `whisp` like any normal program.
 
 ---
 
