@@ -23,6 +23,30 @@ CONFIG_PATH = Path("config.yaml")
 MODELS_DIR = Path("whisper.cpp/models")
 DEFAULT_MODEL = "ggml-base.en.bin"
 
+# ---------------------------------------------------------------------------
+# Public shim for test suite – re-export detect_backend from core.typer
+# ---------------------------------------------------------------------------
+def detect_backend() -> str:
+    """
+    Return "wayland", "x11", or "unknown".
+
+    This is a pass-through to whisp.core.typer.detect_backend so that
+    external callers (and the pytest suite) can import it from the
+    utilities namespace.
+    """
+    try:
+        from whisp.core.typer import detect_backend as _impl
+        return _impl()
+    except Exception:
+        # Fallback copy-pasted from the original implementation
+        if os.environ.get("XDG_SESSION_TYPE"):
+            return os.environ["XDG_SESSION_TYPE"].lower()
+        if os.environ.get("WAYLAND_DISPLAY"):
+            return "wayland"
+        if os.environ.get("DISPLAY"):
+            return "x11"
+        return "unknown"
+
 def check_virtualenv():
     if "VIRTUAL_ENV" not in os.environ:
         print("⚠️  You are not running inside the virtual environment (.venv).")

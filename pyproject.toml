@@ -4,34 +4,19 @@ build-backend = "hatchling.build"
 
 [project]
 name = "whisp"
-version = "0.1.0"
-description = "Speech-to-text and clipboard whispering utility"
-authors = [{ name = "Jakov & ChatGPT", email = "jakov.iv@proton.me" }]
-readme = "README.md"
+version = "0.3.0-dev"
+description = "Voice-typing helper powered by whisper.cpp"
+authors = [{ name = "Jakov", email = "jakov.iv@proton.me" }]
 requires-python = ">=3.9"
-
-# TODO: replace with your real runtime deps
 dependencies = [
-  "sounddevice",
-  "pyqt6",
-  "platformdirs",
-  "pyyaml",
-  "requests",
-  "pytest",
-  "pyperclip",
-  "psutil",
-  "openai",
-  "numpy",
-  "keyboard",
-  "gitpython>=3.1",
+  "sounddevice>=0.5",
+  "pyqt6>=6.9",
+  "platformdirs>=4.2",
+  "pyyaml>=6.0",
+  "pyperclip>=1.9",
+  "psutil>=5.9",
+  "numpy>=1.26",
 ]
 
 [project.scripts]
 whisp = "whisp.__main__:main"
-
-[tool.hatch.build]
-packages = [
-  "src/whisp",
-  "src/whisp_cpp_runtime"
-]
-

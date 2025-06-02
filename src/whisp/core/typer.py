@@ -7,13 +7,20 @@ import select
 from whisp.utils.libw import verbo
 
 def detect_backend():
-    # Try to detect the graphical backend (Wayland or X11)
-    if os.environ.get("XDG_SESSION_TYPE"):
-        return os.environ["XDG_SESSION_TYPE"].lower()
+    """
+    Return a best-guess of the active graphical backend.
+
+    Priority  1. $WAYLAND_DISPLAY  → "wayland"
+              2. $DISPLAY         → "x11"
+              3. $XDG_SESSION_TYPE
+              4. "unknown"
+    """
     if os.environ.get("WAYLAND_DISPLAY"):
         return "wayland"
     if os.environ.get("DISPLAY"):
         return "x11"
+    if os.environ.get("XDG_SESSION_TYPE"):
+        return os.environ["XDG_SESSION_TYPE"].lower()
     return "unknown"
 
 class SimulatedTyper:

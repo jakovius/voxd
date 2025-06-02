@@ -182,3 +182,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# any whisper.cpp build cache
+.whisper.cpp/
+**/whisper.cpp/build/
+src/whisp_cpp_runtime/bin/
