@@ -139,4 +139,22 @@ Change values, restart Whisp.  Unknown keys are ignored.
 
 ---
 
+## Removal
+
+**If it was installed via `git clone` and running `setup.sh`:**
+
+```bash
+cd ~/where/you/cloned/whisp
+rm -rf .venv # kill the virtual-env
+rm -rf whisper.cpp # if whisper.cpp was built in the same folder
+cd .. && rm -rf whisp # remove the repo folder
+```
+
+**If it was installed via `pipx install whisp`:**
+
+```bash
+pipx uninstall whisp # removes venv, script, deps
+```
+---
+
 Enjoy seamless voice‑typing on Linux – and if you build something cool on top, open a PR or say hi! 🚀
