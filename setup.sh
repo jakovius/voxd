@@ -33,7 +33,12 @@ detect_pkg;  msg "Package manager: $PM"
 
 # -----------------------------------------------------------------------------#
 # 1. System packages
-SYS_DEPS=(git ffmpeg gcc make cmake curl build-essential)
+SYS_DEPS=(git ffmpeg gcc make cmake curl build-essential python3-venv)
+
+# Fedora branch (dnf) – optional but nice
+if [[ $PM == dnf ]]; then
+  SYS_DEPS+=(python3-virtualenv)
+fi
 
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && ! command -v ydotool >/dev/null; then
   NEED_YDOTOOL=1
