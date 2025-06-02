@@ -23,17 +23,29 @@ die() { printf "${RED}error:${NC} %s\n" "$*" >&2; exit 1; }
 # -----------------------------------------------------------------------------#
 # 0. Detect package manager
 detect_pkg() {
-  if   command -v apt   >/dev/null; then PM=apt;   INSTALL="sudo apt install -y"
-  elif command -v dnf   >/dev/null; then PM=dnf;   INSTALL="sudo dnf install -y"
-  elif command -v pacman>/dev/null; then PM=pacman;INSTALL="sudo pacman -S --noconfirm"
-  else die "Unsupported distro – need apt, dnf or pacman."
+  if   command -v apt   >/dev/null; then
+       PM=apt
+       INSTALL="sudo apt install -y"
+  elif command -v dnf   >/dev/null; then
+       PM=dnf
+       INSTALL="sudo dnf install -y"
+       # ── add Fedora-specific runtime libs for Qt ──
+       SYS_DEPS+=(portaudio portaudio-devel xcb-util-cursor xcb-util-wm)
+  elif command -v pacman>/dev/null; then
+       PM=pacman
+       INSTALL="sudo pacman -S --noconfirm"
+  else
+       die "Unsupported distro – need apt, dnf or pacman."
   fi
 }
 detect_pkg;  msg "Package manager: $PM"
 
 # -----------------------------------------------------------------------------#
 # 1. System packages
-SYS_DEPS=(git ffmpeg gcc make cmake curl build-essential python3-venv)
+SYS_DEPS=(git ffmpeg gcc make cmake curl build-essential python3-venv \
+          libxcb-cursor0 libxcb-xinerama0 libportaudio2)
+# in case the dev headers for future PyAudio are desired:
+SYS_DEPS+=(portaudio19-dev)
 
 # Fedora branch (dnf) – optional but nice
 if [[ $PM == dnf ]]; then
