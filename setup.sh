@@ -60,6 +60,9 @@ pip install --upgrade pip
 msg "Installing Python dependencies…"
 pip install -r requirements.txt
 
+msg "Installing Whisp package into venv (editable)…"
+pip install -e .
+
 # -----------------------------------------------------------------------------#
 # 3. Clone + build whisper.cpp  (local to repo)
 if [[ ! -d whisper.cpp ]]; then
