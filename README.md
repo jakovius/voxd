@@ -17,87 +17,72 @@ A lightning‑fast voice‑to‑text helper for **any** Linux app.  Hit a global
 
 ---
 
-## 🚀 Quick install (Ubuntu / Fedora / Arch / Pop!\_OS)
-
-```bash
-# 1. Grab the source
-$ git clone https://github.com/jacob8472/whisp.git && cd whisp
-
-# 2. Run one‑shot installer (≈ 2–5 min on first run)
-$ ./setup.sh
-```
-
-`setup.sh` will:
-
-1. Detect **apt / dnf / pacman** and install build tools, `ffmpeg`, clipboard helpers, etc.
-2. Create a local **.venv** and `pip install -r requirements.txt`.
-3. Clone & compile **whisper.cpp** under `whisper.cpp/build/`.
-4. (Wayland only) Offer to build & enable **ydotool** for simulated typing.
-
-> **Re‑run safe** – if everything’s already present the script exits in seconds.
+Below is a drop-in replacement for the **“📦 Installation”** and **“🏃 Usage → Global Hotkey”** parts of `README.md`.
+Everything else in the README can stay as is — just splice this in so that new users see the simplest path first.
 
 ---
 
-## ⌨️ Setting the Global Hotkey ("Trigger Record")
 
-Whisp listens for a small CLI flag: `--trigger-record`.  Your desktop shortcut should run this **exact command**, *with PYTHONPATH pointing at the repo root* so Python can resolve the package when invoked by the WM.
+## 📦 Installation
 
-```bash
-bash -c 'PYTHONPATH=/home/$USER/whisp python3 -m whisp --trigger-record'
-```
-
-### GNOME / Cinnamon / Budgie
-
-1. **Settings → Keyboard → Custom Shortcuts → “+”**
-2. *Name*: **Whisp – Toggle record**
-3. *Command*: *(see box above)*
-4. *Shortcut*: press <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>R</kbd> (or anything free)
-
-### KDE Plasma
-
-1. **System Settings → Shortcuts → Custom Shortcuts**
-2. *Edit ➜ New ➜ Global ➜ Command/URL* → paste command
-3. Assign the key sequence, Apply.
-
-### XFCE / i3 / sway …
-
-Any launcher that can run a shell one‑liner works – just remember the `PYTHONPATH=` prefix or call a wrapper script such as:
+> **Works on any modern Linux** – Ubuntu 24.04, Fedora 40, Pop!\_OS 22, etc.  
+> After this you will have a global `whisp` command available in any shell.
 
 ```bash
-#!/usr/bin/env bash
-export PYTHONPATH="$HOME/whisp"
-python3 -m whisp --trigger-record
-```
+git clone https://github.com/jacob8472/whisp.git
+cd whisp
+./setup.sh               # builds whisper.cpp + checks OS dependencies
+pipx install .   # ⏱️ <15 s → drops ~/.local/bin/whisp
+# if you are developing/hacking, consider instead: `pipx install --editable .`
+````
 
-Place it in `~/bin/whisp_trigger` and bind the shortcut to that file.
+*Why pipx?*
+`pipx` builds its **own** isolated venv under `~/.local/pipx/venvs/whisp/` and writes a tiny shim script to `~/.local/bin/whisp`.
+You never have to remember “`source .venv/bin/activate`” again — just run `whisp` like any normal program.
+
+If you don’t have pipx yet:
+
+```bash
+sudo apt install -y pipx          # Debian/Ubuntu – use dnf / pacman on other distros
+pipx ensurepath                    # makes sure ~/.local/bin is on your $PATH
+logout && login                    # or: source ~/.bashrc
+```
 
 ---
 
-## 🏃‍♀️ Usage modes
+## 🏃 Usage — Setting up a **global Record/Stop shortcut**
+
+1. **Open your system keyboard-shortcuts panel**
+   *GNOME:* Settings → Keyboard → “Custom Shortcuts”
+   *KDE / XFCE / Cinnamon:* similar path.
+
+2. **Add a new shortcut:**
+
+| Field        | Value (copy exactly)               |
+| ------------ | ---------------------------------- |
+| **Name**     | Whisp • Record                     |
+| **Command**  | `bash -c 'whisp --trigger-record'` |
+| **Shortcut** | e.g. `Ctrl + Alt + R`              |
+
+3. Click **Add / Save**.
+4. Launch Whisp in any mode (CLI, GUI, or tray). From now on:
+
+| Press hotkey …   | Whisp does …                                                |
+| ---------------- | ----------------------------------------------------------- |
+| **First press**  | start recording                                             |
+| **Second press** | stop ⇢ transcribe ⇢ copy to clipboard ⇢ (typing if enabled) |
+
+### Quick-start examples
 
 ```bash
-# One‑off dictation into clipboard
-$ python -m whisp --mode hear
-
-# Interactive shell (quick tests, benchmarks, hotkey loop)
-$ python -m whisp --mode cli
-
-# Minimal dark GUI window
-$ python -m whisp --mode gui
-
-# Background tray – ideal for day‑to‑day typing
-$ python -m whisp --mode whisp
+whisp --mode gui      # friendly pill-button window
+whisp --mode whisp    # sits in the tray; perfect for continuous dictation
+whisp --mode cli      # terminal REPL; 'h' shows commands
 ```
 
-*CLI quick keys*
+*(The very first run may download/build its own `whisper-cli` into `~/.cache/whisp/` — subsequent starts are instant.)*
 
-| Key   | Action                                        |
-| ----- | --------------------------------------------- |
-| `r`   | record (Enter to stop)                        |
-| `rh`  | wait for hotkey, record, hotkey again to stop |
-| `l`   | show / save session log                       |
-| `cfg` | open `config.yaml` in editor                  |
-| `x`   | quit                                          |
+```                                   |
 
 ---
 
