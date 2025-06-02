@@ -209,6 +209,16 @@ def check_audio():
         print("❌ Could not query sound devices:", e)
         print("   You may need to install: libportaudio2 alsa-utils")
 
+def check_portaudio():
+    print_section("PortAudio runtime check…")
+    try:
+        import ctypes, sounddevice
+        # ctypes finds libportaudio behind the scenes
+        print("✅ PortAudio library loaded via sounddevice.")
+    except OSError as e:
+        print(f"❌ {e}")
+        print("   Install libportaudio2 (Ubuntu) or portaudio (Fedora).")
+
 def check_whisper_config():
     print_section("Verifying whisper binary + model setup...")
     detect_whisper_binary()
@@ -219,6 +229,7 @@ def run_all():
     check_virtualenv()
     check_dependencies()
     check_audio()
+    check_portaudio()
     check_whisper_config()
     print("\n✅ Setup check complete.")
 
