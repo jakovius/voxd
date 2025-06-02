@@ -1,146 +1,142 @@
-# Whisp App
+# Whisp – Talk & Type on Linux 🗣️⌨️
 
-**Talk and type** with your voice, in any of your apps on Linux!  
-
-Fast, modular speech-to-text dictation tool for Linux, using **whisper.cpp**  
-featuring **CLI**, **GUI**, **"WHISP" mode** (a tray/background mode).  
-  
----
-
-## Features
-
-- 🧠 Fast transcription with **whisper.cpp**
-- 📋 Transcript automatically copied to clipboard
-- ⌨️ Immediate simulated typing into any focused app (even on GNOME/Wayland)
-- 🧾 Session logging with timestamps
-- 🧠 AI post-processing (optional, via local Ollama or a remote LLM)
-- 📊 Benchmarking, diagnostics, performance CSV export
-- 🖥️ Multiple usage modes:
-  - `HEAR`: one-off transcript (from CLI or integration)
-  - `CLI`: interactive shell with hotkey and commands
-  - `GUI`: minimal dark-mode UI with single button
-  - `WHISP`: tray mode with global hotkey
-  - WHISP, CLI and GUI run in the background — can be used to voice-type in any app
----
-
-## 📦 Installation
-
-### Linux:
-
-#### Clone & Run Setup
-```bash
-git clone https://github.com/jacob8472/whisp.git
-cd whisp
-chmod +x setup.sh
-sudo ./setup.sh
-```
-
-## 🏃 Usage
-
-### Setting Up a Global Hotkey for Whisp App
-
-To enable global hotkey recording:
-
-1. **Open your system’s keyboard shortcuts settings** (e.g., GNOME Settings → Keyboard → Custom Shortcuts).
-2. **Add a new shortcut:**
-    - **Name:** Whisp: Start Recording
-    - **Command:** `bash -c 'PYTHONPATH=/path/to/parent/folder/of/the/project/ python3 -m whisp --trigger-record'`
-    - **Shortcut:** (e.g., `ctrl+alt+r`)
-3. **Save the shortcut.**
-4. In your `config.yaml`, set `hotkey_record` to match your chosen shortcut for reference.
-
-**Running**  
-When you are in one of the Whisp running modes (see below), press the shortcut hotkey, the system will run the trigger command, which sends a message to the running Whisp app (CLI, GUI, or Tray) to start recording - then any speech will be recorded - to finish recording and proceed, one should press the hotkey again.
-
-> The shortcut works as long as Whisp App is running in any mode except "hear".
-
-### CLI Mode
-```bash
-python -m cli.cli_main
-```
-**Commands:**
-- `r` → record audio, press ENTER to stop
-- `rh` → wait for hotkey to trigger start recording, and stop with the hotkey trigger again
-- `l` → show log
-- `cfg` → open config
-- `x` → quit
-- `--save-audio` → preserve `.wav`
-- `--test-file file.wav` → use existing audio
-
-### GUI Mode
-```bash
-python -m gui.main
-```
-- Central button to start/stop recording
-- works with hotkey as well
-- Shows clipboard status and transcript preview
-- Options: log, config, test, quit
-
-### WHISP Mode (Tray)
-```bash
-python -m whisp_mode.tray
-```
-- Tray icon with menu
-- listens for hotkey to start/stop recording
-- Runs in background
-- ideal for dictation in any app
+A lightning‑fast voice‑to‑text helper for **any** Linux app.  Hit a global shortcut, speak, and watch your words appear wherever the cursor lives.
 
 ---
 
-## ⚙️ Configuration
+## ✨ Highlights
 
-Modify `config.yaml` or open it in the program to customize settings:
+| Feature                          | Notes                                                                   |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| **Whisper.cpp backend**          | Local, offline, MIT‑licensed large‑vocab ASR.                           |
+| **One‑key recording**            | Works on Wayland (*ydotool*) **and** X11 (*xdotool*).                   |
+| **Clipboard + Simulated typing** | Auto‑copies or types straight into the focused window.                  |
+| Multiple UI surfaces             | CLI, minimal PyQt6 GUI, Background Tray (“WHISP”) & one‑shot HEAR mode. |
+| Optional AI post‑process         | Summarise / rewrite via local **Ollama** or remote **OpenAI**.          |
+| Logs & benchmarks                | Session log plus opt‑in performance CSV.                                |
+
+---
+
+## 🚀 Quick install (Ubuntu / Fedora / Arch / Pop!\_OS)
+
+```bash
+# 1. Grab the source
+$ git clone https://github.com/jacob8472/whisp.git && cd whisp
+
+# 2. Run one‑shot installer (≈ 2–5 min on first run)
+$ ./setup.sh
+```
+
+`setup.sh` will:
+
+1. Detect **apt / dnf / pacman** and install build tools, `ffmpeg`, clipboard helpers, etc.
+2. Create a local **.venv** and `pip install -r requirements.txt`.
+3. Clone & compile **whisper.cpp** under `whisper.cpp/build/`.
+4. (Wayland only) Offer to build & enable **ydotool** for simulated typing.
+
+> **Re‑run safe** – if everything’s already present the script exits in seconds.
+
+---
+
+## ⌨️ Setting the Global Hotkey ("Trigger Record")
+
+Whisp listens for a small CLI flag: `--trigger-record`.  Your desktop shortcut should run this **exact command**, *with PYTHONPATH pointing at the repo root* so Python can resolve the package when invoked by the WM.
+
+```bash
+bash -c 'PYTHONPATH=/home/$USER/whisp python3 -m whisp --trigger-record'
+```
+
+### GNOME / Cinnamon / Budgie
+
+1. **Settings → Keyboard → Custom Shortcuts → “+”**
+2. *Name*: **Whisp – Toggle record**
+3. *Command*: *(see box above)*
+4. *Shortcut*: press <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>R</kbd> (or anything free)
+
+### KDE Plasma
+
+1. **System Settings → Shortcuts → Custom Shortcuts**
+2. *Edit ➜ New ➜ Global ➜ Command/URL* → paste command
+3. Assign the key sequence, Apply.
+
+### XFCE / i3 / sway …
+
+Any launcher that can run a shell one‑liner works – just remember the `PYTHONPATH=` prefix or call a wrapper script such as:
+
+```bash
+#!/usr/bin/env bash
+export PYTHONPATH="$HOME/whisp"
+python3 -m whisp --trigger-record
+```
+
+Place it in `~/bin/whisp_trigger` and bind the shortcut to that file.
+
+---
+
+## 🏃‍♀️ Usage modes
+
+```bash
+# One‑off dictation into clipboard
+$ python -m whisp --mode hear
+
+# Interactive shell (quick tests, benchmarks, hotkey loop)
+$ python -m whisp --mode cli
+
+# Minimal dark GUI window
+$ python -m whisp --mode gui
+
+# Background tray – ideal for day‑to‑day typing
+$ python -m whisp --mode whisp
+```
+
+*CLI quick keys*
+
+| Key   | Action                                        |
+| ----- | --------------------------------------------- |
+| `r`   | record (Enter to stop)                        |
+| `rh`  | wait for hotkey, record, hotkey again to stop |
+| `l`   | show / save session log                       |
+| `cfg` | open `config.yaml` in editor                  |
+| `x`   | quit                                          |
+
+---
+
+## ⚙️ Config (first‑run auto‑generated)
+
+`~/.config/whisp/config.yaml`
+
 ```yaml
-# Whisp configuration file example
-app_mode: CLI
-hotkey_record: ctrl+alt+r
+app_mode: whisp            # default launch mode
 model_path: whisper.cpp/models/ggml-base.en.bin
+hotkey_record: ctrl+alt+r  # for reference only – DE shortcut does the real work
 simulate_typing: true
-aipp_enabled: false
-clipboard_backend: auto
+clipboard_backend: auto    # xclip / wl-copy / pyperclip fallback
+aipp_enabled: false        # AI post‑processing off by default
+verbosity: true            # extra console logs
 ```
+
+Change values, restart Whisp.  Unknown keys are ignored.
 
 ---
 
-## 🧪 Testing & Benchmarking
+## 🩺 Troubleshooting cheatsheet
 
-### Test one transcription run
-```bash
-python test.py test
-```
-
-### Benchmark multiple models
-```bash
-python test.py benchmark --audio recordings/example.wav --models whisper.cpp/models/*.bin
-```
-
-### Analyze previous results
-```bash
-python test.py analyze
-```
-
-### Run system diagnostics
-```bash
-python test.py diagnostics
-```
+| Symptom                            | Likely cause / fix                                                                             |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------- |
+| *Press hotkey, nothing happens*    | Shortcut command missing `PYTHONPATH` or wrong path to repo.                                   |
+| *Transcript printed but not typed* | Wayland: `ydotool` not installed or user not in `input` group → run `setup_ydotool.sh`, relog. |
+| *“whisper-cli not found”*          | Build failed – rerun `./setup.sh` and check cmake output.                                      |
+| *Mic not recording*                | Verify in `pavucontrol` the VM’s input device is active and not muted.                         |
+| Clipboard empty                    | Disable/enable SPICE clipboard sync in VM; ensure `xclip` or `wl-copy` present.                |
 
 ---
 
-## 🧱 Architecture Overview
+## 📜 License & Credits
 
-- `core/` — building blocks: recorder, transcriber, logger, clipboard, typer
-- `cli/` — CLI loop
-- `gui/` — PyQt6 GUI
-- `whisp_mode/` — background tray app
-- `utils/` — orchestration, benchmarking, setup utils
+* Whisp – © 2025 Jakov Iv.
+* **MIT** license (see `LICENSE`).
+* Speech engine powered by [**ggml‑org/whisper.cpp**](https://github.com/ggml-org/whisper.cpp) (MIT) and OpenAI Whisper models (MIT).
 
 ---
 
-## 📜 License
-
-Whisp is licensed under the MIT License. See `LICENSE` for details.
-
----
-
-## 💡 Credits
-- whisper.cpp by @ggerganov
+Enjoy seamless voice‑typing on Linux – and if you build something cool on top, open a PR or say hi! 🚀
