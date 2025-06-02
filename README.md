@@ -134,7 +134,7 @@ rm -rf whisper.cpp # if whisper.cpp was built in the same folder
 cd .. && rm -rf whisp # remove the repo folder
 ```
 
-**If it was installed via `pipx install whisp`:**
+**If it was installed via `pipx install .`:**
 
 ```bash
 pipx uninstall whisp # removes venv, script, deps
