@@ -157,4 +157,25 @@ pipx uninstall whisp # removes venv, script, deps
 ```
 ---
 
+**Optional housekeeping:**
+
+```bash
+# 1. kill anything still running
+pkill -f whisp || true
+pkill -f ydotoold || true
+
+# 2. user-level systemd bits (only if you ran setup_ydotool.sh)
+systemctl --user stop  ydotoold.service 2>/dev/null
+systemctl --user disable ydotoold.service 2>/dev/null
+rm -f ~/.config/systemd/user/ydotoold.service
+
+# 3. wipe Whisp’s XDG dirs
+rm -rf ~/.config/whisp        # settings file
+rm -rf ~/.cache/whisp         # auto-built whisper.cpp, downloaded models, logs
+
+# 4. any stray desktop launchers or symlinks
+rm -f ~/.local/share/applications/whisp.desktop
+sudo rm -f /usr/local/bin/whisp  # only if you manually linked it
+```
+
 Enjoy seamless voice‑typing on Linux – and if you build something cool on top, open a PR or say hi! 🚀
