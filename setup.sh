@@ -90,6 +90,15 @@ else
   msg "whisper.cpp already built."
 fi
 
+MODEL_DIR="whisper.cpp/models"
+MODEL_FILE="$MODEL_DIR/ggml-base.en.bin"
+if [ ! -f "$MODEL_FILE" ]; then
+  echo "→ Downloading default Whisper model (base.en)…"
+  mkdir -p "$MODEL_DIR"
+  curl -L -o "$MODEL_FILE" \
+    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+fi
+
 # -----------------------------------------------------------------------------#
 # 4. Optional: ydotool on Wayland
 if [[ ${NEED_YDOTOOL:-0} == 1 ]]; then
@@ -112,3 +121,15 @@ fi
 msg "${GRN}Setup complete!${NC}"
 echo "Activate venv:   source .venv/bin/activate"
 echo "Run GUI mode:    python -m whisp --mode gui"
+
+ -----------------------------------------------------------------------------#
+# 6. Ensure there is at least a default speech model
+if ! whisp-model list | grep -q "ggml-base.en.bin"; then
+  echo
+  read -p "Download default base.en model now (~142 MB)? [Y/n] " ans
+  if [[ $ans =~ ^([yY]|$) ]]; then
+      whisp-model install base.en
+  else
+      echo "You can do it later with:  whisp-model install base.en"
+  fi
+fi

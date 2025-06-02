@@ -81,7 +81,30 @@ whisp --mode cli      # terminal REPL; 'h' shows commands
 
 *(The very first run may download/build its own `whisper-cli` into `~/.cache/whisp/` — subsequent starts are instant.)*
 
-```                                   |
+
+### 🎙️  Managing speech models
+
+Whisp needs a Whisper GGML model file.  
+Use the built-in model-manager to fetch the default (≈142 MB):
+
+```bash
+whisp-model install base.en     # or tiny.en / small / medium … see list below
+```
+That downloads into ~/.cache/whisp/models/ and Whisp will
+automatically pick it up.
+
+Common commands:
+```bash
+whisp-model list	# show models already on disk
+whisp-model install tiny.en  #	download another model
+whisp-model remove tiny.en	# delete a model
+whisp-model use tiny.en	# make that model the default (edits config.yaml)
+```
+
+A complete catalogue of available keys (size MB):
+
+tiny.en 75 · tiny 142 · base.en 142 · base 142 ·
+small.en 466 · small 466 · medium.en 1500 · medium 1500 · large-v3 2900
 
 ---
 

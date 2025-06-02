@@ -20,3 +20,4 @@ dependencies = [
 
 [project.scripts]
 whisp = "whisp.__main__:main"
+whisp-model = "whisp.models:_cli"
