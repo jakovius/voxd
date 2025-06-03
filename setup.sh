@@ -2,8 +2,8 @@
 # =============================================================================
 #  Whisp – interactive installer for a fresh git-clone
 #
-#  • Installs system packages via apt/dnf/pacman (auto-detect)
-#  • Creates / re-uses a local Python venv  (.venv)
+#  • Installs system packages      (apt / dnf / pacman – auto-detected)
+#  • Creates / re-uses a Python venv   (.venv)
 #  • Installs Python deps from requirements.txt
 #  • Clones + builds whisper.cpp   → whisper.cpp/build/bin/whisper-cli
 #  • (Wayland) builds & enables ydotool if it isn’t on the system
@@ -12,9 +12,8 @@
 # =============================================================================
 set -euo pipefail
 
-# ANSI colours
+# --- pretty printing ---------------------------------------------------------
 YEL='\033[1;33m'; GRN='\033[1;32m'; RED='\033[0;31m'; NC='\033[0m'
-# print utility – %b lets escape-sequences inside $* take effect
 msg() { printf "${YEL}==>${NC} %b\n" "$*"; }
 die() { printf "${RED}error:${NC} %s\n" "$*" >&2; exit 1; }
 
@@ -29,35 +28,58 @@ detect_pkg() {
   elif command -v dnf   >/dev/null; then
        PM=dnf
        INSTALL="sudo dnf install -y"
-       # ── add Fedora-specific runtime libs for Qt ──
-       SYS_DEPS+=(portaudio portaudio-devel xcb-util-cursor xcb-util-wm \
-                  xclip xsel wl-clipboard)
   elif command -v pacman>/dev/null; then
        PM=pacman
        INSTALL="sudo pacman -S --noconfirm"
-       SYS_DEPS+=(xclip xsel wl-clipboard)
   else
        die "Unsupported distro – need apt, dnf or pacman."
   fi
 }
-detect_pkg;  msg "Package manager: $PM"
+detect_pkg; msg "Package manager: $PM"
 
 # -----------------------------------------------------------------------------#
 # 1. System packages
-SYS_DEPS=(git ffmpeg gcc make cmake curl build-essential python3-venv \
-          libxcb-cursor0 libxcb-xinerama0 libportaudio2 \
-          xclip xsel wl-clipboard)
-# in case the dev headers for future PyAudio are desired:
-SYS_DEPS+=(portaudio19-dev)
+#    – first the *common* bits, then a case-block adds / overrides distro names
+SYS_DEPS=(
+  git ffmpeg gcc make cmake curl
+  xclip xsel wl-clipboard                # clipboard helpers
+)
 
-# Fedora branch (dnf) – optional but nice
-if [[ $PM == dnf ]]; then
-  SYS_DEPS+=(python3-virtualenv)
-fi
+case "$PM" in
+  apt)
+    SYS_DEPS+=(
+      build-essential python3-venv
+      libxcb-cursor0 libxcb-xinerama0
+      libportaudio2 portaudio19-dev
+    )
+    ;;
 
+  dnf)
+    SYS_DEPS+=(
+      @development-tools       # group: gcc gcc-c++ make …
+      python3-devel python3-virtualenv
+      xcb-util-cursor xcb-util-wm
+      portaudio portaudio-devel
+    )
+    ;;
+
+  pacman)
+    SYS_DEPS+=(
+      base-devel python-virtualenv
+      xcb-util-cursor xcb-util-wm
+      portaudio
+    )
+    ;;
+esac
+
+# Extra headers only needed when we have to build ydotool (Wayland)
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && ! command -v ydotool >/dev/null; then
   NEED_YDOTOOL=1
-  SYS_DEPS+=(libevdev-dev libudev-dev libconfig++-dev libboost-program-options-dev)
+  case "$PM" in
+    apt)   SYS_DEPS+=(libevdev-dev  libudev-dev  libconfig++-dev  libboost-program-options-dev) ;;
+    dnf)   SYS_DEPS+=(libevdev-devel libudev-devel libconfig++-devel boost-program-options-devel) ;;
+    pacman)SYS_DEPS+=(libevdev  libconfig++  boost) ;;   # Arch’s libudev is in systemd-libs
+  esac
 fi
 
 msg "Installing system deps: ${SYS_DEPS[*]}"
@@ -93,17 +115,19 @@ else
   msg "whisper.cpp already built."
 fi
 
+# -----------------------------------------------------------------------------#
+# 4. Ensure there is at least one model in place
 MODEL_DIR="whisper.cpp/models"
 MODEL_FILE="$MODEL_DIR/ggml-base.en.bin"
-if [ ! -f "$MODEL_FILE" ]; then
+if [[ ! -f $MODEL_FILE ]]; then
   echo "→ Downloading default Whisper model (base.en)…"
   mkdir -p "$MODEL_DIR"
   curl -L -o "$MODEL_FILE" \
-    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+       https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
 fi
 
 # -----------------------------------------------------------------------------#
-# 4. Optional: ydotool on Wayland
+# 5. Optional: ydotool on Wayland
 if [[ ${NEED_YDOTOOL:-0} == 1 ]]; then
   msg "Wayland detected and ydotool missing – building from source…"
   tmpd=$(mktemp -d)
@@ -120,16 +144,16 @@ if [[ ${NEED_YDOTOOL:-0} == 1 ]]; then
 fi
 
 # -----------------------------------------------------------------------------#
-# 5. Done
+# 6. Done
 msg "${GRN}Setup complete!${NC}"
 echo "Activate venv:   source .venv/bin/activate"
 echo "Run GUI mode:    python -m whisp --mode gui"
 
 # -----------------------------------------------------------------------------#
-# 6. Ensure there is at least a default speech model
-if ! whisp-model list | grep -q "ggml-base.en.bin"; then
+# 7. Offer to install the model via model manager (optional, nicer UX)
+if ! whisp-model list | grep -q "ggml-base.en.bin" 2>/dev/null; then
   echo
-  read -p "Download default base.en model now (~142 MB)? [Y/n] " ans
+  read -r -p "Download default base.en model now (~142 MB)? [Y/n] " ans
   if [[ $ans =~ ^([yY]|$) ]]; then
       whisp-model install base.en
   else
