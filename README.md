@@ -97,6 +97,7 @@ Common commands:
 ```bash
 whisp-model list	# show models already on disk
 whisp-model install tiny.en  #	download another model
+whisp-model install base.en --no-check # download a model and skip hash checking (rarely needed)
 whisp-model remove tiny.en	# delete a model
 whisp-model use tiny.en	# make that model the default (edits config.yaml)
 ```
