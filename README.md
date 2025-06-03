@@ -96,8 +96,8 @@ automatically pick it up.
 Common commands:
 ```bash
 whisp-model list	# show models already on disk
-whisp-model install tiny.en  #	download another model
-whisp-model install base.en --no-check # download a model and skip hash checking (rarely needed)
+whisp-model install tiny.en  #	download another model ("fetch" can be also used as alias for "install")
+whisp-model --no-check install base.en # download a model and skip SHA-1 verification (rarely needed)
 whisp-model remove tiny.en	# delete a model
 whisp-model use tiny.en	# make that model the default (edits config.yaml)
 ```

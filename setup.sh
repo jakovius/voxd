@@ -30,10 +30,12 @@ detect_pkg() {
        PM=dnf
        INSTALL="sudo dnf install -y"
        # ── add Fedora-specific runtime libs for Qt ──
-       SYS_DEPS+=(portaudio portaudio-devel xcb-util-cursor xcb-util-wm)
+       SYS_DEPS+=(portaudio portaudio-devel xcb-util-cursor xcb-util-wm \
+                  xclip xsel wl-clipboard)
   elif command -v pacman>/dev/null; then
        PM=pacman
        INSTALL="sudo pacman -S --noconfirm"
+       SYS_DEPS+=(xclip xsel wl-clipboard)
   else
        die "Unsupported distro – need apt, dnf or pacman."
   fi
@@ -43,7 +45,8 @@ detect_pkg;  msg "Package manager: $PM"
 # -----------------------------------------------------------------------------#
 # 1. System packages
 SYS_DEPS=(git ffmpeg gcc make cmake curl build-essential python3-venv \
-          libxcb-cursor0 libxcb-xinerama0 libportaudio2)
+          libxcb-cursor0 libxcb-xinerama0 libportaudio2 \
+          xclip xsel wl-clipboard)
 # in case the dev headers for future PyAudio are desired:
 SYS_DEPS+=(portaudio19-dev)
 
