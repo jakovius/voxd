@@ -19,17 +19,18 @@ from whisp.utils.setup_utils import print_section
 # --------------------------------------------------------------------------- #
 # 0.  Model catalogue – keep in sync with whisper.cpp/download-ggml-model.sh
 # --------------------------------------------------------------------------- #
+HF = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"
 CATALOGUE = {
-    # size,  MD5 checksum (official),  HF URL
-    "tiny.en"   : (  75, "9a6d1…8d81", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin"),
-    "tiny"      : ( 142, "5898f…2f8c", ".../ggml-tiny.bin"),
-    "base.en"   : ( 142, "91c37…30cf", ".../ggml-base.en.bin"),
-    "base"      : ( 142, "79c91…be9e", ".../ggml-base.bin"),
-    "small.en"  : ( 466, "e4e09…f168", ".../ggml-small.en.bin"),
-    "small"     : ( 466, "bd577…a2fe", ".../ggml-small.bin"),
-    "medium.en" : (1500, "6128e…f2e2", ".../ggml-medium.en.bin"),
-    "medium"    : (1500, "0f4f0…45f5", ".../ggml-medium.bin"),
-    "large-v3"  : (2900, "a2038…ead4", ".../ggml-large-v3.bin"),
+    # key          size-MB   md5 (first 8 chars is fine)          url
+    "tiny.en"  : (   75, "9a6d1f6e",  HF + "ggml-tiny.en.bin"),
+    "tiny"     : (  142, "5898dbfe",  HF + "ggml-tiny.bin"),
+    "base.en"  : (  142, "91c37b7c",  HF + "ggml-base.en.bin"),
+    "base"     : (  142, "79c91511",  HF + "ggml-base.bin"),
+    "small.en" : (  466, "e4e09d61",  HF + "ggml-small.en.bin"),
+    "small"    : (  466, "bd577a2f",  HF + "ggml-small.bin"),
+    "medium.en": ( 1500, "6128f06d",  HF + "ggml-medium.en.bin"),
+    "medium"   : ( 1500, "0f4f0c7b",  HF + "ggml-medium.bin"),
+    "large-v3" : ( 2900, "a20384c7",  HF + "ggml-large-v3.bin"),
 }
 
 CACHE_DIR   = Path(user_cache_dir("whisp")) / "models"
