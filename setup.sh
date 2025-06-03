@@ -122,7 +122,7 @@ msg "${GRN}Setup complete!${NC}"
 echo "Activate venv:   source .venv/bin/activate"
 echo "Run GUI mode:    python -m whisp --mode gui"
 
- -----------------------------------------------------------------------------#
+# -----------------------------------------------------------------------------#
 # 6. Ensure there is at least a default speech model
 if ! whisp-model list | grep -q "ggml-base.en.bin"; then
   echo
