@@ -1,7 +1,4 @@
-import pyperclip
-import subprocess
-import os
-import shutil
+import os, shutil, subprocess, pyperclip, logging
 from whisp.utils.libw import verbo
 
 
@@ -13,8 +10,12 @@ class ClipboardManager:
     def _resolve_backend(self):
         if self.backend == "auto":
             # Detect clipboard backend automatically
-            if shutil.which("xclip"):
+            if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
+                self.backend = "wl-copy"
+            elif shutil.which("xclip"):
                 self.backend = "xclip"
+            elif shutil.which("xsel"):
+                self.backend = "xsel"                
             elif shutil.which("wl-copy"):
                 self.backend = "wl-copy"
             else:
@@ -28,9 +29,18 @@ class ClipboardManager:
             return
 
         if self.backend == "pyperclip":
-            pyperclip.copy(text)
-        elif self.backend == "xclip":
-            self._run_cmd("xclip -selection clipboard", input=text)
+            try:
+                pyperclip.copy(text)
+            except pyperclip.PyperclipException as e:
+                logging.warning(
+                    "Clipboard copy failed (%s). "
+                    "Install xclip, xsel or wl-clipboard to enable copy-&-paste.",
+                    e,
+                )
+        elif self.backend in ("xclip", "xsel"):
+            # xclip/xsel need a flag to specify the clipboard selection
+            flag = "-selection clipboard" if self.backend == "xclip" else "-i"
+            self._run_cmd(f"{self.backend} {flag}", input=text)
         elif self.backend == "wl-copy":
             self._run_cmd("wl-copy", input=text)
         else:
@@ -38,10 +48,6 @@ class ClipboardManager:
 
     def _run_cmd(self, cmd, input):
         try:
-            subprocess.run(
-                cmd.split(),
-                input=input.encode(),
-                check=True
-            )
+            subprocess.run(cmd.split(), input=input.encode(), check=True)
         except subprocess.CalledProcessError as e:
-            print(f"[clipboard] Error using '{cmd}': {e}")
+            logging.warning("[clipboard] Error using '%s': %s", cmd, e)
