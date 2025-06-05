@@ -10,7 +10,31 @@
 #
 #  Idempotent: re-running does nothing if everything is already in place.
 # =============================================================================
-set -euo pipefail
++set -euo pipefail   # fail fast, undefined vars are errors, pipelines propagate rc
+
+# -----------------------------------------------------------------------------#
+# Colours + helpers (define once – we delete the duplicate further down)
+YEL='\033[1;33m'; GRN='\033[1;32m'; RED='\033[0;31m'; NC='\033[0m'
+msg() { printf "${YEL}==>${NC} %b\n" "$*"; }
+die() { printf "${RED}error:${NC} %s\n" "$*" >&2; exit 1; }
+
+# DEBUG=1 ./setup.sh  → prints every command
+[[ ${DEBUG:-0} == 1 ]] && set -x
+
+# -----------------------------------------------------------------------------#
+# 1) Verify compilers exist ----------------------------------------------------
+for tool in gcc g++; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    die "Required compiler \"$tool\" is missing – try: sudo dnf install gcc-c++"
+  fi
+done
+
+# 2) Check CMake version -------------------------------------------------------
+cmake_version=$(cmake --version | awk '/version/ {print $3}')
+ver_ge() { [ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]; }
+if ! ver_ge "$cmake_version" "3.13"; then
+  die "CMake ≥ 3.13 required, found $cmake_version"
+fi
 
 # --- pretty printing ---------------------------------------------------------
 YEL='\033[1;33m'; GRN='\033[1;32m'; RED='\033[0;31m'; NC='\033[0m'
@@ -56,7 +80,8 @@ case "$PM" in
 
   dnf)
     SYS_DEPS+=(
-      @development-tools       # group: gcc gcc-c++ make …
+      "@development-tools"     # group: gcc make … (no longer pulls gcc-c++)
+      gcc-c++                  # C++ front-end needed by whisper.cpp
       python3-devel python3-virtualenv
       xcb-util-cursor xcb-util-wm
       portaudio portaudio-devel
@@ -101,7 +126,7 @@ msg "Installing Whisp package into venv (editable)…"
 pip install -e .
 
 # -----------------------------------------------------------------------------#
-# 3. Clone + build whisper.cpp  (local to repo)
+# 3. Clone + build whisper.cpp  (local to repo) -------------------------------
 if [[ ! -d whisper.cpp ]]; then
   msg "Cloning whisper.cpp…"
   git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
@@ -110,7 +135,20 @@ fi
 if [[ ! -x whisper.cpp/build/bin/whisper-cli ]]; then
   msg "Building whisper.cpp (first time only)…"
   cmake -S whisper.cpp -B whisper.cpp/build
+  # We temporarily drop '-e' so we can inspect the result and print a nicer error.
+  set +e
   cmake --build whisper.cpp/build -j"$(nproc)"
+  build_rc=$?
+  set -e
+  if (( build_rc != 0 )); then
+    cat <<EOF >&2
+
+${RED}🚨 whisper.cpp build failed (exit $build_rc)${NC}
+See: whisper.cpp/build/CMakeFiles/CMakeError.log  (and CMakeOutput.log)
+
+EOF
+    exit $build_rc
+  fi
 else
   msg "whisper.cpp already built."
 fi
