@@ -1,67 +1,74 @@
-# src/whisp/paths.py
 """
-Whisp path helpers – single source of truth.
+whisp.paths – all filesystem look-ups live here.
 
-Usage:
-    from whisp.paths import CONFIG_FILE, ASSETS, resource_path
+✓  Works whether the optional wheel `whisp_cpp_runtime` is present or not.
+✓  Provides modern constants (`WHISPER_CLI`, `OUTPUT_DIR`, …) **and**
+   the legacy helper `find_whisper_cli()` required by older code.
 """
+
 from __future__ import annotations
+
+import os
+import shutil
 from pathlib import Path
-from importlib.resources import files
-from platformdirs import user_config_dir, user_cache_dir
-from functools import lru_cache
-from whisp_cpp_runtime import binary_path as _bin_path
+from typing import Final
 
-@lru_cache(maxsize=1)
-def bundled_cli_lazy() -> Path | None:
+# ──────────────────────────────────────────────────────────────────────────────
+# XDG-compatible base dirs
+HOME: Final = Path.home()
+CONFIG_DIR: Final = Path(os.getenv("XDG_CONFIG_HOME", HOME / ".config")) / "whisp"
+CACHE_DIR:  Final = Path(os.getenv("XDG_CACHE_HOME",  HOME / ".cache"))  / "whisp"
+DATA_DIR:   Final = Path(os.getenv("XDG_DATA_HOME",   HOME / ".local" / "share")) / "whisp"
+
+CONFIG_FILE:  Final = CONFIG_DIR / "config.yaml"
+HISTORY_FILE: Final = DATA_DIR  / "history.yaml"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Whisper-cpp binary discovery
+def _locate_whisper_cli() -> Path:
+    """Return an absolute Path to *whisper-cli* (raises FileNotFoundError if absent)."""
+    # 1) bundled runtime wheel
     try:
-        return _bin_path()
-    except ImportError:
-        return None
+        from whisp_cpp_runtime import binary_path as _p  # type: ignore
+        return Path(_p())
+    except ModuleNotFoundError:
+        pass
 
-# ----- user-writable locations (follow XDG spec) ----------------------------
-CONFIG_DIR = Path(user_config_dir("whisp"))
-CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-CONFIG_FILE = CONFIG_DIR / "config.yaml"
+    # 2) executable somewhere on $PATH
+    if (exe := shutil.which("whisper-cli")):
+        return Path(exe).resolve()
 
-CACHE_DIR = Path(user_cache_dir("whisp"))
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    # 3) repo-local build (editable/dev install)
+    repo_candidate = (Path(__file__).parents[1] /
+                      "whisper.cpp" / "build" / "bin" / "whisper-cli")
+    if repo_candidate.exists():
+        return repo_candidate.resolve()
 
-OUTPUT_DIR = CACHE_DIR / "whisp_output"
-OUTPUT_DIR.mkdir(exist_ok=True)
+    raise FileNotFoundError(
+        "Could not locate *whisper-cli*.\n"
+        "Either install the `whisp_cpp_runtime` wheel, build whisper.cpp "
+        "inside the repo, or place a compiled whisper-cli somewhere on $PATH."
+    )
 
-# ----- read-only package data ------------------------------------------------
-ASSETS = files("whisp.assets")          # a Traversable object
+WHISPER_CLI: Final = _locate_whisper_cli()
 
-def resource_path(name: str) -> Path:
-    """Return a Path to a file shipped inside whisp.assets/ …"""
-    return ASSETS.joinpath(name)
+# legacy helper – kept for old imports
+def find_whisper_cli() -> str:          # noqa: N802  (keep original name)
+    """Return the absolute path to *whisper-cli* as a string (legacy API)."""
+    return str(WHISPER_CLI)
 
-# ----- whisper-cli discovery -------------------------------------------------
-from shutil import which
+# ──────────────────────────────────────────────────────────────────────────────
+# Output directory for transcripts, logs, temp files, …
+OUTPUT_DIR: Final = DATA_DIR / "output"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-def find_whisper_cli() -> Path | None:
+# ──────────────────────────────────────────────────────────────────────────────
+# Convenience helper for packaged resources
+def resource_path(*sub: str | os.PathLike[str]) -> Path:
     """
-    Resolution order:
-      1. Explicit path in config.yaml
-      2. System-wide whisper-cli in $PATH
-      3. Bundled binary from whisp_cpp_runtime
-      4. None (caller will trigger fallback build)
+    Return an absolute Path to a data file shipped within the package.
+
+    Example:
+        icon = resource_path("icons", "app.svg")
     """
-    from whisp.core.config import AppConfig   # local import to avoid cycles
-    cfg = AppConfig()
-
-    # 1. config
-    if cfg.whisper_binary and Path(cfg.whisper_binary).is_file():
-        return Path(cfg.whisper_binary)
-
-    # 2. system PATH
-    sys_bin = which("whisper-cli")
-    if sys_bin:
-        return Path(sys_bin)
-
-    # 3. bundled (or auto-built) binary
-    b = bundled_cli_lazy()
-    if b:
-        return b
-
+    return Path(__file__).with_suffix("").with_name("data").joinpath(*sub)
