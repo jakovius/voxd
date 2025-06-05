@@ -25,8 +25,8 @@ Everything else in the README can stay as is — just splice this in so that new
 
 ## 📦 Installation
 
-> **Works on any modern Linux** – Ubuntu 24.04, Fedora 40, Pop!\_OS 22, etc.  
-> After this you will have a global `whisp` command available in any shell.
+**Works on any modern Linux** – Ubuntu 24.04, Fedora 40, Pop!\_OS 22, etc.  
+After this you will have a global `whisp` command available in any shell.
 
 ```bash
 git clone https://github.com/jacob8472/whisp.git
