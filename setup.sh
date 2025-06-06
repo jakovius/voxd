@@ -133,4 +133,44 @@ if [[ ! -f $MODEL_FILE ]]; then
   msg "Downloading default Whisper model (base.en)…"
   mkdir -p "$MODEL_DIR"
   curl -L -o "$MODEL_FILE" \
-       https://huggingface.co/ggerg
+       https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+fi
+
+###############################################################################
+# 6. Optional: ydotool under Wayland ------------------------------------------
+if [[ ${NEED_YDOTOOL:-0} == 1 ]]; then
+  msg "Wayland detected & ydotool missing – building from source…"
+  tmpd=$(mktemp -d)
+  git clone https://github.com/ReimuNotMoe/ydotool.git "$tmpd/ydotool"
+  cmake -S "$tmpd/ydotool" -B "$tmpd/ydotool/build"
+  sudo cmake --build "$tmpd/ydotool/build" --target install -j"$(nproc)"
+  sudo groupadd -f input
+  sudo usermod -aG input "$USER"
+  printf 'KERNEL=="uinput", MODE="0660", GROUP="input"\n' \
+    | sudo tee /etc/udev/rules.d/99-uinput.rules
+  sudo udevadm control --reload-rules && sudo udevadm trigger
+  rm -rf "$tmpd"
+  ok "ydotool installed – log out & back in for group changes."
+fi
+
+###############################################################################
+# 7. Final message -------------------------------------------------------------
+ok "Setup complete!"
+echo "Activate venv:   source .venv/bin/activate"
+echo "Run GUI mode:    python -m whisp --mode gui"
+
+# Friendly prompt to fetch the model via the model manager
+if ! whisp-model list 2>/dev/null | grep -q "ggml-base.en.bin"; then
+  echo
+  read -r -p "Download default base.en model now (~142 MB)? [Y/n] " ans
+  if [[ $ans =~ ^([yY]|$) ]]; then
+    whisp-model install base.en
+  else
+    echo "You can do it later with:  whisp-model install base.en"
+  fi
+fi
+
+###############################################################################
+# 8. Fast-exit if everything already ready ------------------------------------
+# (second / third runs land here almost immediately)
+exit 0
