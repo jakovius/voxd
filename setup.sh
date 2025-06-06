@@ -85,9 +85,9 @@ esac
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && ! command -v ydotool >/dev/null; then
   NEED_YDOTOOL=1
   case "$PM" in
-    apt)   SYS_DEPS+=(libevdev-dev libudev-dev libconfig++-dev libboost-program-options-dev) ;;
-    dnf)   SYS_DEPS+=(libevdev-devel libudev-devel libconfig++-devel boost-program-options-devel) ;;
-    pacman)SYS_DEPS+=(libevdev libconfig++ boost) ;;
+    apt)   SYS_DEPS+=(libevdev-dev libudev-dev libconfig++-dev libboost-program-options-dev scdoc) ;;
+    dnf)   SYS_DEPS+=(libevdev-devel libudev-devel libconfig++-devel boost-program-options-devel scdoc) ;;
+    pacman)SYS_DEPS+=(libevdev libconfig++ boost scdoc) ;;
   esac
 fi
 
