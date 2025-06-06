@@ -1,134 +1,149 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  Whisp – one-shot, self-healing installer
+#  Whisp – one-shot installer / updater
 #
-#  • Detects apt / dnf / pacman and installs missing tool-chains automatically
-#  • Creates / re-uses a Python venv (.venv) and installs requirements
-#  • Fetches + builds whisper.cpp → whisper.cpp/build/bin/whisper-cli
-#  • (Wayland) auto-builds ydotool if absent
+#  • Installs system packages        (apt | dnf | pacman – auto-detected)
+#  • Creates / re-uses Python venv    (.venv)
+#  • Installs Python dependencies & Whisp itself (editable)
+#  • Clones + builds whisper.cpp      → whisper.cpp/build/bin/whisper-cli
+#  • (Wayland) ensures ydotool + daemon, with fallback source build
 #
-#  Re-running after success prints a friendly “all done” message and exits.
+#  Idempotent: re-running skips finished steps.
 # =============================================================================
-set -Eeuo pipefail
+set -euo pipefail
 
-###############################################################################
-# Colours & helpers -----------------------------------------------------------
-YEL='\033[1;33m'; GRN='\033[1;32m'; RED='\033[0;31m'; NC='\033[0m'
-msg()  { printf "${YEL}==>${NC} %b\n" "$*"; }
-die()  { printf "${RED}error:${NC} %s\n" "$*" >&2; exit 1; }
-ok()   { printf "${GRN}%b${NC}\n" "$*"; }
-
+# ───────────────────────────── helpers ────────────────────────────────────────
+YEL=$'\033[1;33m'; GRN=$'\033[1;32m'; RED=$'\033[0;31m'; NC=$'\033[0m'
+msg() { printf "${YEL}==>${NC} %s\n" "$*"; }
+die() { printf "${RED}error:${NC} %s\n" "$*" >&2; exit 1; }
 [[ $EUID == 0 ]] && die "Run as a normal user, not root."
 
-###############################################################################
-# Detect package manager & housekeeping ---------------------------------------
-detect_pkg() {
-  if   command -v apt-get >/dev/null; then
-       PM=apt;    INSTALL="sudo apt-get install -y"; UPDATE="sudo apt-get update -y"
-       BUILD_GROUP="build-essential"
-  elif command -v dnf >/dev/null; then
-       PM=dnf;    INSTALL="sudo dnf install -y";      UPDATE="sudo dnf makecache"
-       BUILD_GROUP="@development-tools"
-  elif command -v pacman >/dev/null; then
-       PM=pacman; INSTALL="sudo pacman -S --noconfirm"; UPDATE="sudo pacman -Sy"
-       BUILD_GROUP="base-devel"
-  else
-       die "Unsupported distro – need apt, dnf or pacman."
+# bail out on missing cmd, or install compiler tool-chain on the fly
+need_compiler() {
+  if command -v gcc >/dev/null 2>&1 && command -v g++ >/dev/null 2>&1; then
+    return 0
   fi
+  msg "Compilers not found – installing build tools …"
+  case "$PM" in
+    apt)   sudo apt update -qq && sudo apt install -y build-essential ;;
+    dnf)   sudo dnf groupinstall -y "Development Tools" ;;
+    pacman)sudo pacman -Sy --noconfirm base-devel ;;
+  esac
 }
-detect_pkg
 
-###############################################################################
-# 0. Make sure gcc / g++ exist -------------------------------------------------
-need_compilers=0
-for t in gcc g++; do command -v "$t" >/dev/null || { need_compilers=1; break; }; done
-if (( need_compilers )); then
-  msg "Compilers missing – installing $BUILD_GROUP …"
-  $UPDATE; $INSTALL "$BUILD_GROUP"
-fi
+# version compare  ver_ge <found> <needed-min>
+ver_ge() { [ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]; }
 
-###############################################################################
-# 1. Make sure cmake ≥ 3.13 exists -------------------------------------------
-cmake_ok=0
-if command -v cmake >/dev/null; then
-  cmake_ver=$(cmake --version | awk '/version/ {print $3}')
-  # version_compare: returns 0 (true) if $1 >= $2
-  version_compare() { [ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]; }
-  version_compare "$cmake_ver" "3.13" && cmake_ok=1
-fi
+# ─────────────────── detect distro / pkg-manager ──────────────────────────────
+if   command -v apt   >/dev/null; then
+     PM=apt   ; INSTALL="sudo apt install -y"
+elif command -v dnf   >/dev/null; then
+     PM=dnf   ; INSTALL="sudo dnf install -y"
+elif command -v pacman>/dev/null; then
+     PM=pacman; INSTALL="sudo pacman -S --noconfirm"
+else die "Unsupported distro – need apt, dnf or pacman."; fi
+msg "Package manager: $PM"
 
-if (( ! cmake_ok )); then
-  msg "CMake < 3.13 (or not installed) – installing …"
-  $UPDATE; $INSTALL cmake
-fi
+# ──────────────────  0. make sure compilers exist  ───────────────────────────–
+need_compiler
 
-###############################################################################
-# 2. System-wide dependencies --------------------------------------------------
+# ──────────────────  1. common system deps list  ─────────────────────────────–
 SYS_DEPS=( git ffmpeg gcc make cmake curl xclip xsel wl-clipboard )
 
 case "$PM" in
-  apt)
-    SYS_DEPS+=( python3-venv libxcb-cursor0 libxcb-xinerama0
-                libportaudio2 portaudio19-dev )
-    ;;
-  dnf)
-    SYS_DEPS+=( python3-devel python3-virtualenv
-                xcb-util-cursor xcb-util-wm
-                portaudio portaudio-devel )
-    ;;
-  pacman)
-    SYS_DEPS+=( python-virtualenv xcb-util-cursor xcb-util-wm portaudio )
-    ;;
+  apt)   SYS_DEPS+=(python3-venv libxcb-cursor0 libxcb-xinerama0
+                    libportaudio2 portaudio19-dev) ;;
+  dnf)   SYS_DEPS+=("@development-tools" gcc-c++
+                    python3-devel python3-virtualenv
+                    xcb-util-cursor xcb-util-wm
+                    portaudio portaudio-devel) ;;
+  pacman)SYS_DEPS+=(base-devel python-virtualenv
+                    xcb-util-cursor xcb-util-wm portaudio) ;;
 esac
 
-# Extra headers if we need to build ydotool under Wayland
-if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && ! command -v ydotool >/dev/null; then
-  NEED_YDOTOOL=1
+# ──────────────────  2. Wayland?  figure out ydotool path  ────────────────────
+install_ydotool_pkg() {
   case "$PM" in
-    apt)   SYS_DEPS+=(libevdev-dev libudev-dev libconfig++-dev libboost-program-options-dev scdoc) ;;
-    dnf)   SYS_DEPS+=(libevdev-devel libudev-devel libconfig++-devel boost-program-options-devel scdoc) ;;
-    pacman)SYS_DEPS+=(libevdev libconfig++ boost scdoc) ;;
+    apt)   $INSTALL ydotool   && return 0 ;;
+    dnf)   $INSTALL ydotool   && return 0 ;;
+    pacman)$INSTALL ydotool   && return 0 || true ;;   # Arch users might use AUR
   esac
-fi
+  return 1
+}
 
-msg "Package manager: $PM"
+install_ydotool_src() {
+  msg "Building ydotool from source (docs disabled)…"
+  tmpd=$(mktemp -d)
+  git clone --depth 1 https://github.com/ReimuNotMoe/ydotool.git "$tmpd/ydotool"
+  cmake -DENABLE_DOCUMENTATION=OFF -S "$tmpd/ydotool" -B "$tmpd/ydotool/build"
+  sudo cmake --build "$tmpd/ydotool/build" --target install -j"$(nproc)"
+  rm -rf "$tmpd"
+}
+
+ensure_ydotool() {
+  # only on Wayland and if not in $PATH
+  [[ ${XDG_SESSION_TYPE:-} != wayland* ]] && return 0
+  command -v ydotool >/dev/null && return 0
+
+  msg "ydotool missing – trying distro package first…"
+  if ! install_ydotool_pkg; then
+     # add build deps that our distro doesn't already have
+     case "$PM" in
+       apt)   SYS_DEPS+=(libevdev-dev libudev-dev libconfig++-dev \
+                         libboost-program-options-dev) ;;
+       dnf)   SYS_DEPS+=(libevdev-devel libudev-devel libconfig++-devel \
+                         boost-program-options-devel) ;;
+       pacman)SYS_DEPS+=(libevdev libconfig++ boost) ;;
+     esac
+     $INSTALL "${SYS_DEPS[@]}"      # top-up missing headers, if any
+     install_ydotool_src
+  fi
+
+  # groups / uinput
+  sudo groupadd -f input
+  sudo usermod -aG input "$USER"
+  printf 'KERNEL=="uinput", MODE="0660", GROUP="input"\n' \
+      | sudo tee /etc/udev/rules.d/99-uinput.rules >/dev/null
+  sudo udevadm control --reload-rules && sudo udevadm trigger
+
+  # enable & start the per-user daemon
+  systemctl --user daemon-reload
+  systemctl --user enable --now ydotoold.service || true
+
+  msg "ydotool installed – log out/in once to refresh group membership."
+}
+
+# ──────────────────  3. install system packages  ─────────────────────────────–
 msg "Installing system deps: ${SYS_DEPS[*]}"
-$UPDATE; $INSTALL "${SYS_DEPS[@]}"
+$INSTALL "${SYS_DEPS[@]}"
 
-###############################################################################
-# 3. Python virtualenv ---------------------------------------------------------
+# ──────────────────  4. python venv & deps  ─────────────────────────────────––
 if [[ ! -d .venv ]]; then
   msg "Creating virtualenv (.venv)…"
   python3 -m venv .venv
 fi
 source .venv/bin/activate
-
-python -m pip install --upgrade pip
+python -m pip install -U pip > /dev/null
 msg "Installing Python dependencies…"
-pip install -r requirements.txt
-msg "Installing Whisp package into venv (editable)…"
-pip install -e .
+pip install -r requirements.txt > /dev/null
+msg "Installing Whisp into venv (editable)…"
+pip install -e .    > /dev/null
 
-###############################################################################
-# 4. whisper.cpp ---------------------------------------------------------------
+# ──────────────────  5. whisper.cpp (once)  ─────────────────────────────────––
 if [[ ! -d whisper.cpp ]]; then
   msg "Cloning whisper.cpp…"
   git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
 fi
-
 if [[ ! -x whisper.cpp/build/bin/whisper-cli ]]; then
-  msg "Building whisper.cpp…"
+  msg "Building whisper.cpp (first time only)…"
   cmake -S whisper.cpp -B whisper.cpp/build
   cmake --build whisper.cpp/build -j"$(nproc)"
 else
-  ok "whisper.cpp already built."
+  msg "whisper.cpp already built."
 fi
 
-###############################################################################
-# 5. Ensure at least one model -------------------------------------------------
-MODEL_DIR="whisper.cpp/models"
-MODEL_FILE="$MODEL_DIR/ggml-base.en.bin"
-
+# ──────────────────  6. default model  ───────────────────────────────────────–
+MODEL_DIR=whisper.cpp/models ; MODEL_FILE=$MODEL_DIR/ggml-base.en.bin
 if [[ ! -f $MODEL_FILE ]]; then
   msg "Downloading default Whisper model (base.en)…"
   mkdir -p "$MODEL_DIR"
@@ -136,41 +151,10 @@ if [[ ! -f $MODEL_FILE ]]; then
        https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
 fi
 
-###############################################################################
-# 6. Optional: ydotool under Wayland ------------------------------------------
-if [[ ${NEED_YDOTOOL:-0} == 1 ]]; then
-  msg "Wayland detected & ydotool missing – building from source…"
-  tmpd=$(mktemp -d)
-  git clone https://github.com/ReimuNotMoe/ydotool.git "$tmpd/ydotool"
-  cmake -S "$tmpd/ydotool" -B "$tmpd/ydotool/build"
-  sudo cmake --build "$tmpd/ydotool/build" --target install -j"$(nproc)"
-  sudo groupadd -f input
-  sudo usermod -aG input "$USER"
-  printf 'KERNEL=="uinput", MODE="0660", GROUP="input"\n' \
-    | sudo tee /etc/udev/rules.d/99-uinput.rules
-  sudo udevadm control --reload-rules && sudo udevadm trigger
-  rm -rf "$tmpd"
-  ok "ydotool installed – log out & back in for group changes."
-fi
+# ──────────────────  7. ydotool (Wayland helper)  ─────────────────────────────
+ensure_ydotool
 
-###############################################################################
-# 7. Final message -------------------------------------------------------------
-ok "Setup complete!"
+# ──────────────────  8. done  ───────────────────────────────────────────────––
+msg "${GRN}Setup complete!${NC}"
 echo "Activate venv:   source .venv/bin/activate"
 echo "Run GUI mode:    python -m whisp --mode gui"
-
-# Friendly prompt to fetch the model via the model manager
-if ! whisp-model list 2>/dev/null | grep -q "ggml-base.en.bin"; then
-  echo
-  read -r -p "Download default base.en model now (~142 MB)? [Y/n] " ans
-  if [[ $ans =~ ^([yY]|$) ]]; then
-    whisp-model install base.en
-  else
-    echo "You can do it later with:  whisp-model install base.en"
-  fi
-fi
-
-###############################################################################
-# 8. Fast-exit if everything already ready ------------------------------------
-# (second / third runs land here almost immediately)
-exit 0
