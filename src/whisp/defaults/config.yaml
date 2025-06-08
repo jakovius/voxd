@@ -1,8 +1,3 @@
-aipp_enabled: false
-aipp_model: llama2
-aipp_prompt_alt: ''
-aipp_prompt_default: Summarize the following text
-aipp_provider: local
 app_mode: whisp
 clipboard_backend: auto
 collect_metrics: false
@@ -15,3 +10,13 @@ typing_delay: 10
 verbosity: false
 whisper_binary: whisper.cpp/build/bin/whisper-cli
 model_path: whisper.cpp/models/ggml-base.en.bin
+# --- ✨ AIPP (AI post-processing) ------------------------------------------
+aipp_enabled: false          # master on/off switch
+aipp_provider: local         # local | openai | anthropic | xai …
+aipp_active_prompt: default  # key inside aipp_prompts to use
+aipp_model: llama2           # model name for the chosen provider
+aipp_prompts:                # up to 4 user-editable prompts
+  default: Summarize the following text
+  prompt1: ""
+  prompt2: ""
+  prompt3: ""

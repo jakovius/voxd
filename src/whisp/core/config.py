@@ -8,11 +8,6 @@ from importlib.resources import files
 from datetime import datetime
 
 DEFAULT_CONFIG = {
-    "aipp_enabled": False,
-    "aipp_model": "llama2",
-    "aipp_prompt_alt": "",
-    "aipp_prompt_default": "Summarize the following text",
-    "aipp_provider": "local",
     "app_mode": "whisp",
     "clipboard_backend": "auto",
     "collect_metrics": False,
@@ -24,7 +19,17 @@ DEFAULT_CONFIG = {
     "typing_delay": 10,
     "verbosity": True,
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
-    "model_path": "whisper.cpp/models/ggml-base.en.bin"
+    "model_path": "whisper.cpp/models/ggml-base.en.bin",
+    "aipp_enabled": False,
+    "aipp_provider": "local",           # local / openai / anthropic / …
+    "aipp_active_prompt": "default",
+    "aipp_model": "llama2",
+    "aipp_prompts": {
+        "default": "Summarize the following text",
+        "prompt1": "",
+        "prompt2": "",
+        "prompt3": "",
+    }
 }
 
 CONFIG_DIR = Path(user_config_dir("whisp"))
@@ -116,3 +121,14 @@ class AppConfig:
         self.set("model_path", str(model_path))
         self.save()
         print(f"[config] Model switched to {model_name}")
+    
+    # ---- AIPP helpers --------------------------------------------------
+    def current_prompt(self) -> str:
+        return self.data["aipp_prompts"].get(self.data["aipp_active_prompt"], "")
+
+    def set_prompt(self, key: str, value: str):
+        if key not in self.data["aipp_prompts"]:
+            print(f"[config] Unknown prompt slot: {key}")
+            return
+        self.data["aipp_prompts"][key] = value
+        self.save()
