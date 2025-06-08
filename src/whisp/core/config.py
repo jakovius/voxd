@@ -21,9 +21,12 @@ DEFAULT_CONFIG = {
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
     "model_path": "whisper.cpp/models/ggml-base.en.bin",
     "aipp_enabled": False,
-    "aipp_provider": "local",           # local / openai / anthropic / …
+    "aipp_provider": "local",           # local / openai / anthropic / xai
     "aipp_active_prompt": "default",
-    "aipp_model": "llama2",
+    "aipp_model": "llama3.2:latest",
+    "openai_api_key": "",
+    "anthropic_api_key": "",
+    "xai_api_key": "",
     "aipp_prompts": {
         "default": "Summarize the following text",
         "prompt1": "",

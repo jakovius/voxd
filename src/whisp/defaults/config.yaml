@@ -12,9 +12,13 @@ whisper_binary: whisper.cpp/build/bin/whisper-cli
 model_path: whisper.cpp/models/ggml-base.en.bin
 # --- ✨ AIPP (AI post-processing) ------------------------------------------
 aipp_enabled: false          # master on/off switch
-aipp_provider: local         # local | openai | anthropic | xai …
+aipp_provider: local         # local | openai | anthropic | xai
 aipp_active_prompt: default  # key inside aipp_prompts to use
-aipp_model: llama2           # model name for the chosen provider
+aipp_model: llama3.2:latest  # model name for the chosen provider
+
+xai_api_key: ""              # paste your key here or leave blank → env var
+xai_model: grok-3            # default Grok model
+
 aipp_prompts:                # up to 4 user-editable prompts
   default: Summarize the following text
   prompt1: ""

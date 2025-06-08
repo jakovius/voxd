@@ -16,6 +16,9 @@ dependencies = [
   "pyperclip>=1.9",
   "psutil>=5.9",
   "numpy>=1.26",
+  "httpx>=0.25",
+  "openai>=1.14",
+  "anthropic>=0.20"
 ]
 
 [project.scripts]
