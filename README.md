@@ -17,11 +17,6 @@ A lightning‑fast voice‑to‑text helper for **any** Linux app.  Hit a global
 
 ---
 
-Below is a drop-in replacement for the **“📦 Installation”** and **“🏃 Usage → Global Hotkey”** parts of `README.md`.
-Everything else in the README can stay as is — just splice this in so that new users see the simplest path first.
-
----
-
 
 ## 📦 Installation
 
@@ -57,7 +52,7 @@ You never have to remember “`source .venv/bin/activate`” again — just run 
 
 2. **Add a new shortcut:**
 
-| Field        | Value (copy exactly)               |
+| Field        | Value *(copy the command exactly)*               |
 | ------------ | ---------------------------------- |
 | **Name**     | Whisp • Record                     |
 | **Command**  | `bash -c 'whisp --trigger-record'` |
@@ -149,7 +144,7 @@ Change values, restart Whisp.  Unknown keys are ignored.
 
 ## Removal
 
-**If it was installed via `git clone` and running `setup.sh`:**
+**If the app was installed via `git clone` and running `setup.sh`:**
 
 ```bash
 cd ~/where/you/cloned/whisp
@@ -158,7 +153,7 @@ rm -rf whisper.cpp # if whisper.cpp was built in the same folder
 cd .. && rm -rf whisp # remove the repo folder
 ```
 
-**If it was installed via `pipx install .`:**
+**If the app was installed via `pipx install .`:**
 
 ```bash
 pipx uninstall whisp # removes venv, script, deps

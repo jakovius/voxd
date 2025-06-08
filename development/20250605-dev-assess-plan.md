@@ -99,4 +99,5 @@ Your biggest blockers are **packaging hygiene and minor threading quirks**, not 
 
 Fix the import/layout, move all user-writable stuff to XDG dirs, make AIPP non-blocking, and you’ll have a tool a non-developer can install with one command and no fear.
 
-
+---
+STATUS of suggested mods: not started.
