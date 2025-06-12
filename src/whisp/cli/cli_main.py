@@ -134,6 +134,7 @@ def main():
     parser.add_argument("--no-aipp", action="store_true", help="Disable AI post-processing (AIPP) for this run")
     parser.add_argument("--aipp-prompt", type=str, help="AIPP prompt key to use (default, prompt1, prompt2, prompt3)")
     parser.add_argument("--aipp-provider", type=str, help="AIPP provider override (ollama, lmstudio, openai, anthropic, xai)")
+    parser.add_argument("--aipp-model", type=str, help="AIPP model override for the selected provider")
     args = parser.parse_args()
 
     cfg = AppConfig()
@@ -158,6 +159,13 @@ def main():
             cfg.aipp_provider = args.aipp_provider
         else:
             print(f"[cli] Unknown AIPP provider: {args.aipp_provider}")
+    if args.aipp_model:
+        prov = cfg.data.get("aipp_provider", "ollama")
+        if args.aipp_model in cfg.data.get("aipp_models", {}).get(prov, []):
+            cfg.data["aipp_selected_models"][prov] = args.aipp_model
+            cfg.aipp_model = args.aipp_model
+        else:
+            print(f"[cli] Unknown model '{args.aipp_model}' for provider '{prov}'")
 
     try:
         if args.test_file:

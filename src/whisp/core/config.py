@@ -24,9 +24,25 @@ DEFAULT_CONFIG = {
     "aipp_enabled": False,
     "aipp_provider": "ollama",           # ollama / lmstudio / openai / anthropic / xai
     "aipp_active_prompt": "default",
-    "aipp_model": "llama3.2:latest",
+
+    # New: List of models per provider
+    "aipp_models": {
+        "ollama": ["llama3.2:latest", "mistral:latest", "gemma3:latest", "qwen2.5-coder:1.5b"],
+        "openai": ["gpt-4o-mini-2024-07-18"],
+        "anthropic": ["claude-3-opus-20240229", "claude-3-haiku"],
+        "xai": ["grok-3-latest"]
+    },
+
+    # New: Selected model per provider
+    "aipp_selected_models": {
+        "ollama": "llama3.2:latest",
+        "openai": "gpt-4o-mini-2024-07-18",
+        "anthropic": "claude-3-opus-20240229",
+        "xai": "grok-3-latest"
+    },
+
     "aipp_prompts": {
-        "default": "Summarize the following text",
+        "default": "Rewrite the following text to appear as if Yoda from Star Wars is saying it",
         "prompt1": "",
         "prompt2": "",
         "prompt3": "",
@@ -50,7 +66,7 @@ class AppConfig:
     def __init__(self):
         self.data = DEFAULT_CONFIG.copy()
         self.load()
-        self._validate_aipp_config()  # <-- Add this line
+        self._validate_aipp_config()
 
     def load(self):
         if CONFIG_PATH.exists():
@@ -144,27 +160,67 @@ class AppConfig:
         self.data["aipp_prompts"][key] = value
         self.save()
 
+    def get_aipp_models(self, provider=None):
+        """Return list of models for the given provider (or current provider)."""
+        if provider is None:
+            provider = self.data.get("aipp_provider", "ollama")
+        return self.data.get("aipp_models", {}).get(provider, [])
+
+    def get_aipp_selected_model(self, provider=None):
+        """Return the selected model for the given provider (or current provider)."""
+        if provider is None:
+            provider = self.data.get("aipp_provider", "ollama")
+        return self.data.get("aipp_selected_models", {}).get(provider, "")
+
+    def set_aipp_selected_model(self, model_name, provider=None):
+        """Set the selected model for the given provider (or current provider)."""
+        if provider is None:
+            provider = self.data.get("aipp_provider", "ollama")
+        if model_name not in self.get_aipp_models(provider):
+            print(f"[config] Model '{model_name}' not in aipp_models for provider '{provider}'")
+            return
+        self.data["aipp_selected_models"][provider] = model_name
+        self.save()
+        print(f"[config] AIPP model for {provider} set to {model_name}")
+
     def _validate_aipp_config(self):
-        """Ensure aipp_prompts has exactly 4 slots and active_prompt is valid."""
+        """Ensure aipp_prompts and aipp_models/selected_models are valid."""
         prompts = self.data.get("aipp_prompts", {})
-        # Ensure all 4 keys exist
         for slot in ["default", "prompt1", "prompt2", "prompt3"]:
             if slot not in prompts:
                 prompts[slot] = ""
-        # Remove extra keys if any
         for k in list(prompts.keys()):
             if k not in ["default", "prompt1", "prompt2", "prompt3"]:
                 del prompts[k]
         self.data["aipp_prompts"] = prompts
 
-        # Validate active_prompt
         active = self.data.get("aipp_active_prompt", "default")
         if active not in prompts:
             print(f"[config] Invalid aipp_active_prompt '{active}', resetting to 'default'")
             self.data["aipp_active_prompt"] = "default"
-        # Refined provider validation
-        provider = self.data.get("aipp_provider", "ollama")
+
         valid_providers = ["ollama", "lmstudio", "openai", "anthropic", "xai"]
+        provider = self.data.get("aipp_provider", "ollama")
         if provider not in valid_providers:
             print(f"[config] Invalid aipp_provider '{provider}', resetting to 'ollama'")
             self.data["aipp_provider"] = "ollama"
+
+        # Ensure aipp_models and aipp_selected_models have all providers
+        for prov in valid_providers:
+            if prov not in self.data.get("aipp_models", {}):
+                self.data["aipp_models"][prov] = []
+            if prov not in self.data.get("aipp_selected_models", {}):
+                self.data["aipp_selected_models"][prov] = (
+                    self.data["aipp_models"][prov][0] if self.data["aipp_models"][prov] else ""
+                )
+
+    @property
+    def aipp_model(self):
+        """Shortcut for current provider's selected model."""
+        prov = self.data.get("aipp_provider", "ollama")
+        return self.data.get("aipp_selected_models", {}).get(prov, "")
+
+    @aipp_model.setter
+    def aipp_model(self, value):
+        prov = self.data.get("aipp_provider", "ollama")
+        self.set_aipp_selected_model(value, prov)

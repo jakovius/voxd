@@ -18,7 +18,8 @@ def run_aipp(text: str, cfg, prompt_key: str = None) -> str:
     full_prompt = f"{prompt}\n{text.strip()}"
 
     provider = cfg.data.get("aipp_provider", "local")
-    model = cfg.data.get("aipp_model", "llama3.2:latest")
+    # Use the selected model for the current provider
+    model = cfg.get_aipp_selected_model(provider) if hasattr(cfg, "get_aipp_selected_model") else cfg.data.get("aipp_model", "llama3.2:latest")
 
     for attempt in (1, 2):
         try:

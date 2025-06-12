@@ -120,14 +120,25 @@ class WhispTrayApp(QObject):
 
         # Providers submenu
         providers_menu = QMenu("Providers", aipp_menu)
-        providers = ["local", "openai", "anthropic", "xai"]
-        current_provider = self.cfg.data.get("aipp_provider", "local")
+        providers = list(self.cfg.data.get("aipp_models", {"ollama":[]}).keys())
+        current_provider = self.cfg.data.get("aipp_provider", "ollama")
         for prov in providers:
             act = QAction(prov, providers_menu, checkable=True)
             act.setChecked(current_provider == prov)
             act.triggered.connect(lambda checked, p=prov: self.set_aipp_provider(p))
             providers_menu.addAction(act)
         aipp_menu.addMenu(providers_menu)
+
+        # Models submenu (NEW)
+        models_menu = QMenu("Models", aipp_menu)
+        models = self.cfg.data.get("aipp_models", {}).get(current_provider, [])
+        selected_model = self.cfg.data.get("aipp_selected_models", {}).get(current_provider, "")
+        for model in models:
+            act = QAction(model, models_menu, checkable=True)
+            act.setChecked(selected_model == model)
+            act.triggered.connect(lambda checked, m=model: self.set_aipp_model(current_provider, m))
+            models_menu.addAction(act)
+        aipp_menu.addMenu(models_menu)
 
         return aipp_menu
 
@@ -146,6 +157,12 @@ class WhispTrayApp(QObject):
     def set_aipp_provider(self, provider):
         self.cfg.data["aipp_provider"] = provider
         self.cfg.aipp_provider = provider
+        self.cfg.save()
+        self.refresh_tray_menu()
+
+    def set_aipp_model(self, provider, model):
+        self.cfg.data["aipp_selected_models"][provider] = model
+        self.cfg.aipp_model = model
         self.cfg.save()
         self.refresh_tray_menu()
 

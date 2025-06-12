@@ -70,7 +70,6 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
     aipp_enable_cb = QCheckBox("Enable AIPP")
     aipp_enable_cb.setChecked(cfg.data.get("aipp_enabled", False))
     def on_aipp_enable(state):
-        print("SIGNAL: aipp_enabled changing to", bool(state), "CFG id:", id(cfg))
         cfg.data["aipp_enabled"] = bool(state)
         cfg.aipp_enabled = bool(state)
         cfg.save()
@@ -79,25 +78,41 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
 
     # Provider dropdown
     aipp_provider_combo = QComboBox()
-    aipp_provider_combo.addItems(["ollama", "lmstudio", "openai", "anthropic", "xai"])
-    aipp_provider_combo.setCurrentText(cfg.data.get("aipp_provider", "ollama"))
+    providers = list(cfg.data.get("aipp_models", {"ollama":[]}).keys())
+    aipp_provider_combo.addItems(providers)
+    current_provider = cfg.data.get("aipp_provider", "ollama")
+    aipp_provider_combo.setCurrentText(current_provider)
+
+    # Model dropdown (NEW)
+    aipp_model_combo = QComboBox()
+    def update_model_combo(provider):
+        aipp_model_combo.clear()
+        models = cfg.data.get("aipp_models", {}).get(provider, [])
+        aipp_model_combo.addItems(models)
+        selected = cfg.data.get("aipp_selected_models", {}).get(provider, "")
+        if selected in models:
+            aipp_model_combo.setCurrentText(selected)
+        elif models:
+            aipp_model_combo.setCurrentIndex(0)
+    update_model_combo(current_provider)
+
     def on_aipp_provider(text):
         cfg.data["aipp_provider"] = text
         cfg.aipp_provider = text
         cfg.save()
+        update_model_combo(text)
     aipp_provider_combo.currentTextChanged.connect(on_aipp_provider)
     aipp_layout.addWidget(QLabel("Provider:"))
     aipp_layout.addWidget(aipp_provider_combo)
 
-    # Model entry
-    aipp_model_edit = QLineEdit(cfg.data.get("aipp_model", "llama3.2:latest"))
-    def on_aipp_model():
-        cfg.data["aipp_model"] = aipp_model_edit.text()
-        cfg.aipp_model = aipp_model_edit.text()
+    def on_aipp_model(text):
+        provider = aipp_provider_combo.currentText()
+        cfg.data["aipp_selected_models"][provider] = text
+        cfg.aipp_model = text
         cfg.save()
-    aipp_model_edit.editingFinished.connect(on_aipp_model)
+    aipp_model_combo.currentTextChanged.connect(on_aipp_model)
     aipp_layout.addWidget(QLabel("Model:"))
-    aipp_layout.addWidget(aipp_model_edit)
+    aipp_layout.addWidget(aipp_model_combo)
 
     # Active prompt label and manage button
     aipp_prompt_label = QLabel(cfg.data.get("aipp_active_prompt", "default"))
