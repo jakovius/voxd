@@ -1,0 +1,23 @@
+app_mode: whisp
+clipboard_backend: auto
+collect_metrics: false
+hotkey_record: ctrl+alt+r
+log_enabled: true
+log_file: ''
+performance_log_file: performance_data.csv
+simulate_typing: true
+typing_delay: 10
+verbosity: true
+whisper_binary: whisper.cpp/build/bin/whisper-cli
+model_path: whisper.cpp/models/ggml-base.en.bin
+
+# --- ✨ AIPP (AI post-processing) ------------------------------------------
+aipp_enabled: false
+aipp_provider: ollama
+aipp_active_prompt: default
+aipp_model: llama3.2:latest
+aipp_prompts:
+  default: Summarize the following text
+  prompt1: ""
+  prompt2: ""
+  prompt3: ""

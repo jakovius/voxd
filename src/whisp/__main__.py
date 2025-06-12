@@ -43,7 +43,7 @@ def main():
         action="store_true",
         help="Print configuration and hotkey status"
     )
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
 
     # If we're just the hotkey sender, dispatch and exit immediately
     if args.trigger_record:
@@ -64,11 +64,11 @@ def main():
     check_hotkey(cfg, mode)
 
     if mode == "cli":
-        from whisp.cli.cli_main import cli_main
-        from whisp.core.logger import SessionLogger
-        import argparse as ap
-        logger = SessionLogger(cfg.log_enabled, cfg.log_file)
-        cli_main(cfg, logger, ap.Namespace(save_audio=False))
+        # Forward unknown args to cli_main
+        import sys
+        from whisp.cli import cli_main as cli_main_mod
+        sys.argv = [sys.argv[0]] + unknown
+        cli_main_mod.main()
     elif mode == "gui":
         from whisp.gui.main import main as gui_main
         gui_main()

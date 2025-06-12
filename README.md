@@ -14,6 +14,7 @@ A lightning‑fast voice‑to‑text helper for **any** Linux app.  Hit a global
 | Multiple UI surfaces             | CLI, minimal PyQt6 GUI, Background Tray (“WHISP”) & one‑shot HEAR mode. |
 | Optional AI post‑process         | Summarise / rewrite via local **Ollama** or remote **OpenAI**.          |
 | Logs & benchmarks                | Session log plus opt‑in performance CSV.                                |
+| AI Post-Processing (AIPP)	     | Process transcripts via local or cloud LLMs. GUI prompt editor.         |
 
 ---
 
@@ -122,6 +123,55 @@ Change values, restart Whisp.  Unknown keys are ignored.
 
 ---
 
+## 🧠 AI Post-Processing (AIPP)
+Whisp can optionally post-process your transcripts using local or cloud LLMs (like Ollama, OpenAI, Anthropic, or xAI).
+You can enable, configure, and manage prompts directly from the GUI.
+
+### Enabling AIPP
+Open the Options dialog in GUI or tray mode.
+Check Enable AIPP.
+Select a provider and model.
+Click Manage prompts… to edit or select prompts.
+
+### Editing Prompts
+Use the Manage prompts… button in the Options dialog to edit or select which prompt is active.
+Changes are saved to your config and take effect after restart.
+
+***Tip:*** 
+You can also edit the YAML config directly from the app via the Settings button, which opens a built-in editor.
+
+## Supported providers:
+
+local: Ollama, LM Studio
+openai
+anthropic
+xai
+
+---
+
+## 🔑 Setting API Keys for AIPP Providers
+
+For security, Whisp does **not** store API keys in config files.  
+To use cloud AIPP providers, set the required API key(s) in your shell environment before running Whisp:
+
+```sh
+# For OpenAI
+export OPENAI_API_KEY="sk-..."
+
+# For Anthropic
+export ANTHROPIC_API_KEY="..."
+
+# For xAI
+export XAI_API_KEY="..."
+```
+
+You can add these lines to your `.bashrc`, `.zshrc`, or equivalent shell profile for convenience.
+
+**Note:**  
+If an API key is missing, cloud-based AIPP providers will not work and you will see an error.
+
+---
+
 ## 🩺 Troubleshooting cheatsheet
 
 | Symptom                            | Likely cause / fix                                                                             |
@@ -181,4 +231,4 @@ rm -f ~/.local/share/applications/whisp.desktop
 sudo rm -f /usr/local/bin/whisp  # only if you manually linked it
 ```
 
-Enjoy seamless voice‑typing on Linux – and if you build something cool on top, open a PR or say hi! 🚀
+Enjoy seamless voice‑typing on Linux – and if you build something cool on top, open a PR or say hi!

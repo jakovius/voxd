@@ -51,6 +51,8 @@ class WhispTrayApp(QObject):
         self.quit_action.triggered.connect(self.quit_app)
         self.menu.addAction(self.quit_action)
 
+        self.menu.addMenu(self.build_aipp_menu())
+
         self.tray.setContextMenu(self.menu)
         self.tray.show()
 
@@ -93,6 +95,77 @@ class WhispTrayApp(QObject):
     def quit_app(self):
         print()
         QApplication.quit()
+
+    def build_aipp_menu(self):
+        aipp_menu = QMenu("AI Post-Processing", self.menu)
+
+        # Enabled checkbox
+        enabled_action = QAction("Enabled", self.menu, checkable=True)
+        enabled_action.setChecked(self.cfg.data.get("aipp_enabled", False))
+        enabled_action.toggled.connect(self.toggle_aipp_enabled)
+        aipp_menu.addAction(enabled_action)
+        aipp_menu.addSeparator()
+
+        # Prompts submenu
+        prompts_menu = QMenu("Prompts", aipp_menu)
+        prompt_keys = ["default", "prompt1", "prompt2", "prompt3"]
+        current_prompt = self.cfg.data.get("aipp_active_prompt", "default")
+        for key in prompt_keys:
+            label = self.cfg.data.get("aipp_prompts", {}).get(key, key)
+            act = QAction(label if label else key, prompts_menu, checkable=True)
+            act.setChecked(current_prompt == key)
+            act.triggered.connect(lambda checked, k=key: self.set_aipp_prompt(k))
+            prompts_menu.addAction(act)
+        aipp_menu.addMenu(prompts_menu)
+
+        # Providers submenu
+        providers_menu = QMenu("Providers", aipp_menu)
+        providers = ["local", "openai", "anthropic", "xai"]
+        current_provider = self.cfg.data.get("aipp_provider", "local")
+        for prov in providers:
+            act = QAction(prov, providers_menu, checkable=True)
+            act.setChecked(current_provider == prov)
+            act.triggered.connect(lambda checked, p=prov: self.set_aipp_provider(p))
+            providers_menu.addAction(act)
+        aipp_menu.addMenu(providers_menu)
+
+        return aipp_menu
+
+    def toggle_aipp_enabled(self, checked):
+        self.cfg.data["aipp_enabled"] = checked
+        self.cfg.aipp_enabled = checked
+        self.cfg.save()
+        self.refresh_tray_menu()
+
+    def set_aipp_prompt(self, key):
+        self.cfg.data["aipp_active_prompt"] = key
+        self.cfg.aipp_active_prompt = key
+        self.cfg.save()
+        self.refresh_tray_menu()
+
+    def set_aipp_provider(self, provider):
+        self.cfg.data["aipp_provider"] = provider
+        self.cfg.aipp_provider = provider
+        self.cfg.save()
+        self.refresh_tray_menu()
+
+    def refresh_tray_menu(self):
+        # Rebuild the menu to update checkmarks
+        self.menu.clear()
+        # Status label
+        status_action = QWidgetAction(self.menu)
+        status_action.setDefaultWidget(self.status_label)
+        self.menu.addAction(status_action)
+        self.menu.addSeparator()
+        # Recording
+        self.menu.addAction(self.record_action)
+        # AIPP
+        self.menu.addMenu(self.build_aipp_menu())
+        # Options
+        self.menu.addAction(self.options_action)
+        # Quit
+        self.menu.addAction(self.quit_action)
+        self.tray.setContextMenu(self.menu)
 
 def main():
     app = QApplication(sys.argv)

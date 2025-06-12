@@ -1,4 +1,3 @@
-
 import subprocess
 import argparse
 import threading
@@ -6,6 +5,7 @@ import threading
 from whisp.core.config import AppConfig
 from whisp.core.logger import SessionLogger
 from whisp.core.transcriber import WhisperTranscriber
+from whisp.core.aipp import get_final_text
 from whisp.utils.core_runner import AudioRecorder, ClipboardManager, SimulatedTyper
 from whisp.utils.ipc_server import start_ipc_server
 from whisp.utils.libw import verbo
@@ -23,7 +23,8 @@ def print_help():
 
 def edit_config(config_path="config.yaml"):
     verbo("[cli] Opening config file...")
-    subprocess.run(["xdg-open", config_path])
+    from whisp.core.config import CONFIG_PATH
+    subprocess.run(["xdg-open", str(CONFIG_PATH)])
 
 def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
     hotkey_event = threading.Event()
@@ -56,10 +57,11 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
                 print("[core_runner] No transcript returned.")
                 continue
 
-            clipboard.copy(tscript)
-            logger.log_entry(tscript)
+            final_text = get_final_text(tscript, cfg)
+            clipboard.copy(final_text)
+            logger.log_entry(final_text)
             logger.save()
-            print(f"📝 ---> {tscript}")
+            print(f"📝 ---> {final_text}")
 
         elif cmd == "rh":
             print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit\n*** You can now go to ANY other app to VOICE-TYPE - leave this active in the background ***")
@@ -89,12 +91,13 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
                         print("[core_runner] No transcript returned.")
                         continue
 
-                    clipboard.copy(tscript)
+                    final_text = get_final_text(tscript, cfg)
+                    clipboard.copy(final_text)
                     print(f"\n📝 ---> ")
                     if cfg.simulate_typing:
-                        typer.type(tscript)
+                        typer.type(final_text)
                     print()
-                    logger.log_entry(tscript)
+                    logger.log_entry(final_text)
                     logger.save()
 
             except KeyboardInterrupt:
@@ -122,23 +125,58 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
         else:
             print("[cli] Unknown command. Type 'h' for help.")
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Whisp CLI Mode")
     parser.add_argument("--save-audio", action="store_true", help="Preserve audio recordings.")
     parser.add_argument("--test-file", type=str, help="Path to audio file to reuse.")
+    # --- AIPP CLI flags ---
+    parser.add_argument("--aipp", action="store_true", help="Enable AI post-processing (AIPP) for this run")
+    parser.add_argument("--no-aipp", action="store_true", help="Disable AI post-processing (AIPP) for this run")
+    parser.add_argument("--aipp-prompt", type=str, help="AIPP prompt key to use (default, prompt1, prompt2, prompt3)")
+    parser.add_argument("--aipp-provider", type=str, help="AIPP provider override (ollama, lmstudio, openai, anthropic, xai)")
     args = parser.parse_args()
 
     cfg = AppConfig()
     logger = SessionLogger(cfg.log_enabled, cfg.log_file)
 
+    # --- Apply CLI AIPP overrides (in-memory only) ---
+    if args.aipp:
+        cfg.data["aipp_enabled"] = True
+        cfg.aipp_enabled = True
+    if args.no_aipp:
+        cfg.data["aipp_enabled"] = False
+        cfg.aipp_enabled = False
+    if args.aipp_prompt:
+        if args.aipp_prompt in cfg.data.get("aipp_prompts", {}):
+            cfg.data["aipp_active_prompt"] = args.aipp_prompt
+            cfg.aipp_active_prompt = args.aipp_prompt
+        else:
+            print(f"[cli] Unknown AIPP prompt key: {args.aipp_prompt}")
+    if args.aipp_provider:
+        if args.aipp_provider in ("ollama", "lmstudio", "openai", "anthropic", "xai"):
+            cfg.data["aipp_provider"] = args.aipp_provider
+            cfg.aipp_provider = args.aipp_provider
+        else:
+            print(f"[cli] Unknown AIPP provider: {args.aipp_provider}")
+
     try:
         if args.test_file:
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary)
             tscript, _ = transcriber.transcribe(args.test_file)
-            print(f"\n📝 ---> {tscript}")
-            logger.log_entry(tscript)
+            # --- Apply AIPP if enabled ---
+            final_text = get_final_text(tscript, cfg)
+            print(f"\n📝 ---> {final_text}")
+            logger.log_entry(final_text)
             logger.save()
         else:
+            # Patch: inject get_final_text into cli_main's scope
+            original_get_final_text = get_final_text  # Save the original
+            def get_final_text_for_cli(tscript, _cfg=None):
+                return original_get_final_text(tscript, cfg)
+            globals()['get_final_text'] = get_final_text_for_cli
             cli_main(cfg, logger, args)
     except KeyboardInterrupt:
         verbo("\n[cli] Interrupted. Exiting.")
+
+if __name__ == "__main__":
+    main()

@@ -1,5 +1,4 @@
-Below is a **refined “round-2” project plan** that folds AIPP cleanly into **every working mode** of Whisp and walks you through the Git workflow we’ll use.
-After you read it, please reply with **“confirm step 0”** and we’ll start right away with the first task (branch setup). I’ll always pause for your short confirmation before moving to each new step.
+Below is a **refined “round-2 aipp development” project plan** that folds AIPP cleanly into **every working mode** of Whisp and walks you through the Git workflow we’ll use.
 
 ---
 
