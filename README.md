@@ -31,6 +31,9 @@ cd whisp
 pipx install .   # ⏱️ <15 s → drops ~/.local/bin/whisp
 # if you are developing/hacking, consider instead: `pipx install --editable .`
 ```
+> **Note:**  
+> The setup script will symlink the `whisper-cli` binary to `~/.local/bin/whisper-cli` so it is always available on your `$PATH`.  
+> If you see errors about `whisper-cli not found`, make sure `~/.local/bin` is in your `$PATH` (run `pipx ensurepath` and restart your shell).
 
 If you don’t have pipx yet:
 

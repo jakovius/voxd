@@ -36,9 +36,9 @@ def _embedded_binary() -> Path | None:
     arch = machine().lower()         # x86_64 | aarch64 | arm64 …
 
     mapping = {
-        ("linux",  {"x86_64", "amd64"}): "linux_x86_64",
-        ("linux",  {"aarch64", "arm64"}): "linux_aarch64",
-        ("darwin", {"arm64"}): "macos_arm64",
+        ("linux",  ("x86_64", "amd64")): "linux_x86_64",
+        ("linux",  ("aarch64", "arm64")): "linux_aarch64",
+        ("darwin", ("arm64",)): "macos_arm64",
     }
     for (p, arches), subdir in mapping.items():
         if plat == p and arch in arches:

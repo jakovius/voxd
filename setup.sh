@@ -154,7 +154,18 @@ fi
 # ──────────────────  7. ydotool (Wayland helper)  ─────────────────────────────
 ensure_ydotool
 
-# ──────────────────  8. done  ───────────────────────────────────────────────––
+# ──────────────────  8. symlink whisper-cli to ~/.local/bin  ─────────────────
+WHISPER_BIN="$PWD/whisper.cpp/build/bin/whisper-cli"
+LOCAL_BIN="$HOME/.local/bin"
+mkdir -p "$LOCAL_BIN"
+if [[ ! -e "$LOCAL_BIN/whisper-cli" ]]; then
+  ln -s "$WHISPER_BIN" "$LOCAL_BIN/whisper-cli"
+  msg "Symlinked whisper-cli to $LOCAL_BIN/whisper-cli"
+else
+  msg "whisper-cli already present in $LOCAL_BIN"
+fi
+
+# ──────────────────  9. done  ───────────────────────────────────────────────––
 msg "${GRN}Setup complete!${NC}"
 echo "Activate venv:   source .venv/bin/activate"
 echo "Run GUI mode:    python -m whisp --mode gui"

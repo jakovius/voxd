@@ -65,7 +65,6 @@ def main():
 
     if mode == "cli":
         # Forward unknown args to cli_main
-        import sys
         from whisp.cli import cli_main as cli_main_mod
         sys.argv = [sys.argv[0]] + unknown
         cli_main_mod.main()
