@@ -6,6 +6,7 @@ from whisp.core.logger import SessionLogger
 from whisp.core.config import AppConfig
 from whisp.core.aipp import run_aipp
 from whisp.utils.benchmark_utils import write_perf_entry
+from whisp.utils.libw import verbo
 
 from time import time
 from datetime import datetime
@@ -18,7 +19,7 @@ if "PyQt6" in sys.modules:
 
 
 def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=False, apply_aipp=False, logger=None):
-    print("[core_runner] Running core process...")
+    verbo("[core_runner] Running core process...")
 
     recorder = AudioRecorder()
     transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not preserve_audio)
@@ -29,7 +30,7 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=Fa
 
     # === Record
     recorder.start_recording()
-    input("[core_runner] Press ENTER to stop recording...")
+    input("[core_runner] Recording - press ENTER to stop.")
     rec_start = datetime.now()
     rec_path = recorder.stop_recording(preserve=preserve_audio)
     rec_end = datetime.now()
@@ -51,13 +52,13 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=Fa
         ai_output = run_aipp(tscript, cfg)
         aipp_end = time()
         if ai_output:
-            print("[core_runner] AIPP result:", ai_output)
+            verbo("[core_runner] AIPP result:", ai_output)
 
     # === Clipboard
     clipboard.copy(tscript)
 
     # === Simulated Typing
-    if simulate_typing and cfg.simulate_typing:
+    if cfg.simulate_typing:
         typer.type(tscript)
 
     # === Logging
@@ -82,10 +83,10 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=Fa
             except Exception:
                 usr_trans_acc = 0.0
         else:
-            print("\n[core_runner] Please rate the transcription accuracy (0-100%)")
+            print("\n[core_runner] Please rate the transcription accuracy (0-100)")
             print("Transcript:\n", tscript)
             try:
-                usr_trans_acc = float(input("Enter accuracy % (or leave blank): ").strip() or 0.0)
+                usr_trans_acc = float(input("Enter accuracy (0-100, or leave blank): ").strip() or 0.0)
             except ValueError:
                 usr_trans_acc = 0.0
 
@@ -112,7 +113,7 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=Fa
             "aipp_eff": (aipp_end - aipp_start) / max(len(ai_output), 1) if ai_output and aipp_start and aipp_end else None,
             "sys_mem": psutil.virtual_memory().total,
             "sys_cpu": psutil.cpu_freq().max,
-            "total_dur": (trans_end - trans_start) + (rec_end - rec_start)
+            "total_dur": (trans_end - trans_start) + (rec_end - rec_start).total_seconds()
         }
         write_perf_entry(perf_entry)
 

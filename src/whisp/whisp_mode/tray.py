@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QApplication, QSystemTrayIcon, QMenu, QLabel, QWidgetAction
 )
 from PyQt6.QtGui import QIcon, QAction
-from PyQt6.QtCore import Qt, QObject
+from PyQt6.QtCore import Qt, QObject, QTimer, QThread
 
 from whisp.core.config import AppConfig
 from whisp.core.logger import SessionLogger
@@ -28,14 +28,6 @@ class WhispTrayApp(QObject):
 
         self.menu = QMenu()
 
-        # Status label at the top of the menu
-        self.status_label = QLabel(self.status)
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        status_action = QWidgetAction(self.menu)
-        status_action.setDefaultWidget(self.status_label)
-        self.menu.addAction(status_action)
-        self.menu.addSeparator()
-
         # Start/Stop Recording action
         self.record_action = QAction("Start Recording")
         self.record_action.triggered.connect(self.toggle_recording)
@@ -57,8 +49,10 @@ class WhispTrayApp(QObject):
         self.tray.show()
 
     def set_status(self, text):
+        if QApplication.instance().thread() != QThread.currentThread():
+            QTimer.singleShot(0, lambda: self.set_status(text))
+            return
         self.status = text
-        self.status_label.setText(text)
         self.tray.setToolTip(f"Whisp - {text}")
         # Change icon based on status
         if text == "Recording":
@@ -68,6 +62,7 @@ class WhispTrayApp(QObject):
         self.record_action.setText(
             "Start Recording" if text == "Whisp" else ("Stop Recording" if text == "Recording" else f"{text}...")
         )
+        self.refresh_tray_menu()
         QApplication.processEvents()
 
     def toggle_recording(self):
@@ -79,7 +74,7 @@ class WhispTrayApp(QObject):
             return
         self.set_status("Recording")
         self.thread = CoreProcessThread(self.cfg, self.logger)
-        self.thread.status_changed.connect(self.set_status)
+        self.thread.status_changed.connect(self.set_status, Qt.ConnectionType.QueuedConnection)
         self.thread.finished.connect(self.on_transcript_ready)
         self.thread.start()
 
@@ -99,9 +94,10 @@ class WhispTrayApp(QObject):
     def build_aipp_menu(self):
         aipp_menu = QMenu("AI Post-Processing", self.menu)
 
-        # Enabled checkbox
-        enabled_action = QAction("Enabled", self.menu, checkable=True)
-        enabled_action.setChecked(self.cfg.data.get("aipp_enabled", False))
+        # Enabled checkbox with dynamic label and checkmark
+        aipp_enabled = self.cfg.data.get("aipp_enabled", False)
+        enabled_action = QAction("Enabled" if aipp_enabled else "Enable", self.menu, checkable=True)
+        enabled_action.setChecked(aipp_enabled)
         enabled_action.toggled.connect(self.toggle_aipp_enabled)
         aipp_menu.addAction(enabled_action)
         aipp_menu.addSeparator()
@@ -169,11 +165,6 @@ class WhispTrayApp(QObject):
     def refresh_tray_menu(self):
         # Rebuild the menu to update checkmarks
         self.menu.clear()
-        # Status label
-        status_action = QWidgetAction(self.menu)
-        status_action.setDefaultWidget(self.status_label)
-        self.menu.addAction(status_action)
-        self.menu.addSeparator()
         # Recording
         self.menu.addAction(self.record_action)
         # AIPP
@@ -189,7 +180,7 @@ def main():
     tray_app = WhispTrayApp()
 
     def on_ipc_trigger():
-        tray_app.toggle_recording()
+        QTimer.singleShot(0, tray_app.toggle_recording)
 
     start_ipc_server(on_ipc_trigger)
     sys.exit(app.exec())

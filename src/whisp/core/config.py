@@ -73,8 +73,6 @@ class AppConfig:
             with open(CONFIG_PATH, "r") as f:
                 user_config = yaml.safe_load(f) or {}
                 self.data.update(user_config)
-        # for diagnostics
-        print(f"--- diagnostic --- Config dir: {CONFIG_DIR} | Config path: {CONFIG_PATH}")
 
         # Assign config values to attributes
         for k, v in self.data.items():
@@ -86,18 +84,18 @@ class AppConfig:
     def save(self):
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.data, f, default_flow_style=False)
-        print("[config] Configuration saved.")
+        print("\n[config] Configuration saved.")
 
     def set(self, key, value):
         if key not in DEFAULT_CONFIG:
-            print(f"[config] Unknown key: {key}")
+            print(f"\n[config] Unknown key: {key}")
             return
         self.data[key] = value
         setattr(self, key, value)
-        print(f"[config] Updated: {key} = {value}")
+        print(f"\n[config] Updated: {key} = {value}")
 
     def validate(self):
-        print("[config] Validating config...")
+        print("\n[config] Validating config...")
 
         def check_file(path, label):
             if not os.path.exists(path):
@@ -121,7 +119,7 @@ class AppConfig:
         if self.aipp_provider == "xai" and not os.getenv("XAI_API_KEY"):
             print("  ⚠️ XAI_API_KEY not set in environment.")
 
-        print("[config] Validation complete.")
+        print("\n[config] Validation complete.")
 
     def print_summary(self):
         print("\n[config] Current Settings:")
@@ -143,11 +141,11 @@ class AppConfig:
     def select_model(self, model_name):
         model_path = Path("whisper.cpp/models") / model_name
         if not model_path.exists():
-            print(f"[config] Model not found: {model_path}")
+            print(f"\n[config] Model not found: {model_path}")
             return
         self.set("model_path", str(model_path))
         self.save()
-        print(f"[config] Model switched to {model_name}")
+        print(f"\n[config] Model switched to {model_name}")
     
     # ---- AIPP helpers --------------------------------------------------
     def current_prompt(self) -> str:
@@ -155,7 +153,7 @@ class AppConfig:
 
     def set_prompt(self, key: str, value: str):
         if key not in self.data["aipp_prompts"]:
-            print(f"[config] Unknown prompt slot: {key}")
+            print(f"\n[config] Unknown prompt slot: {key}")
             return
         self.data["aipp_prompts"][key] = value
         self.save()
@@ -177,11 +175,11 @@ class AppConfig:
         if provider is None:
             provider = self.data.get("aipp_provider", "ollama")
         if model_name not in self.get_aipp_models(provider):
-            print(f"[config] Model '{model_name}' not in aipp_models for provider '{provider}'")
+            print(f"\n[config] Model '{model_name}' not in aipp_models for provider '{provider}'")
             return
         self.data["aipp_selected_models"][provider] = model_name
         self.save()
-        print(f"[config] AIPP model for {provider} set to {model_name}")
+        print(f"\n[config] AIPP model for {provider} set to {model_name}")
 
     def _validate_aipp_config(self):
         """Ensure aipp_prompts and aipp_models/selected_models are valid."""
@@ -196,13 +194,13 @@ class AppConfig:
 
         active = self.data.get("aipp_active_prompt", "default")
         if active not in prompts:
-            print(f"[config] Invalid aipp_active_prompt '{active}', resetting to 'default'")
+            print(f"\n[config] Invalid aipp_active_prompt '{active}', resetting to 'default'")
             self.data["aipp_active_prompt"] = "default"
 
         valid_providers = ["ollama", "lmstudio", "openai", "anthropic", "xai"]
         provider = self.data.get("aipp_provider", "ollama")
         if provider not in valid_providers:
-            print(f"[config] Invalid aipp_provider '{provider}', resetting to 'ollama'")
+            print(f"\n[config] Invalid aipp_provider '{provider}', resetting to 'ollama'")
             self.data["aipp_provider"] = "ollama"
 
         # Ensure aipp_models and aipp_selected_models have all providers
