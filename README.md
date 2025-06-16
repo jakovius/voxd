@@ -177,13 +177,13 @@ If an API key is missing, cloud-based AIPP providers will not work and you will 
 
 ## 🩺 Troubleshooting cheatsheet
 
-| Symptom                            | Likely cause / fix                                                                             |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------- |
-| *Press hotkey, nothing happens*    | Shortcut command missing `PYTHONPATH` or wrong path to repo.                                   |
-| *Transcript printed but not typed* | Wayland: `ydotool` not installed or user not in `input` group → run `setup_ydotool.sh`, relog. |
-| *“whisper-cli not found”*          | Build failed – rerun `./setup.sh` and check cmake output.                                      |
-| *Mic not recording*                | Verify in `pavucontrol` the VM’s input device is active and not muted.                         |
-| Clipboard empty                    | Disable/enable SPICE clipboard sync in VM; ensure `xclip` or `wl-copy` present.                |
+| Symptom                            | Likely cause / fix                                                                                             |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| *Press hotkey, nothing happens*    | Troubleshoot with this command: *gnome-terminal -- bash -c "whisp --trigger-record; read -p 'Press Enter...'"* |
+| *Transcript printed but not typed* | Wayland: `ydotool` not installed or user not in `input` group → run `setup_ydotool.sh`, relog.                 |
+| *“whisper-cli not found”*          | Build failed – rerun `./setup.sh` and check cmake output.                                                      |
+| *Mic not recording*                | Verify in `pavucontrol` the VM’s input device is active and not muted.                                         |
+| Clipboard empty                    | Disable/enable SPICE clipboard sync in VM; ensure `xclip` or `wl-copy` present.                                |
 
 ---
 
