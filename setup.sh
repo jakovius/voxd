@@ -130,16 +130,24 @@ msg "Installing Whisp into venv (editable)…"
 pip install -e .    > /dev/null
 
 # ──────────────────  5. whisper.cpp (once)  ─────────────────────────────────––
-if [[ ! -d whisper.cpp ]]; then
-  msg "Cloning whisper.cpp…"
-  git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
-fi
-if [[ ! -x whisper.cpp/build/bin/whisper-cli ]]; then
-  msg "Building whisper.cpp (first time only)…"
-  cmake -S whisper.cpp -B whisper.cpp/build
-  cmake --build whisper.cpp/build -j"$(nproc)"
+if command -v whisper-cli >/dev/null; then
+  # A binary is already available system-wide – reuse it.
+  WHISPER_BIN="$(command -v whisper-cli)"
+  msg "Found existing whisper-cli at $WHISPER_BIN – skipping source build."
 else
-  msg "whisper.cpp already built."
+  # Build from source inside repo_root/whisper.cpp  (old behaviour)
+  if [[ ! -d whisper.cpp ]]; then
+    msg "Cloning whisper.cpp…"
+    git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+  fi
+  if [[ ! -x whisper.cpp/build/bin/whisper-cli ]]; then
+    msg "Building whisper.cpp (first time only)…"
+    cmake -S whisper.cpp -B whisper.cpp/build
+    cmake --build whisper.cpp/build -j"$(nproc)"
+  else
+    msg "whisper.cpp already built."
+  fi
+  WHISPER_BIN="$PWD/whisper.cpp/build/bin/whisper-cli"
 fi
 
 # ──────────────────  6. default model  ───────────────────────────────────────–
@@ -155,7 +163,6 @@ fi
 ensure_ydotool
 
 # ──────────────────  8. symlink whisper-cli to ~/.local/bin  ─────────────────
-WHISPER_BIN="$PWD/whisper.cpp/build/bin/whisper-cli"
 LOCAL_BIN="$HOME/.local/bin"
 mkdir -p "$LOCAL_BIN"
 if [[ ! -e "$LOCAL_BIN/whisper-cli" ]]; then
@@ -165,7 +172,19 @@ else
   msg "whisper-cli already present in $LOCAL_BIN"
 fi
 
+# ──────────────────  8b. persist absolute paths in config.yaml  ──────────────
+python - <<PY
+from pathlib import Path
+from whisp.core.config import AppConfig
+cfg = AppConfig()
+cfg.set("whisper_binary", str(Path("$WHISPER_BIN").resolve()))
+cfg.set("model_path", str(Path("$PWD/whisper.cpp/models/ggml-base.en.bin").resolve()))
+cfg.save()
+print("[setup] Absolute paths written to ~/.config/whisp/config.yaml")
+PY
+
 # ──────────────────  9. done  ───────────────────────────────────────────────––
 msg "${GRN}Setup complete!${NC}"
 echo "Activate venv:   source .venv/bin/activate"
 echo "Run GUI mode:    python -m whisp --mode gui"
+echo "---> see in README.md on easy use setup."

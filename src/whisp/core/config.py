@@ -5,6 +5,7 @@ from pathlib import Path
 from platformdirs import user_config_dir
 from importlib.resources import files
 from datetime import datetime
+from whisp.paths import resolve_whisper_binary, resolve_model_path  # <-- add this import
 
 DEFAULT_CONFIG = {
     "app_mode": "whisp",
@@ -74,12 +75,27 @@ class AppConfig:
                 user_config = yaml.safe_load(f) or {}
                 self.data.update(user_config)
 
+        # Always resolve absolute paths for whisper_binary and model_path
+        abs_whisper = str(resolve_whisper_binary(self.data.get("whisper_binary", "")))
+        abs_model = str(resolve_model_path(self.data.get("model_path", "")))
+        updated = False
+        if self.data.get("whisper_binary") != abs_whisper:
+            self.data["whisper_binary"] = abs_whisper
+            updated = True
+        if self.data.get("model_path") != abs_model:
+            self.data["model_path"] = abs_model
+            updated = True
+
         # Assign config values to attributes
         for k, v in self.data.items():
             setattr(self, k, v)
 
         if not self.log_file:
             self.log_file = default_log_filename()
+
+        # Save config if any path was updated
+        if updated:
+            self.save()
 
     def save(self):
         with open(CONFIG_PATH, "w") as f:
@@ -143,7 +159,8 @@ class AppConfig:
         if not model_path.exists():
             print(f"\n[config] Model not found: {model_path}")
             return
-        self.set("model_path", str(model_path))
+        abs_model_path = str(model_path.resolve())
+        self.set("model_path", abs_model_path)
         self.save()
         print(f"\n[config] Model switched to {model_name}")
     

@@ -1,21 +1,84 @@
-# this is a library of useful functions that canbe used in the project
+# whisp.utils.libw
+# -----------------------------------------------------------------------------
+# Misc utility helpers that are safe to import from anywhere in the project.
+#
+# IMPORTANT: Do **not** put heavy top-level imports here (especially ones that
+# in turn import `whisp.paths`, `whisp.core.config`, …) as that easily leads to
+# circular-import hell.  Keep everything lightweight and import lazily inside
+# the individual helpers instead.
+# -----------------------------------------------------------------------------
 
-from whisp.core.config import AppConfig
+from __future__ import annotations
 
-_cfg = AppConfig()  # Create once, reuse
+from functools import lru_cache
 
-# a function that will take a string argument and print it out if the verbosity is true in config.yaml
-# it can be called in any script in the codebase
+
+# -----------------------------------------------------------------------------
+# Internal helpers
+# -----------------------------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def _app_cfg():
+    """Return a cached instance of :class:`whisp.core.config.AppConfig`."""
+    # Import **inside** the function to avoid circular imports during the Python
+    # module import phase.  The first call constructs the config object; later
+    # calls re-use that same instance.
+    from whisp.core.config import AppConfig  # local import – deliberate
+
+    return AppConfig()
+
+
+# -----------------------------------------------------------------------------
+# Public helpers
+# -----------------------------------------------------------------------------
+
+# a function that will take a string argument and print it out if the verbosity
+# flag in the user config is **true**.  It can be imported and used anywhere in
+# the codebase **without** causing circular-import problems.
+
+
 def verbo(what_string: str, *args, **kwargs):
-    """Prints what_string if verbosity is enabled in config."""
-    if getattr(_cfg, "verbosity", False):
+    """Conditionally ``print`` *what_string* depending on the user's settings.
+
+    The string is formatted with ``str.format(*args, **kwargs)`` exactly like
+    ``print`` would do.
+    """
+
+    cfg = _app_cfg()
+    if getattr(cfg, "verbosity", False):
         print(what_string.format(*args, **kwargs))
+
+def diagn(value, *, label: str | None = None):
+    """
+    Diagnostic print that tries hard to show:
+        file:line | variable = repr(value)
+    If automatic name detection fails you can supply an explicit *label*.
+    """
+    import inspect, pathlib, textwrap, re
+
+    frame = inspect.currentframe()
+    outer = inspect.getouterframes(frame, 2)[1]          # caller
+    filename = pathlib.Path(outer.filename).name
+    lineno   = outer.lineno
+
+    # Try to extract the expression passed to diagn()
+    if label is None:
+        if outer.code_context:
+            src_line = outer.code_context[-1]  # last line corresponds to *this* call
+        else:
+            src_line = ""
+        src = textwrap.dedent(src_line).strip()
+        m = re.search(r"diagn\(\s*(.+?)(?:,\s*\*\w+=|,\s*label=|[\s\)])", src)
+        label = m.group(1).strip() if m else "?"
+    print(f"---> {filename}:{lineno} | {label} = {value!r}")
+
 
 def main():
     # testing example
-    print(_cfg.verbosity)
-    verbo(f"Verbosity is {_cfg.verbosity}ly on.".lower())
+    cfg = _app_cfg()
+    verb_flag = getattr(cfg, "verbosity", False)
+    print(verb_flag)
+    verbo(f"Verbosity is {verb_flag}ly on.".lower())
 
 if __name__ == "__main__":
     main()
-    

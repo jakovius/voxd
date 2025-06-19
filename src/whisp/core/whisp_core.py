@@ -51,6 +51,7 @@ class CoreProcessThread(QThread):
         if self.cfg.simulate_typing and final_text:
             self.status_changed.emit("Typing")
             typer.type(final_text)
+            print()
         self.finished.emit(final_text)
 
 def show_options_dialog(parent, logger, cfg=None, modal=True):

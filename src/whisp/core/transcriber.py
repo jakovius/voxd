@@ -3,13 +3,26 @@ import os
 from pathlib import Path
 import re
 from whisp.utils.libw import verbo
-from whisp.paths import find_whisper_cli
+from whisp.paths import find_whisper_cli, find_base_model
 
 
 class WhisperTranscriber:
     def __init__(self, model_path, binary_path, delete_input=True):
-        self.model_path = model_path
-        self.binary_path = binary_path or find_whisper_cli()
+        # --- Model path: try config, else auto-discover ---
+        if model_path and Path(model_path).is_file():
+            self.model_path = model_path
+        else:
+            # Try to use the default model in cache
+            self.model_path = find_base_model()
+            verbo(f"[transcriber] Falling back to cached model: {self.model_path}")
+
+        # --- Binary path: try config, else auto-discover ---
+        if binary_path and Path(binary_path).is_file() and os.access(binary_path, os.X_OK):
+            self.binary_path = binary_path
+        else:
+            self.binary_path = find_whisper_cli()
+            verbo(f"[transcriber] Falling back to auto-detected whisper-cli: {self.binary_path}")
+
         self.delete_input = delete_input
         from whisp.paths import OUTPUT_DIR
         self.output_dir = OUTPUT_DIR
