@@ -47,6 +47,19 @@ class CoreProcessThread(QThread):
         # --- Apply AIPP if enabled ---
         final_text = get_final_text(tscript, self.cfg)
 
+        # === Logging ------------------------------------------------------
+        try:
+            if self.cfg.aipp_enabled:
+                # Log both original and, if different, AIPP output
+                self.logger.log_entry(f"[original] {tscript}")
+                if final_text and final_text != tscript:
+                    self.logger.log_entry(f"[aipp] {final_text}")
+            else:
+                # AIPP disabled → keep legacy single-line behaviour
+                self.logger.log_entry(tscript)
+        except Exception:
+            pass  # logging failures should never crash the thread
+
         clipboard.copy(final_text)
         if self.cfg.simulate_typing and final_text:
             self.status_changed.emit("Typing")
@@ -73,7 +86,6 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
     def on_aipp_enable(state):
         cfg.data["aipp_enabled"] = bool(state)
         cfg.aipp_enabled = bool(state)
-        cfg.save()
     aipp_enable_cb.stateChanged.connect(on_aipp_enable)
     aipp_layout.addWidget(aipp_enable_cb)
 
@@ -100,8 +112,6 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
     def on_aipp_provider(text):
         cfg.data["aipp_provider"] = text
         cfg.aipp_provider = text
-        cfg.save()
-        update_model_combo(text)
     aipp_provider_combo.currentTextChanged.connect(on_aipp_provider)
     aipp_layout.addWidget(QLabel("Provider:"))
     aipp_layout.addWidget(aipp_provider_combo)
@@ -110,7 +120,6 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
         provider = aipp_provider_combo.currentText()
         cfg.data["aipp_selected_models"][provider] = text
         cfg.aipp_model = text
-        cfg.save()
     aipp_model_combo.currentTextChanged.connect(on_aipp_model)
     aipp_layout.addWidget(QLabel("Model:"))
     aipp_layout.addWidget(aipp_model_combo)
@@ -160,9 +169,7 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
                 cfg.data["aipp_prompts"][key] = text_edits[i].toPlainText()
             cfg.data["aipp_active_prompt"] = selected_key
             cfg.aipp_active_prompt = selected_key
-            cfg.save()
-            aipp_prompt_label.setText(selected_key)
-            dlg.accept()
+            # Save will be called once when dialog closes
 
         def on_cancel():
             dlg.reject()
@@ -188,11 +195,40 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
 
     # --- Existing options buttons ---
     def show_log():
-        logger.show()
-        if QMessageBox.question(dialog, "Save log?", "Save session log to file?") == QMessageBox.StandardButton.Yes:
-            path, _ = QFileDialog.getSaveFileName(dialog, "Save Log", "", "Text Files (*.txt)")
-            if path:
-                logger.save(path)
+        """Open a window that shows the current session log with Save/Close."""
+
+        log_view = QDialog(dialog)
+        log_view.setWindowTitle("Session Log")
+        log_view.setMinimumSize(600, 400)
+        log_view.setStyleSheet("background-color: #2e2e2e; color: white;")
+
+        vbox = QVBoxLayout(log_view)
+
+        from PyQt6.QtWidgets import QTextEdit, QDialogButtonBox
+
+        text_area = QTextEdit()
+        text_area.setReadOnly(True)
+        text_area.setStyleSheet("background-color: #1e1e1e; color: white;")
+        if logger.entries:
+            text_area.setText("\n".join(logger.entries))
+        else:
+            text_area.setText("No entries logged yet.")
+        vbox.addWidget(text_area)
+
+        btn_box = QDialogButtonBox()
+        save_btn = btn_box.addButton("Save log…", QDialogButtonBox.ButtonRole.ActionRole)
+        close_btn = btn_box.addButton(QDialogButtonBox.StandardButton.Close)
+
+        def on_save():
+            # logger.save() will pop the system save dialog in the right folder
+            logger.save()
+
+        save_btn.clicked.connect(on_save)
+        close_btn.clicked.connect(log_view.close)
+        vbox.addWidget(btn_box)
+
+        log_view.setLayout(vbox)
+        log_view.exec()
 
     def edit_config():
         from whisp.core.config import CONFIG_PATH
@@ -218,6 +254,9 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
         layout.addWidget(btn)
 
     dialog.setLayout(layout)
+    # Persist any changes once when dialog closes/finishes
+    dialog.finished.connect(lambda _=None: cfg.save())
+
     if modal:
         dialog.exec()
     else:

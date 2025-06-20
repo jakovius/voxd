@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 from platformdirs import user_config_dir
 from importlib.resources import files
-from datetime import datetime
 from whisp.paths import resolve_whisper_binary, resolve_model_path  # <-- add this import
 
 DEFAULT_CONFIG = {
@@ -13,7 +12,7 @@ DEFAULT_CONFIG = {
     "collect_metrics": False,
     "hotkey_record": "ctrl+alt+r",
     "log_enabled": True,
-    "log_file": "",
+    "log_location": "",
     "performance_log_file": "performance_data.csv",
     "simulate_typing": True,
     "typing_delay": 10,
@@ -58,10 +57,6 @@ _TPL = files("whisp.defaults").joinpath("default_config.yaml")
 if not CONFIG_PATH.exists():
     shutil.copy(_TPL, CONFIG_PATH)
 
-def default_log_filename():
-    ts = datetime.now().strftime("%Y-%m-%d %H%M")
-    return f"{ts} whisp_log.txt"
-
 
 class AppConfig:
     def __init__(self):
@@ -90,8 +85,7 @@ class AppConfig:
         for k, v in self.data.items():
             setattr(self, k, v)
 
-        if not self.log_file:
-            self.log_file = default_log_filename()
+        self.log_location = self.data.get("log_location", "")
 
         # Save config if any path was updated
         if updated:

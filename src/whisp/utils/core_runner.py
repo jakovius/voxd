@@ -26,7 +26,7 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=Fa
     clipboard = ClipboardManager(backend=cfg.clipboard_backend)
     typer = SimulatedTyper(delay=cfg.typing_delay)
     if logger is None:
-        logger = SessionLogger(cfg.log_enabled, cfg.log_file)
+        logger = SessionLogger(cfg.log_enabled, cfg.log_location)
 
     # === Record
     recorder.start_recording()
@@ -62,9 +62,12 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=Fa
         typer.type(tscript)
 
     # === Logging
-    logger.log_entry(tscript)
-    if ai_output:
-        logger.log_entry(f"[ai output] {ai_output}")
+    if cfg.aipp_enabled:
+        logger.log_entry(f"[original] {tscript}")
+        if ai_output:
+            logger.log_entry(f"[aipp] {ai_output}")
+    else:
+        logger.log_entry(tscript)
     logger.save()
 
     if not preserve_audio:

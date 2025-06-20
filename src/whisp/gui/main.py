@@ -14,7 +14,7 @@ class WhispApp(QWidget):
     def __init__(self):
         super().__init__()
         self.cfg = AppConfig()
-        self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_file)
+        self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_location)
 
         self.setWindowTitle("whisp")
         self.setFixedWidth(300)  # Fix the width

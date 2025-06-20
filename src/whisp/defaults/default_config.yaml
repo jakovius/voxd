@@ -3,7 +3,7 @@ clipboard_backend: auto
 collect_metrics: false
 hotkey_record: ctrl+alt+r
 log_enabled: true
-log_file: ''
+log_location: ''
 performance_log_file: performance_data.csv
 simulate_typing: true
 typing_delay: 10

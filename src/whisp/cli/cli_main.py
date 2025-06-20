@@ -59,8 +59,12 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
 
             final_text = get_final_text(tscript, cfg)
             clipboard.copy(final_text)
-            logger.log_entry(final_text)
-            logger.save()
+            if cfg.aipp_enabled:
+                logger.log_entry(f"[original] {tscript}")
+                if final_text != tscript:
+                    logger.log_entry(f"[aipp] {final_text}")
+            else:
+                logger.log_entry(final_text)
             print(f"📝 ---> {final_text}")
 
         elif cmd == "rh":
@@ -97,8 +101,12 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
                     if cfg.simulate_typing:
                         typer.type(final_text)
                     print()
-                    logger.log_entry(final_text)
-                    logger.save()
+                    if cfg.aipp_enabled:
+                        logger.log_entry(f"[original] {tscript}")
+                        if final_text != tscript:
+                            logger.log_entry(f"[aipp] {final_text}")
+                    else:
+                        logger.log_entry(final_text)
 
             except KeyboardInterrupt:
                 print("\n[cli] Exiting continuous recording mode...")
@@ -138,7 +146,7 @@ def main():
     args = parser.parse_args()
 
     cfg = AppConfig()
-    logger = SessionLogger(cfg.log_enabled, cfg.log_file)
+    logger = SessionLogger(cfg.log_enabled, cfg.log_location)
 
     # --- Apply CLI AIPP overrides (in-memory only) ---
     if args.aipp:
@@ -174,7 +182,10 @@ def main():
             # --- Apply AIPP if enabled ---
             final_text = get_final_text(tscript, cfg)
             print(f"\n📝 ---> {final_text}")
-            logger.log_entry(final_text)
+            if cfg.aipp_enabled:
+                logger.log_entry(f"[original] {tscript}")
+                if final_text != tscript:
+                    logger.log_entry(f"[aipp] {final_text}")
             logger.save()
         else:
             # Patch: inject get_final_text into cli_main's scope

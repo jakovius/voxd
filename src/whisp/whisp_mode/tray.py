@@ -18,7 +18,7 @@ class WhispTrayApp(QObject):
     def __init__(self):
         super().__init__()
         self.cfg = AppConfig()
-        self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_file)
+        self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_location)
         self.status = "Whisp"
         self.last_transcript = ""
         self.thread = None
