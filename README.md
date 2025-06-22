@@ -145,7 +145,7 @@ You can also edit the YAML config directly from the app via the Settings button,
 
 ## Supported providers:
 
-local: Ollama, LM Studio
+local: Ollama
 openai
 anthropic
 xai

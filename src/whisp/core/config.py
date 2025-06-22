@@ -22,7 +22,7 @@ DEFAULT_CONFIG = {
 
     # --- ✨ AIPP (AI post-processing) ------------------------------------------
     "aipp_enabled": False,
-    "aipp_provider": "ollama",           # ollama / lmstudio / openai / anthropic / xai
+    "aipp_provider": "ollama",           # ollama / openai / anthropic / xai
     "aipp_active_prompt": "default",
 
     # New: List of models per provider
@@ -116,7 +116,7 @@ class AppConfig:
         check_file(self.model_path, "Model file")
         check_file(self.whisper_binary, "Whisper binary")
 
-        if self.aipp_provider not in ("ollama", "lmstudio", "openai", "anthropic", "xai"):
+        if self.aipp_provider not in ("ollama", "openai", "anthropic", "xai"):
             print(f"  ⚠️ Invalid AIPP provider: {self.aipp_provider}")
 
         if not isinstance(self.typing_delay, (int, float)) or not (0.001 <= self.typing_delay <= 1):
@@ -208,7 +208,7 @@ class AppConfig:
             print(f"\n[config] Invalid aipp_active_prompt '{active}', resetting to 'default'")
             self.data["aipp_active_prompt"] = "default"
 
-        valid_providers = ["ollama", "lmstudio", "openai", "anthropic", "xai"]
+        valid_providers = ["ollama", "openai", "anthropic", "xai"]
         provider = self.data.get("aipp_provider", "ollama")
         if provider not in valid_providers:
             print(f"\n[config] Invalid aipp_provider '{provider}', resetting to 'ollama'")

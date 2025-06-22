@@ -27,8 +27,6 @@ def run_aipp(text: str, cfg, prompt_key: str = None) -> str:
                 return text
             elif provider == "ollama":
                 return run_ollama_aipp(full_prompt, model)
-            elif provider == "lmstudio":
-                return run_lmstudio_aipp(full_prompt, model)
             elif provider == "openai":
                 return run_openai_aipp(full_prompt, model)
             elif provider == "anthropic":
@@ -112,20 +110,6 @@ def run_xai_aipp(prompt: str, model: str = "grok-3") -> str:
         return response.json()["choices"][0]["message"]["content"].strip()
     else:
         raise requests.RequestException(f"XAI error {response.status_code}: {response.text}")
-
-
-def run_lmstudio_aipp(prompt: str, model: str = "default") -> str:
-    url = "http://localhost:1234/v1/completions"  # Adjust port/path as needed
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False
-    }
-    response = requests.post(url, json=payload, timeout=20)
-    if response.ok:
-        return response.json().get("choices", [{}])[0].get("text", "")
-    else:
-        raise requests.RequestException(f"LM Studio error {response.status_code}: {response.text}")
 
 
 def get_final_text(transcript: str, cfg) -> str:
