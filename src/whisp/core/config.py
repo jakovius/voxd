@@ -233,3 +233,13 @@ class AppConfig:
     def aipp_model(self, value):
         prov = self.data.get("aipp_provider", "ollama")
         self.set_aipp_selected_model(value, prov)
+
+# Global singleton holder (defined after AppConfig)
+_APP_CONFIG = None
+
+def get_config():
+    """Return the shared AppConfig instance (create on first call)."""
+    global _APP_CONFIG
+    if _APP_CONFIG is None:
+        _APP_CONFIG = AppConfig()
+    return _APP_CONFIG

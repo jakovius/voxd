@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from whisp.core.config import AppConfig
+from whisp.core.config import get_config
 from whisp.core.logger import SessionLogger
 from whisp.utils.ipc_server import start_ipc_server  # <-- Add this import
 from whisp.core.whisp_core import CoreProcessThread, show_options_dialog
@@ -13,7 +13,7 @@ from whisp.core.whisp_core import CoreProcessThread, show_options_dialog
 class WhispApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.cfg = AppConfig()
+        self.cfg = get_config()
         self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_location)
 
         self.setWindowTitle("whisp")
@@ -61,6 +61,7 @@ class WhispApp(QWidget):
                 border-radius: 10px;
             }
         """)
+        self.options_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.options_button.clicked.connect(self.show_options)
 
         self.build_ui()
@@ -92,10 +93,12 @@ class WhispApp(QWidget):
             if hasattr(self, 'thread') and self.thread.isRunning():
                 self.thread.stop_recording()
             return
-            
+        # Ensure the Whisp window does **not** receive the keystrokes we
+        # are about to send with ydotool/xdotool.
+        self.clearFocus()            # drop keyboard-focus
+        self.setWindowState(self.windowState() | Qt.WindowState.WindowMinimized)
         if self.status in ("Transcribing", "Typing"):
             return
-            
         # Start recording
         self.set_status("Recording")
         self.clipboard_notice.setText("")
@@ -111,9 +114,12 @@ class WhispApp(QWidget):
             self.transcript_label.setText(short)
             self.clipboard_notice.setText("Copied to clipboard")
         self.set_status("Whisp")
+        # Restore window after typing (optional; comment out if you prefer it
+        # to stay minimised)
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
 
     def show_options(self):
-        show_options_dialog(self, self.logger)
+        show_options_dialog(self, self.logger, cfg=self.cfg)
 
 
 def main():
