@@ -1,5 +1,5 @@
 import sys
-import os
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QSystemTrayIcon, QMenu, QLabel, QWidgetAction,
     QMessageBox
@@ -18,8 +18,15 @@ from whisp.core.whisp_core import (
     show_log_dialog,
 )
 
-ICON_PATH = os.path.join(os.path.dirname(__file__), "..", "assets", "icon.png")
-ICON_RECORDING_PATH = os.path.join(os.path.dirname(__file__), "..", "assets", "icon_r.png")
+# ──────────────────────────────────────────────────────────────────────────────
+#  Icon resources & animation frames
+# -----------------------------------------------------------------------------
+ASSETS_DIR = (Path(__file__).resolve().parent / ".." / "assets").resolve()
+
+# Filename lists only – actual QIcon objects are created *after* QApplication
+_IDLE_NAME = "whisp-0.png"
+_REC_NAMES = [f"whisp-{i}.png" for i in range(1, 10)]  # 1 … 9
+_TRANS_ORDER = ["whisp-0.png", "whisp-9.png", "whisp-1.png", "whisp-9.png"]
 
 class WhispTrayApp(QObject):
     def __init__(self):
@@ -30,8 +37,18 @@ class WhispTrayApp(QObject):
         self.last_transcript = ""
         self.thread = None
 
-        self.tray = QSystemTrayIcon(QIcon(ICON_PATH))
-        self.tray.setToolTip("Whisp - Ready")
+        # ── Icon creation (needs QApplication to exist) ───────────────────
+        self.icon_idle = QIcon(str(ASSETS_DIR / _IDLE_NAME))
+        self.icons_recording = [QIcon(str(ASSETS_DIR / n)) for n in _REC_NAMES]
+        self.icons_transcribing = [QIcon(str(ASSETS_DIR / n)) for n in _TRANS_ORDER]
+
+        # ── Tray icon & animation timer ────────────────────────────────────
+        self.tray = QSystemTrayIcon(self.icon_idle)
+
+        self._anim_timer = QTimer(self)
+        self._anim_timer.timeout.connect(self._advance_frame)
+        self._anim_frames: list[QIcon] = []
+        self._anim_index: int = 0
 
         self.menu = QMenu()
 
@@ -88,11 +105,13 @@ class WhispTrayApp(QObject):
             return
         self.status = text
         self.tray.setToolTip(f"Whisp - {text}")
-        # Change icon based on status
+        # ── Animation handling based on status ─────────────────────────────
         if text == "Recording":
-            self.tray.setIcon(QIcon(ICON_RECORDING_PATH))
-        else:
-            self.tray.setIcon(QIcon(ICON_PATH))
+            self._start_animation(self.icons_recording, total_period_ms=500)
+        elif text in ("Transcribing", "Typing"):
+            self._start_animation(self.icons_transcribing, total_period_ms=1000)
+        else:  # idle or unknown → stop anim
+            self._stop_animation()
         self.record_action.setText(
             "Start Recording" if text == "Whisp" else ("Stop Recording" if text == "Recording" else f"{text}...")
         )
@@ -202,6 +221,33 @@ class WhispTrayApp(QObject):
         self.menu.addAction(self.test_action)
         self.menu.addAction(self.quit_action)
         self.tray.setContextMenu(self.menu)
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  Animation helpers
+    # ----------------------------------------------------------------------
+    def _start_animation(self, frames: list[QIcon], total_period_ms: int) -> None:
+        """Start looping animation with *frames* covering *total_period_ms*."""
+        if not frames:
+            return
+        interval = max(1, total_period_ms // len(frames))
+        self._anim_frames = frames
+        self._anim_index = 0
+        self.tray.setIcon(frames[0])
+        self._anim_timer.stop()
+        self._anim_timer.start(interval)
+
+    def _stop_animation(self) -> None:
+        """Stop any running animation and restore idle icon."""
+        if self._anim_timer.isActive():
+            self._anim_timer.stop()
+        self.tray.setIcon(self.icon_idle)
+
+    def _advance_frame(self) -> None:
+        """Slot: advance to next frame in the running animation."""
+        if not self._anim_frames:
+            return
+        self._anim_index = (self._anim_index + 1) % len(self._anim_frames)
+        self.tray.setIcon(self._anim_frames[self._anim_index])
 
 def main():
     app = QApplication(sys.argv)
