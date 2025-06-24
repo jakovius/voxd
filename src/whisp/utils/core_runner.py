@@ -24,7 +24,7 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=Fa
     recorder = AudioRecorder()
     transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not preserve_audio)
     clipboard = ClipboardManager(backend=cfg.clipboard_backend)
-    typer = SimulatedTyper(delay=cfg.typing_delay)
+    typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
     if logger is None:
         logger = SessionLogger(cfg.log_enabled, cfg.log_location)
 

@@ -45,7 +45,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
             recorder = AudioRecorder()
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
             clipboard = ClipboardManager(backend=cfg.clipboard_backend)
-            typer = SimulatedTyper(delay=cfg.typing_delay)
+            typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
 
             recorder.start_recording()
             input()
@@ -73,7 +73,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
             recorder = AudioRecorder()
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
             clipboard = ClipboardManager(backend=cfg.clipboard_backend)
-            typer = SimulatedTyper(delay=cfg.typing_delay)
+            typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
 
             try:
                 while True:

@@ -16,6 +16,7 @@ DEFAULT_CONFIG = {
     "performance_log_file": "performance_data.csv",
     "simulate_typing": True,
     "typing_delay": 10,
+    "typing_start_delay": 0.15,
     "verbosity": True,
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
     "model_path": "whisper.cpp/models/ggml-base.en.bin",
@@ -121,6 +122,12 @@ class AppConfig:
 
         if not isinstance(self.typing_delay, (int, float)) or not (0.001 <= self.typing_delay <= 1):
             print(f"  ⚠️ Typing delay out of range: {self.typing_delay}")
+
+        if not isinstance(self.typing_start_delay, (int, float)) or not (0.0 <= self.typing_start_delay <= 5):
+            # Using .data avoids mypy complaints about dynamic attrs
+            val = self.data.get("typing_start_delay", 0.15)
+            if not isinstance(val, (int, float)) or not (0.0 <= val <= 5):
+                print(f"  ⚠️ typing_start_delay out of range: {val}")
 
         if self.aipp_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
             print("  ⚠️ OPENAI_API_KEY not set in environment.")

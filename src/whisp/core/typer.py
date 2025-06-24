@@ -24,8 +24,13 @@ def detect_backend():
     return "unknown"
 
 class SimulatedTyper:
-    def __init__(self, delay=None):
+    def __init__(self, delay=None, start_delay=None):
         self.delay = str(delay or 10)
+        # Extra delay (in seconds) inserted before the first keystroke so
+        # that the key-release events from the hot-key that stopped the
+        # recording have time to reach the focused window. Prevents the
+        # first character from being interpreted as Ctrl/Alt+<char>.
+        self.start_delay = float(start_delay) if start_delay is not None else 0.15
         self.backend = detect_backend()
         self.tool = None
         self.enabled = self._detect_typing_tool()
@@ -60,6 +65,15 @@ class SimulatedTyper:
         if not self.enabled:
             print("[typer] ⚠️ Typing disabled - required tool not available.")
             return
+
+        # Give the window manager a moment to process key-release events
+        if self.start_delay > 0:
+            time.sleep(self.start_delay)
+
+        # Ensure lingering modifiers are up (mostly relevant for xdotool/X11)
+        if self.tool == "xdotool":
+            # Release common modifiers; ignore errors if any key is already up
+            subprocess.run(["xdotool", "keyup", "ctrl", "alt", "shift", "super"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         text = text.rstrip() # to eliminate any unwanted trailing characters added by the typer
 
