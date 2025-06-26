@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from whisp.paths import DATA_DIR
 import yaml
 from whisp.core.config import AppConfig
 import tempfile
@@ -20,7 +21,7 @@ TOOL_PACKAGE_MAP = {
 }
 
 CONFIG_PATH = Path("config.yaml")
-MODELS_DIR = Path("whisper.cpp/models")
+MODELS_DIR = DATA_DIR / "models"
 DEFAULT_MODEL = "ggml-base.en.bin"
 
 # ---------------------------------------------------------------------------

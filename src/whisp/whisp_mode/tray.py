@@ -16,6 +16,7 @@ from whisp.core.whisp_core import (
     show_config_editor,
     show_manage_prompts,
     show_log_dialog,
+    show_performance_dialog,
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -74,14 +75,10 @@ class WhispTrayApp(QObject):
             )
         )
 
-        # Test stub
-        self.test_action = QAction("Test")
-        self.test_action.triggered.connect(
-            lambda _=False: QMessageBox.information(
-                None,
-                "Testing",
-                "Test utility not implemented yet.",
-            )
+        # Performance window
+        self.performance_action = QAction("Performance")
+        self.performance_action.triggered.connect(
+            lambda _=False: show_performance_dialog(None, self.cfg)
         )
 
         # Quit action (kept as before)
@@ -90,10 +87,13 @@ class WhispTrayApp(QObject):
 
         self.menu.addMenu(self.build_aipp_menu())
 
+        # Model management submenu
+        self.menu.addMenu(self.build_model_menu())
+
         # Add the new flat actions right away
         self.menu.addAction(self.show_log_action)
         self.menu.addAction(self.settings_action)
-        self.menu.addAction(self.test_action)
+        self.menu.addAction(self.performance_action)
         self.menu.addAction(self.quit_action)
 
         self.tray.setContextMenu(self.menu)
@@ -135,6 +135,21 @@ class WhispTrayApp(QObject):
         if tscript:
             self.last_transcript = tscript
             # Optionally, show a notification here
+            # ── Prompt for accuracy rating (GUI thread safe) -------------
+            if self.cfg.collect_metrics and self.cfg.collect_accuracy_rating:
+                from PyQt6.QtWidgets import QInputDialog
+                s, ok = QInputDialog.getText(
+                    None,
+                    "Accuracy Rating",
+                    "Rate transcription accuracy (0-100 %):",
+                )
+                if ok and s.strip():
+                    try:
+                        val = float(s.strip())
+                        from whisp.utils.benchmark_utils import update_last_perf_entry
+                        update_last_perf_entry(val)
+                    except ValueError:
+                        pass  # ignore invalid input
         self.set_status("Whisp")
 
     def show_options(self):
@@ -213,12 +228,14 @@ class WhispTrayApp(QObject):
         self.menu.clear()
         # Recording
         self.menu.addAction(self.record_action)
+        # Model management
+        self.menu.addMenu(self.build_model_menu())
         # AIPP
         self.menu.addMenu(self.build_aipp_menu())
         # Top-level helpers (already created in __init__)
         self.menu.addAction(self.show_log_action)
         self.menu.addAction(self.settings_action)
-        self.menu.addAction(self.test_action)
+        self.menu.addAction(self.performance_action)
         self.menu.addAction(self.quit_action)
         self.tray.setContextMenu(self.menu)
 
@@ -248,6 +265,80 @@ class WhispTrayApp(QObject):
             return
         self._anim_index = (self._anim_index + 1) % len(self._anim_frames)
         self.tray.setIcon(self._anim_frames[self._anim_index])
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  Model Management helpers (NEW)
+    # ----------------------------------------------------------------------
+    def build_model_menu(self):
+        """Return a QMenu that lets the user switch / download models."""
+        from whisp.models import list_local, ensure, set_active, remove  # local import
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+
+        model_menu = QMenu("Whisper Models", self.menu)
+
+        # Current model (label)
+        cur_path = Path(self.cfg.data.get("model_path", ""))
+        cur_name = cur_path.name if cur_path else "(none)"
+        cur_act = QAction(f"Current: {cur_name}", model_menu)
+        cur_act.setEnabled(False)
+        model_menu.addAction(cur_act)
+        model_menu.addSeparator()
+
+        # Installed models
+        local = list_local()
+        for fn in local:
+            act = QAction(fn, model_menu, checkable=True)
+            act.setChecked(fn == cur_name)
+
+            def _switch(checked, name=fn):
+                if not checked:
+                    return
+                set_active(name)
+                # reload cfg so all components see the new value
+                self.cfg.load()
+                self.refresh_tray_menu()
+
+            act.triggered.connect(_switch)
+            model_menu.addAction(act)
+
+        if local:
+            model_menu.addSeparator()
+
+        # Download new…
+        dl_act = QAction("Download…", model_menu)
+
+        def _do_download():
+            key, ok = QInputDialog.getText(None, "Download model", "Enter model key (e.g. tiny.en):")
+            if not ok or not key:
+                return
+            try:
+                ensure(key.strip())
+                set_active(key.strip())
+                self.cfg.load()
+                QMessageBox.information(None, "Download complete", f"Model '{key}' installed and activated.")
+            except Exception as e:
+                QMessageBox.warning(None, "Error", str(e))
+            finally:
+                self.refresh_tray_menu()
+
+        dl_act.triggered.connect(_do_download)
+        model_menu.addAction(dl_act)
+
+        # Remove current model
+        if cur_name:
+            rm_act = QAction("Remove current", model_menu)
+
+            def _rm():
+                remove(cur_name.replace("ggml-", "").replace(".bin", ""))
+                # If we deleted the active model we need to clear config
+                self.cfg.set("model_path", "")
+                self.cfg.save()
+                self.refresh_tray_menu()
+
+            rm_act.triggered.connect(_rm)
+            model_menu.addAction(rm_act)
+
+        return model_menu
 
 def main():
     app = QApplication(sys.argv)

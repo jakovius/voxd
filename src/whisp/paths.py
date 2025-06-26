@@ -75,8 +75,9 @@ def _locate_base_model() -> Path:
 
     Search order:
       1. $WHISP_MODEL_PATH env-var
-      2. <repo root>/whisper.cpp/models/…
-      3. XDG data dir  ~/.local/share/whisp/models/…
+      2. XDG data dir  ~/.local/share/whisp/models/…
+      3. Legacy cache dir (pre-0.6)
+      4. Repo-local (editable/dev install)
     """
     # 1. Environment override -----------------------------------------------
     env = os.getenv("WHISP_MODEL_PATH")
@@ -85,24 +86,30 @@ def _locate_base_model() -> Path:
         if env_path.is_file():
             return env_path
 
-    # 2. Repo-local (editable/dev install) -----------------------------------
-    repo_candidate = (Path(__file__).parents[2] /       # <-- one level higher
-                      "whisper.cpp" / "models" / "ggml-base.en.bin")
-    if repo_candidate.exists():
-        return repo_candidate.resolve()
-
-    # 3. XDG data dir --------------------------------------------------------
+    # 2. XDG data dir – new canonical location --------------------------------
     data_candidate = DATA_DIR / "models" / "ggml-base.en.bin"
     if data_candidate.exists():
         return data_candidate.resolve()
+
+    # 3. Legacy cache dir (pre-0.6) -----------------------------------------
+    cache_candidate = CACHE_DIR / "models" / "ggml-base.en.bin"
+    if cache_candidate.exists():
+        return cache_candidate.resolve()
+
+    # 4. Repo-local (editable/dev install) -----------------------------------
+    repo_candidate = (Path(__file__).parents[2] /
+                      "whisper.cpp" / "models" / "ggml-base.en.bin")
+    if repo_candidate.exists():
+        return repo_candidate.resolve()
 
     # Nothing worked ---------------------------------------------------------
     raise FileNotFoundError(
         "Could not locate the default Whisper model (ggml-base.en.bin).\n"
         "Checked:\n"
         "  • $WHISP_MODEL_PATH\n"
-        f"  • {repo_candidate}\n"
         f"  • {data_candidate}\n"
+        f"  • {cache_candidate}\n"
+        f"  • {repo_candidate}\n"
         "Run setup.sh or download the model manually."
     )
 

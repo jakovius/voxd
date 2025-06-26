@@ -1,6 +1,6 @@
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QSizePolicy
+    QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QSizePolicy, QInputDialog
 )
 from PyQt6.QtCore import Qt
 
@@ -8,6 +8,7 @@ from whisp.core.config import get_config
 from whisp.core.logger import SessionLogger
 from whisp.utils.ipc_server import start_ipc_server  # <-- Add this import
 from whisp.core.whisp_core import CoreProcessThread, show_options_dialog
+from whisp.utils.benchmark_utils import update_last_perf_entry
 
 
 class WhispApp(QWidget):
@@ -113,6 +114,19 @@ class WhispApp(QWidget):
             short = tscript[:420] + "..." if len(tscript) > 420 else tscript
             self.transcript_label.setText(short)
             self.clipboard_notice.setText("Copied to clipboard")
+            # Prompt user for accuracy rating (optional)
+            if self.cfg.collect_metrics and self.cfg.collect_accuracy_rating:
+                s, ok = QInputDialog.getText(
+                    self,
+                    "Accuracy Rating",
+                    "Rate transcription accuracy (0-100 %):",
+                )
+                if ok and s.strip():
+                    try:
+                        val = float(s.strip())
+                        update_last_perf_entry(val)
+                    except ValueError:
+                        pass
         self.set_status("Whisp")
         # Restore window after typing (optional; comment out if you prefer it
         # to stay minimised)

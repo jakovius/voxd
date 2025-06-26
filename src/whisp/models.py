@@ -12,7 +12,7 @@ CLI usage:
 from __future__ import annotations
 import argparse, sys, shutil, hashlib
 from pathlib import Path
-from platformdirs import user_cache_dir
+from whisp.paths import DATA_DIR
 from whisp.core.config import AppConfig
 from whisp.utils.setup_utils import print_section
 
@@ -67,7 +67,9 @@ CATALOGUE = {
     "large-v3-turbo-q8_0":( 834,"01bf15bedffe9f39d65c1b6ff9b687ea91f59e0e",HF+"ggml-large-v3-turbo-q8_0.bin"),
 }
 
-CACHE_DIR   = Path(user_cache_dir("whisp")) / "models"
+# Models now live in the XDG *data* dir so they survive cache clean-ups
+# ~/.local/share/whisp/models (or $XDG_DATA_HOME/whisp/models)
+CACHE_DIR   = DATA_DIR / "models"  # renamed variable kept for minimal diff
 REPO_MODELS = Path(__file__).resolve().parents[2] / "whisper.cpp" / "models"   # keeps legacy path working
 
 
@@ -92,7 +94,7 @@ def _download(url: str, dest: Path):
                 bar.update(len(chunk))
 
 def _verify_sha1(path: Path, sha_ref: str) -> bool:
-    """Return True if file’s SHA-1 matches the reference digest (full length)."""
+    """Return True if file's SHA-1 matches the reference digest (full length)."""
     h = hashlib.sha1()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -145,7 +147,8 @@ def remove(key: str):
 def set_active(key: str | None):
     cfg = AppConfig()
     if key is None:
-        print(f"Current model: {cfg.model_path}")
+        # Using cfg.data avoids static analysis complaining about dynamic attrs
+        print(f"Current model: {cfg.data.get('model_path')}")
         return
     path = ensure(key, quiet=True)
     cfg.set("model_path", str(path))

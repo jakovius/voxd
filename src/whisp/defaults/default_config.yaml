@@ -1,12 +1,13 @@
 app_mode: whisp
 clipboard_backend: auto
-collect_metrics: false
 hotkey_record: ctrl+alt+r
 log_enabled: true
 log_location: ''
+collect_metrics: false
+collect_accuracy_rating: true
 performance_log_file: performance_data.csv
 simulate_typing: true
-typing_delay: 10
+typing_delay: 1
 typing_start_delay: 0.15
 verbosity: true
 whisper_binary: whisper.cpp/build/bin/whisper-cli
@@ -32,7 +33,7 @@ aipp_selected_models:
   xai: "grok-3-latest"
 
 aipp_prompts:
-  default: Rewrite the following text to appear as if Yoda from Star Wars is saying it
+  default: "Rewrite the following input so that it is clean and concise. Do not add any additional text or commentary. Just the rewritten text."
   prompt1: ""
   prompt2: ""
   prompt3: ""

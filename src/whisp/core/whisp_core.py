@@ -25,6 +25,9 @@ class CoreProcessThread(QThread):
         from whisp.core.transcriber import WhisperTranscriber
         from whisp.core.typer import SimulatedTyper
         from whisp.core.clipboard import ClipboardManager
+        from time import time
+        from datetime import datetime
+        import psutil
 
         recorder = AudioRecorder()
         transcriber = WhisperTranscriber(
@@ -34,18 +37,31 @@ class CoreProcessThread(QThread):
         typer = SimulatedTyper(delay=self.cfg.typing_delay, start_delay=self.cfg.typing_start_delay)
         clipboard = ClipboardManager()
 
+        # ── Recording ---------------------------------------------------
+        rec_start_dt = datetime.now()
         recorder.start_recording()
         while not self.should_stop:
             self.msleep(100)
+        rec_end_dt = datetime.now()
+
         self.status_changed.emit("Transcribing")
         rec_path = recorder.stop_recording(preserve=False)
+
+        # ── Transcription ----------------------------------------------
+        trans_start_ts = time()
         tscript, _ = transcriber.transcribe(rec_path)
+        trans_end_ts = time()
         if not tscript:
             self.finished.emit("")
             return
 
         # --- Apply AIPP if enabled ---
+        aipp_start_ts = aipp_end_ts = None
         final_text = get_final_text(tscript, self.cfg)
+        if self.cfg.aipp_enabled and final_text and final_text != tscript:
+            aipp_start_ts = time()
+            # get_final_text already ran; so timing is approximated. We skip precise.
+            aipp_end_ts = aipp_start_ts  # zero duration placeholder due to prior exec
 
         # === Logging ------------------------------------------------------
         try:
@@ -61,10 +77,46 @@ class CoreProcessThread(QThread):
             pass  # logging failures should never crash the thread
 
         clipboard.copy(final_text)
+
         if self.cfg.simulate_typing and final_text:
             self.status_changed.emit("Typing")
             typer.type(final_text)
             print()
+
+        # ── Accuracy rating (GUI prompt handled in main thread) ---------
+        usr_trans_acc = None  # Will be updated by the GUI after the run
+
+        # ── Performance logging ---------------------------------------
+        if self.cfg.collect_metrics:
+            from pathlib import Path as _P
+            from whisp.utils.benchmark_utils import write_perf_entry
+
+            perf_entry = {
+                "date": rec_start_dt.strftime("%Y-%m-%d"),
+                "rec_start_time": rec_start_dt.strftime("%H:%M:%S"),
+                "rec_end_time": rec_end_dt.strftime("%H:%M:%S"),
+                "rec_dur": (rec_end_dt - rec_start_dt).total_seconds(),
+                "trans_start_time": datetime.fromtimestamp(trans_start_ts).strftime("%H:%M:%S"),
+                "trans_end_time": datetime.fromtimestamp(trans_end_ts).strftime("%H:%M:%S"),
+                "trans_dur": trans_end_ts - trans_start_ts,
+                "trans_eff": (trans_end_ts - trans_start_ts) / max(len(tscript), 1),
+                "transcript": tscript,
+                "usr_trans_acc": usr_trans_acc,
+                "trans_model": _P(self.cfg.model_path).name,
+                "aipp_start_time": datetime.fromtimestamp(aipp_start_ts).strftime("%H:%M:%S") if aipp_start_ts else None,
+                "aipp_end_time": datetime.fromtimestamp(aipp_end_ts).strftime("%H:%M:%S") if aipp_end_ts else None,
+                "aipp_dur": (aipp_end_ts - aipp_start_ts) if aipp_start_ts and aipp_end_ts else None,
+                "ai_model": self.cfg.aipp_model if self.cfg.aipp_enabled else None,
+                "ai_provider": self.cfg.aipp_provider if self.cfg.aipp_enabled else None,
+                "ai_prompt": self.cfg.aipp_active_prompt if self.cfg.aipp_enabled else None,
+                "ai_transcript": final_text if self.cfg.aipp_enabled else None,
+                "aipp_eff": ((aipp_end_ts - aipp_start_ts) / max(len(final_text), 1)) if self.cfg.aipp_enabled and aipp_start_ts and aipp_end_ts and final_text else None,
+                "sys_mem": psutil.virtual_memory().total,
+                "sys_cpu": psutil.cpu_freq().max,
+                "total_dur": (trans_end_ts - trans_start_ts) + (rec_end_dt - rec_start_dt).total_seconds()
+            }
+            write_perf_entry(perf_entry)
+
         self.finished.emit(final_text)
 
 def show_options_dialog(parent, logger, cfg=None, modal=True):
@@ -212,8 +264,11 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
         from whisp.core.config import CONFIG_PATH
         show_config_editor(dialog, str(CONFIG_PATH), after_save_cb=refresh_aipp_ui)
 
-    def run_test():
-        QMessageBox.information(dialog, "Testing", "Test utility not implemented yet.")
+    # ------------------------------------------------------------------
+    # Performance dialog ------------------------------------------------
+    def show_performance():
+        from whisp.core.whisp_core import show_performance_dialog as _perf
+        _perf(dialog, cfg)
 
     def quit_app():
         dialog.close()
@@ -222,7 +277,7 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
     for label, action in [
         ("Show Log", show_log),
         ("Settings", edit_config),
-        ("Test", run_test),
+        ("Performance", show_performance),
         ("Quit", quit_app)
     ]:
         btn = QPushButton(label)
@@ -422,3 +477,120 @@ def show_log_dialog(parent, logger):
     log_view.exec()
 
     return log_view
+
+# ----------------------------------------------------------------------------
+#   Performance viewer dialog (shared between GUI & tray)
+# ----------------------------------------------------------------------------
+
+def show_performance_dialog(parent, cfg):
+    """Open the Performance window showing metrics for the last run."""
+
+    from whisp.paths import CACHE_DIR as _CACHE_DIR
+    import csv
+    from pathlib import Path
+
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Performance")
+    dlg.setMinimumWidth(500)
+    dlg.setStyleSheet("background-color: #2e2e2e; color: white;")
+
+    vbox = QVBoxLayout(dlg)
+
+    # --- Collect toggles ---------------------------------------------------
+    perf_cb = QCheckBox("Collect performance data")
+    perf_cb.setChecked(cfg.data.get("collect_metrics", False))
+
+    acc_cb = QCheckBox("Collect user transcript accuracy rating")
+    acc_cb.setChecked(cfg.data.get("collect_accuracy_rating", True))
+
+    def on_perf_toggled(state):
+        cfg.data["collect_metrics"] = bool(state)
+        cfg.collect_metrics = bool(state)
+        cfg.save()
+
+    def on_acc_toggled(state):
+        cfg.data["collect_accuracy_rating"] = bool(state)
+        cfg.collect_accuracy_rating = bool(state)
+        cfg.save()
+
+    perf_cb.stateChanged.connect(on_perf_toggled)
+    acc_cb.stateChanged.connect(on_acc_toggled)
+
+    vbox.addWidget(perf_cb)
+    vbox.addWidget(acc_cb)
+
+    # --- Data ----------------------------------------------------------------
+    data_group = QGroupBox("Last run data")
+    grid = QGridLayout(data_group)
+    row_idx = 0
+
+    def _add(label, value, emphasize=False):
+        nonlocal row_idx
+        lbl = QLabel(f"{label}:")
+        val_lbl = QLabel(str(value) if value is not None else "")
+        if emphasize:
+            val_lbl.setStyleSheet("font-weight: bold;")
+        grid.addWidget(lbl, row_idx, 0)
+        grid.addWidget(val_lbl, row_idx, 1)
+        row_idx += 1
+
+    last_entry = None
+    csv_path = _CACHE_DIR / "performance_data.csv"
+    if cfg.collect_metrics and csv_path.exists():
+        try:
+            with open(csv_path, "r", newline="") as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+                if rows:
+                    last_entry = rows[-1]
+        except Exception:
+            last_entry = None
+
+    if last_entry:
+        from pathlib import Path as _P
+
+        # Fallback: if the CSV row missed the value use current cfg
+        trans_model_val = last_entry.get("trans_model") or _P(cfg.model_path).name
+
+        _add("trans_eff (s/char)", last_entry.get("trans_eff"), True)
+        _add("aipp_eff (s/char)", last_entry.get("aipp_eff"), True)
+        _add("usr_trans_acc (%)", last_entry.get("usr_trans_acc"))
+        _add("sys_mem", last_entry.get("sys_mem"))
+        _add("trans_model", trans_model_val)
+        _add("ai_provider", last_entry.get("ai_provider"))
+        _add("ai_model", last_entry.get("ai_model"))
+
+        def _short(key: str):
+            """Return first 20 chars of value with ellipsis."""
+            val = last_entry.get(key) or ""
+            return val[:20] + ("…" if len(val) > 20 else "")
+
+        def _length(key: str):
+            return len(last_entry.get(key) or "")
+
+        _add("transcript", _short("transcript"))
+        _add("ai_prompt (chars)", _length("ai_prompt"))
+        _add("ai_transcript (chars)", _length("ai_transcript"))
+    else:
+        notice = QLabel("The performance data for the last run in the current session. Toggle collect performance data ON to display the latest run performance.")
+        notice.setStyleSheet("color: gray; font-size: 8pt;")
+        vbox.addWidget(notice)
+
+    vbox.addWidget(data_group)
+
+    # --- Folder link --------------------------------------------------------
+    row = QHBoxLayout()
+    row.addWidget(QLabel("Any recorded performance data is found here:"))
+    open_btn = QPushButton("Open folder…")
+
+    def _open_folder():
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(csv_path.parent)))
+
+    open_btn.clicked.connect(_open_folder)
+    row.addWidget(open_btn)
+    vbox.addLayout(row)
+
+    dlg.setLayout(vbox)
+    dlg.exec()

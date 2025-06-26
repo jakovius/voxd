@@ -50,3 +50,35 @@ def summarize_perf_data():
         count = len(group)
         avg_dur = sum(float(r.get("aipp_dur", 0)) for r in group) / count
         print(f"  {model:<15} → {count} AIPP runs, avg AIPP duration: {avg_dur:.2f}s")
+
+# ─────────────────────────────────────────────────────────────────-----------
+#   Convenience: update the last perf entry with user accuracy rating
+# ---------------------------------------------------------------------------
+
+def update_last_perf_entry(acc_value: float | None) -> None:
+    """Patch the *usr_trans_acc* field of the most recent row in the CSV.
+
+    Silently returns if the file does not exist or is empty.
+    """
+    if acc_value is None:
+        return
+
+    if not PERF_CSV.exists():
+        return
+
+    rows: list[dict[str, str]]
+    with PERF_CSV.open("r", newline="") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    if not rows:
+        return
+
+    # Update the last row only
+    rows[-1]["usr_trans_acc"] = f"{acc_value:.2f}"
+
+    # Rewrite file in place preserving column order
+    with PERF_CSV.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)

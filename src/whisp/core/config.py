@@ -4,18 +4,19 @@ import os
 from pathlib import Path
 from platformdirs import user_config_dir
 from importlib.resources import files
-from whisp.paths import resolve_whisper_binary, resolve_model_path  # <-- add this import
+from whisp.paths import resolve_whisper_binary, resolve_model_path, DATA_DIR  # <-- add this import
 
 DEFAULT_CONFIG = {
     "app_mode": "whisp",
     "clipboard_backend": "auto",
     "collect_metrics": False,
+    "collect_accuracy_rating": True,
     "hotkey_record": "ctrl+alt+r",
     "log_enabled": True,
     "log_location": "",
     "performance_log_file": "performance_data.csv",
     "simulate_typing": True,
-    "typing_delay": 10,
+    "typing_delay": 1,
     "typing_start_delay": 0.15,
     "verbosity": True,
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
@@ -144,7 +145,8 @@ class AppConfig:
             print(f"  {k}: {v}")
 
     def list_models(self):
-        model_dir = Path("whisper.cpp/models")
+        """Return all model files in the canonical data dir."""
+        model_dir = DATA_DIR / "models"
         print("\nAvailable models:")
         if not model_dir.exists():
             print("  No model directory found.")
@@ -156,7 +158,8 @@ class AppConfig:
         return models
 
     def select_model(self, model_name):
-        model_path = Path("whisper.cpp/models") / model_name
+        """Set the active model to *model_name* found in DATA_DIR/models."""
+        model_path = DATA_DIR / "models" / model_name
         if not model_path.exists():
             print(f"\n[config] Model not found: {model_path}")
             return
