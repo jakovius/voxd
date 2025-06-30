@@ -77,8 +77,23 @@ def update_last_perf_entry(acc_value: float | None) -> None:
     # Update the last row only
     rows[-1]["usr_trans_acc"] = f"{acc_value:.2f}"
 
-    # Rewrite file in place preserving column order
+    # Ensure header includes *all* keys across rows
+    all_fields: set[str] = set()
+    for r in rows:
+        # Remove None key which DictReader inserts for extra columns
+        if None in r:
+            r.pop(None, None)  # type: ignore[arg-type]
+        all_fields.update(k for k in r.keys() if k is not None)
+
+    # Stable ordering: existing header first, then new fields alphabetically
+    header: list[str] = list(rows[0].keys())
+    for k in sorted(all_fields):
+        if k not in header:
+            header.append(k)
+
+    # Rewrite file in place with consolidated header
     with PERF_CSV.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+        writer = csv.DictWriter(f, fieldnames=header)
         writer.writeheader()
-        writer.writerows(rows)
+        for r in rows:
+            writer.writerow(r)

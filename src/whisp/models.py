@@ -82,16 +82,39 @@ def _human(n_mb: int) -> str:      # 142 → '142 MB'
 def _pretty_name(key: str) -> str:
     return f"ggml-{key}.bin"
 
-def _download(url: str, dest: Path):
+def _download(url: str, dest: Path, *, progress_cb=None):
+    """Download *url* to *dest*.
+
+    Parameters
+    ----------
+    url : str
+        File URL.
+    dest : pathlib.Path
+        Destination path (will be overwritten).
+    progress_cb : callable | None, optional
+        If given, it will be called as ``progress_cb(downloaded_bytes, total_bytes)``
+        after every chunk.  When *None* (default) a tqdm progress-bar is shown.
+    """
     import urllib.request, tqdm, os, ssl
     ssl._create_default_https_context = ssl._create_unverified_context  # avoids local cert issues
 
     with urllib.request.urlopen(url) as resp, open(dest, "wb") as out:
         total = int(resp.info()["Content-Length"])
-        with tqdm.tqdm(total=total, unit="B", unit_scale=True, unit_divisor=1024) as bar:
-            while chunk := resp.read(8192):
-                out.write(chunk)
+        downloaded = 0
+
+        if progress_cb is None:
+            bar = tqdm.tqdm(total=total, unit="B", unit_scale=True, unit_divisor=1024)
+
+        while chunk := resp.read(8192):
+            out.write(chunk)
+            downloaded += len(chunk)
+            if progress_cb is not None:
+                progress_cb(downloaded, total)
+            else:
                 bar.update(len(chunk))
+
+        if progress_cb is None:
+            bar.close()
 
 def _verify_sha1(path: Path, sha_ref: str) -> bool:
     """Return True if file's SHA-1 matches the reference digest (full length)."""
@@ -105,8 +128,13 @@ def _verify_sha1(path: Path, sha_ref: str) -> bool:
 # --------------------------------------------------------------------------- #
 # 2.  Public API
 # --------------------------------------------------------------------------- #
-def ensure(key: str, quiet=False, *, no_check=False) -> Path:
-    """Return local Path to the requested model, downloading if necessary."""
+def ensure(key: str, quiet=False, *, no_check=False, progress_cb=None) -> Path:
+    """Return local Path to the requested model, downloading if necessary.
+
+    The optional *progress_cb* is forwarded to the internal downloader and
+    therefore allows GUI callers to receive live byte counts while keeping
+    the original tqdm behaviour for CLI usage (when *progress_cb* is None).
+    """
     if key not in CATALOGUE:
         raise ValueError(f"Unknown model '{key}'. See `whisp models list`")
 
@@ -118,7 +146,7 @@ def ensure(key: str, quiet=False, *, no_check=False) -> Path:
     size_mb, sha1, url = CATALOGUE[key]
     if not quiet:
         print(f"Downloading {key} ({_human(size_mb)}) …")
-    _download(url, dest)
+    _download(url, dest, progress_cb=progress_cb)
     if not no_check and not _verify_sha1(dest, sha1):
         dest.unlink(missing_ok=True)
         raise RuntimeError("Checksum mismatch – download corrupted, retried later.")

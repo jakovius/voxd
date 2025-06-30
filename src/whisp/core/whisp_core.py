@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 )
 import yaml
 from whisp.core.aipp import get_final_text
+from whisp.core.model_manager import show_model_manager
 
 class CoreProcessThread(QThread):
     finished = pyqtSignal(str)
@@ -127,6 +128,15 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
     dialog.setWindowTitle("Options")
     dialog.setStyleSheet("background-color: #2e2e2e; color: white;")
     layout = QVBoxLayout()
+
+    # ── Whisper model management (moved to top‐level) ────────────────
+    models_group = QGroupBox("Whisper Models")
+    models_layout = QVBoxLayout()
+    manage_models_btn = QPushButton("Manage Models")
+    manage_models_btn.clicked.connect(lambda _=False: show_model_manager(dialog))
+    models_layout.addWidget(manage_models_btn)
+    models_group.setLayout(models_layout)
+    layout.addWidget(models_group)
 
     # --- AIPP Settings Group ---
     aipp_group = QGroupBox("AI Post-Processing")
@@ -552,6 +562,8 @@ def show_performance_dialog(parent, cfg):
         # Fallback: if the CSV row missed the value use current cfg
         trans_model_val = last_entry.get("trans_model") or _P(cfg.model_path).name
 
+        _add("date", last_entry.get("date"))
+        _add("rec_start_time", last_entry.get("rec_start_time"))
         _add("trans_eff (s/char)", last_entry.get("trans_eff"), True)
         _add("aipp_eff (s/char)", last_entry.get("aipp_eff"), True)
         _add("usr_trans_acc (%)", last_entry.get("usr_trans_acc"))

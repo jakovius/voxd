@@ -18,6 +18,7 @@ from whisp.core.whisp_core import (
     show_log_dialog,
     show_performance_dialog,
 )
+from whisp.core.model_manager import show_model_manager  # NEW
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Icon resources & animation frames
@@ -85,10 +86,13 @@ class WhispTrayApp(QObject):
         self.quit_action = QAction("Quit")
         self.quit_action.triggered.connect(self.quit_app)
 
-        self.menu.addMenu(self.build_aipp_menu())
-
-        # Model management submenu
+        # Voice model management submenu (lightweight label + dialog launcher)
         self.menu.addMenu(self.build_model_menu())
+        # ── Visual separation
+        self.menu.addSeparator()
+        # AIPP
+        self.menu.addMenu(self.build_aipp_menu())
+        self.menu.addSeparator()
 
         # Add the new flat actions right away
         self.menu.addAction(self.show_log_action)
@@ -202,6 +206,7 @@ class WhispTrayApp(QObject):
             act.triggered.connect(lambda checked, m=model: self.set_aipp_model(current_provider, m))
             models_menu.addAction(act)
         aipp_menu.addMenu(models_menu)
+        aipp_menu.addSeparator()
 
         return aipp_menu
 
@@ -228,10 +233,13 @@ class WhispTrayApp(QObject):
         self.menu.clear()
         # Recording
         self.menu.addAction(self.record_action)
-        # Model management
+        # Voice model management
         self.menu.addMenu(self.build_model_menu())
+        self.menu.addSeparator()
         # AIPP
         self.menu.addMenu(self.build_aipp_menu())
+        self.menu.addSeparator()
+
         # Top-level helpers (already created in __init__)
         self.menu.addAction(self.show_log_action)
         self.menu.addAction(self.settings_action)
@@ -270,75 +278,25 @@ class WhispTrayApp(QObject):
     #  Model Management helpers (NEW)
     # ----------------------------------------------------------------------
     def build_model_menu(self):
-        """Return a QMenu that lets the user switch / download models."""
-        from whisp.models import list_local, ensure, set_active, remove  # local import
-        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        """Return a lightweight menu with current model and a Manage… action."""
+        menu = QMenu("Whisper Models", self.menu)
 
-        model_menu = QMenu("Whisper Models", self.menu)
-
-        # Current model (label)
-        cur_path = Path(self.cfg.data.get("model_path", ""))
-        cur_name = cur_path.name if cur_path else "(none)"
-        cur_act = QAction(f"Current: {cur_name}", model_menu)
+        cur_name = Path(self.cfg.data.get("model_path", "")).name or "(none)"
+        cur_act = QAction(f"Current: {cur_name}", menu)
         cur_act.setEnabled(False)
-        model_menu.addAction(cur_act)
-        model_menu.addSeparator()
+        menu.addAction(cur_act)
+        menu.addSeparator()
 
-        # Installed models
-        local = list_local()
-        for fn in local:
-            act = QAction(fn, model_menu, checkable=True)
-            act.setChecked(fn == cur_name)
+        manage_act = QAction("Voice models", menu)
+        manage_act.triggered.connect(lambda _=False: self._open_model_manager())
+        menu.addAction(manage_act)
+        return menu
 
-            def _switch(checked, name=fn):
-                if not checked:
-                    return
-                set_active(name)
-                # reload cfg so all components see the new value
-                self.cfg.load()
-                self.refresh_tray_menu()
-
-            act.triggered.connect(_switch)
-            model_menu.addAction(act)
-
-        if local:
-            model_menu.addSeparator()
-
-        # Download new…
-        dl_act = QAction("Download…", model_menu)
-
-        def _do_download():
-            key, ok = QInputDialog.getText(None, "Download model", "Enter model key (e.g. tiny.en):")
-            if not ok or not key:
-                return
-            try:
-                ensure(key.strip())
-                set_active(key.strip())
-                self.cfg.load()
-                QMessageBox.information(None, "Download complete", f"Model '{key}' installed and activated.")
-            except Exception as e:
-                QMessageBox.warning(None, "Error", str(e))
-            finally:
-                self.refresh_tray_menu()
-
-        dl_act.triggered.connect(_do_download)
-        model_menu.addAction(dl_act)
-
-        # Remove current model
-        if cur_name:
-            rm_act = QAction("Remove current", model_menu)
-
-            def _rm():
-                remove(cur_name.replace("ggml-", "").replace(".bin", ""))
-                # If we deleted the active model we need to clear config
-                self.cfg.set("model_path", "")
-                self.cfg.save()
-                self.refresh_tray_menu()
-
-            rm_act.triggered.connect(_rm)
-            model_menu.addAction(rm_act)
-
-        return model_menu
+    def _open_model_manager(self):
+        show_model_manager(None)
+        # reload config in case model changed
+        self.cfg.load()
+        self.refresh_tray_menu()
 
 def main():
     app = QApplication(sys.argv)
