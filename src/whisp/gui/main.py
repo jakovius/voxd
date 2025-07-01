@@ -1,6 +1,6 @@
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QSizePolicy, QInputDialog
+    QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QSizePolicy, QInputDialog, QGroupBox
 )
 from PyQt6.QtCore import Qt
 
@@ -15,7 +15,7 @@ class WhispApp(QWidget):
     def __init__(self):
         super().__init__()
         self.cfg = get_config()
-        self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_location)
+        self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_location)  # type: ignore[attr-defined]
 
         self.setWindowTitle("whisp")
         self.setFixedWidth(300)  # Fix the width
@@ -41,11 +41,19 @@ class WhispApp(QWidget):
         """)
         self.status_button.clicked.connect(self.on_button_clicked)
 
+        # Transcript display wrapped in a group-box for padding & visual separation
         self.transcript_label = QLabel("")
         self.transcript_label.setStyleSheet("color: white; font-size: 10pt;")
         self.transcript_label.setWordWrap(True)
-        self.transcript_label.setFixedWidth(270)  # Set fixed width slightly less than window
-        self.transcript_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+        # Put the label inside a group-box so we get default margins/border
+        self.transcript_group = QGroupBox()
+        self.transcript_group.setStyleSheet("QGroupBox { border: 1px solid #444; border-radius: 6px; margin-top: 4px; }")
+        group_layout = QVBoxLayout()
+        group_layout.addWidget(self.transcript_label)
+        group_layout.setContentsMargins(6, 4, 6, 4)  # extra padding inside box
+        self.transcript_group.setLayout(group_layout)
+        self.transcript_group.setFixedWidth(270)  # align with other widgets
+        self.transcript_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
 
         self.clipboard_notice = QLabel("")
         self.clipboard_notice.setStyleSheet("color: gray; font-size: 8pt;")
@@ -65,22 +73,28 @@ class WhispApp(QWidget):
         self.options_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.options_button.clicked.connect(self.show_options)
 
+        # Placeholder for background processing thread
+        self.runner_thread = None  # type: CoreProcessThread | None
+
         self.build_ui()
 
     def build_ui(self):
-        self.layout = QVBoxLayout()
-        self.layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.main_layout = QVBoxLayout()
+        # Align widgets to top; consistent vertical gaps via spacing
+        self.main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.main_layout.setContentsMargins(0, 12, 0, 12)  # top/bottom padding
+        self.main_layout.setSpacing(12)  # fixed spacing between stacked items
 
         # For each button/widget, wrap it in a container layout
-        for widget in [self.status_button, self.transcript_label, 
+        for widget in [self.status_button, self.transcript_group, 
                       self.clipboard_notice, self.options_button]:
             container = QHBoxLayout()
             container.addStretch()
             container.addWidget(widget)
             container.addStretch()
-            self.layout.addLayout(container)
+            self.main_layout.addLayout(container)
 
-        self.setLayout(self.layout)
+        self.setLayout(self.main_layout)
 
     def set_status(self, text):
         self.status = text
@@ -91,8 +105,8 @@ class WhispApp(QWidget):
     def on_button_clicked(self):
         if self.status == "Recording":
             # Stop recording
-            if hasattr(self, 'thread') and self.thread.isRunning():
-                self.thread.stop_recording()
+            if self.runner_thread and self.runner_thread.isRunning():
+                self.runner_thread.stop_recording()
             return
         # Ensure the Whisp window does **not** receive the keystrokes we
         # are about to send with ydotool/xdotool.
@@ -103,10 +117,10 @@ class WhispApp(QWidget):
         # Start recording
         self.set_status("Recording")
         self.clipboard_notice.setText("")
-        self.thread = CoreProcessThread(self.cfg, self.logger)
-        self.thread.status_changed.connect(self.set_status)
-        self.thread.finished.connect(self.on_transcript_ready)
-        self.thread.start()
+        self.runner_thread = CoreProcessThread(self.cfg, self.logger)
+        self.runner_thread.status_changed.connect(self.set_status)
+        self.runner_thread.finished.connect(self.on_transcript_ready)
+        self.runner_thread.start()
 
     def on_transcript_ready(self, tscript):
         if tscript:
@@ -115,7 +129,7 @@ class WhispApp(QWidget):
             self.transcript_label.setText(short)
             self.clipboard_notice.setText("Copied to clipboard")
             # Prompt user for accuracy rating (optional)
-            if self.cfg.collect_metrics and self.cfg.collect_accuracy_rating:
+            if getattr(self.cfg, "collect_metrics", False) and getattr(self.cfg, "collect_accuracy_rating", False):
                 s, ok = QInputDialog.getText(
                     self,
                     "Accuracy Rating",

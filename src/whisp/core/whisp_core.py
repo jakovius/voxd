@@ -1,8 +1,8 @@
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal, Qt
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QPushButton, QFileDialog, QMessageBox,
     QGroupBox, QHBoxLayout, QCheckBox, QComboBox, QLineEdit, QLabel,
-    QTextEdit, QDialogButtonBox, QRadioButton, QGridLayout
+    QTextEdit, QDialogButtonBox, QRadioButton, QGridLayout, QLayout
 )
 import yaml
 from whisp.core.aipp import get_final_text
@@ -127,113 +127,21 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
     dialog = QDialog(parent)
     dialog.setWindowTitle("Options")
     dialog.setStyleSheet("background-color: #2e2e2e; color: white;")
+    # Let the dialog width adapt automatically to its contents.
+    # We'll rely on the layout's fixed-size constraint after we know
+    # the natural size of the widest button.
     layout = QVBoxLayout()
 
-    # ── Whisper model management (moved to top‐level) ────────────────
-    models_group = QGroupBox("Whisper Models")
-    models_layout = QVBoxLayout()
-    manage_models_btn = QPushButton("Manage Models")
-    manage_models_btn.clicked.connect(lambda _=False: show_model_manager(dialog))
-    models_layout.addWidget(manage_models_btn)
-    models_group.setLayout(models_layout)
-    layout.addWidget(models_group)
+    # ------------------------------------------------------------------
+    # Buttons (keep list order for UI)
+    # ------------------------------------------------------------------
 
-    # --- AIPP Settings Group ---
-    aipp_group = QGroupBox("AI Post-Processing")
-    aipp_layout = QVBoxLayout()
+    def _show_whisper_models():
+        show_model_manager(dialog)
 
-    # Enable AIPP
-    aipp_enable_cb = QCheckBox("Enable AIPP")
-    aipp_enable_cb.setChecked(cfg.data.get("aipp_enabled", False))
-    def on_aipp_enable(state):
-        cfg.data["aipp_enabled"] = bool(state)
-        cfg.aipp_enabled = bool(state)
-    aipp_enable_cb.stateChanged.connect(on_aipp_enable)
-    aipp_layout.addWidget(aipp_enable_cb)
+    def _show_aipp_dialog():
+        show_aipp_dialog(dialog, cfg)
 
-    # Provider dropdown
-    aipp_provider_combo = QComboBox()
-    providers = list(cfg.data.get("aipp_models", {"ollama":[]}).keys())
-    aipp_provider_combo.addItems(providers)
-    current_provider = cfg.data.get("aipp_provider", "ollama")
-    aipp_provider_combo.setCurrentText(current_provider)
-
-    # Model dropdown (NEW)
-    aipp_model_combo = QComboBox()
-
-    # Helper to (re)populate model combo and select current model
-    def update_model_combo(provider):
-        aipp_model_combo.clear()
-        models = cfg.data.get("aipp_models", {}).get(provider, [])
-        aipp_model_combo.addItems(models)
-        selected = cfg.data.get("aipp_selected_models", {}).get(provider, "")
-        if selected in models:
-            aipp_model_combo.setCurrentText(selected)
-        elif models:
-            aipp_model_combo.setCurrentIndex(0)
-
-    # Helper that syncs all AIPP widgets with cfg (called after external edits)
-    def refresh_aipp_ui():
-        """Update all AIPP widgets so they reflect current cfg values."""
-        prov = cfg.data.get("aipp_provider", "ollama")
-        # Provider combo
-        aipp_provider_combo.blockSignals(True)
-        aipp_provider_combo.setCurrentText(prov)
-        aipp_provider_combo.blockSignals(False)
-
-        # Enabled checkbox
-        enabled_state = bool(cfg.data.get("aipp_enabled", False))
-        aipp_enable_cb.blockSignals(True)
-        aipp_enable_cb.setChecked(enabled_state)
-        aipp_enable_cb.blockSignals(False)
-
-        # Model list
-        update_model_combo(prov)
-
-        # Active prompt label
-        aipp_prompt_label.setText(cfg.data.get("aipp_active_prompt", "default"))
-
-    # Populate model combo for initial provider now that helper exists
-    update_model_combo(current_provider)
-
-    def on_aipp_provider(text):
-        cfg.data["aipp_provider"] = text
-        cfg.aipp_provider = text
-        update_model_combo(text)        # refresh model list/selection
-        cfg.save()                      # persist immediately
-    aipp_provider_combo.currentTextChanged.connect(on_aipp_provider)
-    aipp_layout.addWidget(QLabel("Provider:"))
-    aipp_layout.addWidget(aipp_provider_combo)
-
-    def on_aipp_model(text):
-        provider = aipp_provider_combo.currentText()
-        cfg.data["aipp_selected_models"][provider] = text
-        cfg.aipp_model = text
-        cfg.save()
-    aipp_model_combo.currentTextChanged.connect(on_aipp_model)
-    aipp_layout.addWidget(QLabel("Model:"))
-    aipp_layout.addWidget(aipp_model_combo)
-
-    # Active prompt label and manage button
-    aipp_prompt_label = QLabel(cfg.data.get("aipp_active_prompt", "default"))
-    manage_btn = QPushButton("Manage prompts…")
-    manage_btn.clicked.connect(
-        lambda _=False: show_manage_prompts(
-            dialog,
-            cfg,
-            after_save_cb=refresh_aipp_ui,
-        )
-    )
-    row = QHBoxLayout()
-    row.addWidget(QLabel("Active prompt:"))
-    row.addWidget(aipp_prompt_label)
-    row.addWidget(manage_btn)
-    aipp_layout.addLayout(row)
-
-    aipp_group.setLayout(aipp_layout)
-    layout.addWidget(aipp_group)
-
-    # --- Existing options buttons ---
     def show_log():
         """Open a window that shows the current session log with Save/Close."""
 
@@ -272,7 +180,10 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
 
     def edit_config():
         from whisp.core.config import CONFIG_PATH
-        show_config_editor(dialog, str(CONFIG_PATH), after_save_cb=refresh_aipp_ui)
+        # After saving the YAML config we don't need to refresh any inline
+        # widgets because the Options window no longer hosts dynamic AIPP
+        # controls.  Hence we omit an *after_save* callback here.
+        show_config_editor(dialog, str(CONFIG_PATH))
 
     # ------------------------------------------------------------------
     # Performance dialog ------------------------------------------------
@@ -285,18 +196,23 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
         parent.close() if hasattr(parent, "close") else None
 
     for label, action in [
+        ("Whisper Models", _show_whisper_models),
+        ("AI Post-Processing", _show_aipp_dialog),
         ("Show Log", show_log),
         ("Settings", edit_config),
         ("Performance", show_performance),
-        ("Quit", quit_app)
+        ("Quit", quit_app),
     ]:
         btn = QPushButton(label)
-        btn.setFixedSize(100, 20)
+        # Slightly wider buttons so long labels are not truncated
+        btn.setFixedSize(140, 28)
         btn.setStyleSheet("background-color: #444; color: white; border-radius: 5px;")
         btn.clicked.connect(action)
         layout.addWidget(btn)
 
     dialog.setLayout(layout)
+    # Make the dialog adopt the minimum size that fits the layout
+    layout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
     # Persist any changes once when dialog closes/finishes
     dialog.finished.connect(lambda _=None: cfg.save())
 
@@ -372,7 +288,7 @@ def show_manage_prompts(parent, cfg, after_save_cb=None, modal=True):
 
     dlg = QDialog(parent)
     dlg.setWindowTitle("Manage AIPP Prompts")
-    dlg.setMinimumWidth(400)
+    dlg.setMinimumWidth(300)
 
     grid = QGridLayout(dlg)
 
@@ -413,7 +329,7 @@ def show_manage_prompts(parent, cfg, after_save_cb=None, modal=True):
             cfg.data["aipp_prompts"][key] = text_edits[i].toPlainText()
 
         cfg.data["aipp_active_prompt"] = selected_key
-        cfg.aipp_active_prompt = selected_key
+        cfg.aipp_active_prompt = selected_key  # type: ignore[attr-defined]
 
         # Persist changes
         cfg.save()
@@ -606,3 +522,110 @@ def show_performance_dialog(parent, cfg):
 
     dlg.setLayout(vbox)
     dlg.exec()
+
+# ----------------------------------------------------------------------------
+#   AIPP settings dialog (extracted from Options)
+# ----------------------------------------------------------------------------
+
+def show_aipp_dialog(parent, cfg, modal=True):
+    """Open the standalone *AI Post-Processing* settings window.
+
+    This dialog contains exactly the same controls that were previously
+    embedded inside the *Options* window, but is now shown from its own
+    button so the main menu stays compact.
+    """
+
+    if cfg is None:
+        from whisp.core.config import get_config  # lazy import to avoid cycles
+        cfg = get_config()
+
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("AI Post-Processing")
+    dlg.setMinimumWidth(300)
+    dlg.setStyleSheet("background-color: #2e2e2e; color: white;")
+
+    layout = QVBoxLayout(dlg)
+
+    # Enable AIPP -----------------------------------------------------------
+    aipp_enable_cb = QCheckBox("Enable AIPP")
+    aipp_enable_cb.setChecked(cfg.data.get("aipp_enabled", False))
+
+    def on_aipp_enable(state):
+        cfg.data["aipp_enabled"] = bool(state)
+        cfg.aipp_enabled = bool(state)  # type: ignore[attr-defined]
+        cfg.save()
+
+    aipp_enable_cb.stateChanged.connect(on_aipp_enable)
+    layout.addWidget(aipp_enable_cb)
+
+    # Provider --------------------------------------------------------------
+    layout.addWidget(QLabel("Provider:"))
+    provider_combo = QComboBox()
+    providers = list(cfg.data.get("aipp_models", {"ollama": []}).keys())
+    provider_combo.addItems(providers)
+    cur_provider = cfg.data.get("aipp_provider", "ollama")
+    provider_combo.setCurrentText(cur_provider)
+    layout.addWidget(provider_combo)
+
+    # Model list ------------------------------------------------------------
+    layout.addWidget(QLabel("Model:"))
+    model_combo = QComboBox()
+    layout.addWidget(model_combo)
+
+    def _refresh_models(provider: str):
+        model_combo.clear()
+        models = cfg.data.get("aipp_models", {}).get(provider, [])
+        model_combo.addItems(models)
+        selected = cfg.data.get("aipp_selected_models", {}).get(provider, "")
+        if selected in models:
+            model_combo.setCurrentText(selected)
+        elif models:
+            model_combo.setCurrentIndex(0)
+
+    _refresh_models(cur_provider)
+
+    def on_provider_changed(text):
+        cfg.data["aipp_provider"] = text
+        cfg.aipp_provider = text  # type: ignore[attr-defined]
+        _refresh_models(text)
+        cfg.save()
+
+    provider_combo.currentTextChanged.connect(on_provider_changed)
+
+    def on_model_changed(text):
+        prov = provider_combo.currentText()
+        cfg.data["aipp_selected_models"][prov] = text
+        cfg.aipp_model = text  # type: ignore[attr-defined]
+        cfg.save()
+
+    model_combo.currentTextChanged.connect(on_model_changed)
+
+    # Active prompt ---------------------------------------------------------
+    prompt_row = QHBoxLayout()
+    prompt_row.addWidget(QLabel("Active prompt:"))
+    prompt_label = QLabel(cfg.data.get("aipp_active_prompt", "default"))
+    prompt_row.addWidget(prompt_label)
+    layout.addLayout(prompt_row)
+
+    # Manage prompt button --------------------------------------------------
+    manage_btn_row = QHBoxLayout()
+    manage_btn = QPushButton("Manage prompts")
+
+    def _open_manage_prompts():
+        show_manage_prompts(dlg, cfg, after_save_cb=lambda: prompt_label.setText(cfg.data.get("aipp_active_prompt", "default")))
+
+    manage_btn.clicked.connect(_open_manage_prompts)
+    manage_btn_row.addWidget(manage_btn)
+    layout.addLayout(manage_btn_row)
+
+    dlg.setLayout(layout)
+
+    # Persist changes when dialog closes
+    dlg.finished.connect(lambda _=None: cfg.save())
+
+    if modal:
+        dlg.exec()
+    else:
+        dlg.show()
+
+    return dlg
