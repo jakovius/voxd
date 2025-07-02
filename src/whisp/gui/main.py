@@ -19,7 +19,7 @@ class WhispApp(QWidget):
 
         self.setWindowTitle("whisp")
         self.setFixedWidth(300)  # Fix the width
-        self.setMinimumHeight(160)  # Only set minimum height
+        self.setMinimumHeight(200)  # Only set minimum height
         self.setStyleSheet("background-color: #1e1e1e; color: white;")
 
         self.status = "Whisp"
@@ -42,24 +42,27 @@ class WhispApp(QWidget):
         self.status_button.clicked.connect(self.on_button_clicked)
 
         # Transcript display wrapped in a group-box for padding & visual separation
-        self.transcript_label = QLabel("")
-        self.transcript_label.setStyleSheet("color: white; font-size: 10pt;")
+        self.transcript_label = QLabel("The latest transcript will be shown here.")
+        self.transcript_label.setStyleSheet("color: darkgray; font-size: 10pt; font-style: italic;")
         self.transcript_label.setWordWrap(True)
+        from PyQt6.QtCore import Qt as _Qt
+        self.transcript_label.setTextInteractionFlags(_Qt.TextInteractionFlag.TextSelectableByMouse |
+                                                      _Qt.TextInteractionFlag.TextSelectableByKeyboard)
         # Put the label inside a group-box so we get default margins/border
         self.transcript_group = QGroupBox()
-        self.transcript_group.setStyleSheet("QGroupBox { border: 1px solid #444; border-radius: 6px; margin-top: 4px; }")
+        self.transcript_group.setStyleSheet("QGroupBox { border: 1px solid #333; border-radius: 6px; margin-top: 2px; }")
         group_layout = QVBoxLayout()
         group_layout.addWidget(self.transcript_label)
-        group_layout.setContentsMargins(6, 4, 6, 4)  # extra padding inside box
+        
         self.transcript_group.setLayout(group_layout)
-        self.transcript_group.setFixedWidth(270)  # align with other widgets
-        self.transcript_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+        # Set fixed size for the transcript group box
+        self.transcript_group.setFixedSize(280, 60)
+        self.transcript_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         self.clipboard_notice = QLabel("")
         self.clipboard_notice.setStyleSheet("color: gray; font-size: 8pt;")
         self.clipboard_notice.setWordWrap(True)
-        self.clipboard_notice.setFixedWidth(270)  # Set fixed width slightly less than window
-        self.clipboard_notice.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+        self.clipboard_notice.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.options_button = QPushButton("Options")
         self.options_button.setFixedSize(150, 20)
@@ -80,19 +83,14 @@ class WhispApp(QWidget):
 
     def build_ui(self):
         self.main_layout = QVBoxLayout()
-        # Align widgets to top; consistent vertical gaps via spacing
-        self.main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.main_layout.setContentsMargins(0, 12, 0, 12)  # top/bottom padding
-        self.main_layout.setSpacing(12)  # fixed spacing between stacked items
+        # Top alignment, consistent spacing/margins
+        self.main_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        # self.main_layout.setContentsMargins(6, 6, 6, 6)
+        # self.main_layout.setSpacing(12)
 
-        # For each button/widget, wrap it in a container layout
-        for widget in [self.status_button, self.transcript_group, 
-                      self.clipboard_notice, self.options_button]:
-            container = QHBoxLayout()
-            container.addStretch()
-            container.addWidget(widget)
-            container.addStretch()
-            self.main_layout.addLayout(container)
+        for widget in [self.status_button, self.transcript_group,
+                        self.clipboard_notice, self.options_button]:
+            self.main_layout.addWidget(widget, 0, Qt.AlignmentFlag.AlignHCenter)
 
         self.setLayout(self.main_layout)
 
@@ -125,8 +123,11 @@ class WhispApp(QWidget):
     def on_transcript_ready(self, tscript):
         if tscript:
             self.last_transcript = tscript
-            short = tscript[:420] + "..." if len(tscript) > 420 else tscript
+            short = tscript[:80] + (" …" if len(tscript) > 80 else "")
             self.transcript_label.setText(short)
+            # Switch style to brighter color while keeping italics
+            self.transcript_label.setStyleSheet("color: white; font-size: 10pt; font-style: italic;")
+            
             self.clipboard_notice.setText("Copied to clipboard")
             # Prompt user for accuracy rating (optional)
             if getattr(self.cfg, "collect_metrics", False) and getattr(self.cfg, "collect_accuracy_rating", False):
