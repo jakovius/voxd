@@ -19,7 +19,7 @@ class AudioRecorder:
 
     def _timestamped_filename(self):
         dt = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"recording_{dt}.wav"
+        return f"{dt}_recording.wav"
 
     def start_recording(self):
         verbo("[recorder] Recording started...")
@@ -69,7 +69,7 @@ class AudioRecorder:
             wf.setsampwidth(2)
             wf.setframerate(self.fs)
             wf.writeframes((data * 32767).astype(np.int16).tobytes())
-
+            
     def get_last_temp_file(self):
         return self.last_temp_file
 

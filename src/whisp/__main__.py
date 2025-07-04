@@ -26,13 +26,16 @@ def check_hotkey(cfg, mode):
             # sys.exit(1)
 
 def main():
-    parser = argparse.ArgumentParser(description="Whisp App Entry Point")
-    parser.add_argument(
-        "--mode",
-        type=str,
-        choices=["cli", "gui", "whisp", "hear"],
-        help="Override app_mode from config.yaml"
-    )
+    parser = argparse.ArgumentParser(description="Whisp App Entry Point", add_help=False)
+    # NOTE: we intentionally disable the automatic -h/--help so that when the user
+    # runs `whisp --cli -h` the `-h` flag is forwarded to the CLI parser instead
+    # of being swallowed here. We will render top-level help manually when no
+    # sub-mode flag is provided and -h/--help is present.
+    # Mutually-exclusive launch mode flags (simpler UX)
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument("--gui", action="store_true", help="Launch Whisp in GUI mode")
+    mode_group.add_argument("--cli", action="store_true", help="Launch Whisp in CLI mode")
+    mode_group.add_argument("--tray", action="store_true", help="Launch Whisp tray-only mode (background)")
     parser.add_argument(
         "--trigger-record",
         action="store_true",
@@ -45,6 +48,14 @@ def main():
     )
     args, unknown = parser.parse_known_args()
 
+    # ------------------------------------------------------------
+    #         Top-level help handling (only when no sub-mode)
+    # ------------------------------------------------------------
+    if not any([args.cli, args.gui, args.tray]):
+        if "-h" in unknown or "--help" in unknown or len(sys.argv) == 1:
+            parser.print_help()
+            sys.exit(0)
+
     # If we're just the hotkey sender, dispatch and exit immediately
     if args.trigger_record:
         from whisp.utils.ipc_client import send_trigger
@@ -52,7 +63,14 @@ def main():
         sys.exit(0)
 
     cfg = AppConfig()
-    mode = args.mode or cfg.app_mode.lower()
+    if args.cli:
+        mode = "cli"
+    elif args.gui:
+        mode = "gui"
+    elif args.tray:
+        mode = "whisp"  # internal identifier for tray mode
+    else:
+        mode = cfg.app_mode.lower()  # type: ignore[attr-defined]
 
     if args.diagnose:
         print(f"[Diagnose] Current mode: {mode}")
@@ -74,9 +92,6 @@ def main():
     elif mode == "whisp":
         from whisp.whisp_mode.tray import main as tray_main
         tray_main()
-    elif mode == "hear":
-        from whisp.utils.core_runner import run_core_process
-        run_core_process(cfg, preserve_audio=False, simulate_typing=False, apply_aipp=False)
     else:
         print(f"[__main__] ❌ Unknown app_mode: {mode}")
         sys.exit(1)

@@ -1,19 +1,21 @@
-# Whisp – Talk & Type on Linux 🗣️⌨️
+# Whisp - Talk & Type on Linux 🗣️⌨️
 
-A lightning‑fast voice‑to‑text helper for **any** Linux app.  Hit a global shortcut, speak, and watch your words appear wherever the cursor lives.
+A lightning-fast voice-to-text helper for **any** Linux app, using local voice processing.  
+Hit a global shortcut, speak, and watch your words appear wherever the cursor lives.  
+Optionally, have your transcript rewritten by local or remote AI model before output. 
 
 ---
 
-## ✨ Highlights
+## Highlights
 
 | Feature                          | Notes                                                                   |
 | -------------------------------- | ----------------------------------------------------------------------- |
-| **Whisper.cpp backend**          | Local, offline, MIT‑licensed large‑vocab ASR.                           |
-| **One‑key recording**            | Works on Wayland (*ydotool*) **and** X11 (*xdotool*).                   |
-| **Clipboard + Simulated typing** | Auto‑copies or types straight into the focused window.                  |
-| Multiple UI surfaces             | CLI, minimal PyQt6 GUI, Background Tray (“WHISP”) & one‑shot HEAR mode. |
-| Optional AI post‑process         | Summarise / rewrite via local **Ollama** or remote **OpenAI**.          |
-| Logs & benchmarks                | Session log plus opt‑in performance CSV.                                |
+| **Whisper.cpp backend**          | Local, offline, MIT-licensed large-vocab ASR.                           |
+| **Simulated typing**             | Works on Wayland (*ydotool*) **and** X11 (*xdotool*).                   |
+| **Clipboard**                    | Auto-copies or types straight into the currently focused window.        |
+| Multiple UI surfaces             | CLI, GUI (minimal PyQt6), WHISP (system tray) & HEAR (one-shot via cli) |
+| Optional AI post-process         | Type/copy-to-clipboard an AI-rewritten output via local or remote LLM   |
+| Logging & benchmarks             | Session log plus opt-in local performance data (CSV).                          |
 | AI Post-Processing (AIPP)	     | Process transcripts via local or cloud LLMs. GUI prompt editor.         |
 
 ---
@@ -108,7 +110,7 @@ small.en 466 · small 466 · medium.en 1500 · medium 1500 · large-v3 2900
 
 ---
 
-## ⚙️ Config (first‑run auto‑generated)
+## ⚙️ Config (first-run auto-generated)
 
 `~/.config/whisp/config.yaml`
 
@@ -118,7 +120,7 @@ model_path: whisper.cpp/models/ggml-base.en.bin
 hotkey_record: ctrl+alt+r  # for reference only – DE shortcut does the real work
 simulate_typing: true
 clipboard_backend: auto    # xclip / wl-copy / pyperclip fallback
-aipp_enabled: false        # AI post‑processing off by default
+aipp_enabled: false        # AI post-processing off by default
 verbosity: true            # extra console logs
 ```
 
@@ -179,19 +181,19 @@ If an API key is missing, cloud-based AIPP providers will not work and you will 
 
 | Symptom                            | Likely cause / fix                                                                                             |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| *Press hotkey, nothing happens*    | Troubleshoot with this command: *gnome-terminal -- bash -c "whisp --trigger-record; read -p 'Press Enter...'"* |
+| *Press hotkey, nothing happens*    | Troubleshoot with this command: `gnome-terminal -- bash -c "whisp --trigger-record; read -p 'Press Enter...'"` |
 | *Transcript printed but not typed* | Wayland: `ydotool` not installed or user not in `input` group → run `setup_ydotool.sh`, relog.                 |
-| *“whisper-cli not found”*          | Build failed – rerun `./setup.sh` and check cmake output.                                                      |
-| *Mic not recording*                | Verify in `pavucontrol` the VM’s input device is active and not muted.                                         |
+| *“whisper-cli not found”*          | Build failed - rerun `./setup.sh` and check cmake output.                                                      |
+| *Mic not recording*                | Verify in system settings (or e.g.`pavucontrol`) input device mic is active and not muted.                                         |
 | Clipboard empty                    | Disable/enable SPICE clipboard sync in VM; ensure `xclip` or `wl-copy` present.                                |
 
 ---
 
 ## 📜 License & Credits
 
-* Whisp – © 2025 Jakov Iv.
+* Whisp – © 2025 Jakov Ivkovic.
 * **MIT** license (see `LICENSE`).
-* Speech engine powered by [**ggml‑org/whisper.cpp**](https://github.com/ggml-org/whisper.cpp) (MIT) and OpenAI Whisper models (MIT).
+* Speech engine powered by [**ggml-org/whisper.cpp**](https://github.com/ggml-org/whisper.cpp) (MIT) and OpenAI Whisper models (MIT).
 
 ---
 
@@ -234,4 +236,4 @@ rm -f ~/.local/share/applications/whisp.desktop
 sudo rm -f /usr/local/bin/whisp  # only if you manually linked it
 ```
 
-Enjoy seamless voice‑typing on Linux – and if you build something cool on top, open a PR or say hi!
+Enjoy seamless voice-typing on Linux - and if you build something cool on top, open a PR or say hi!
