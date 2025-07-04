@@ -88,9 +88,9 @@ class CoreProcessThread(QThread):
         usr_trans_acc = None  # Will be updated by the GUI after the run
 
         # ── Performance logging ---------------------------------------
-        if self.cfg.collect_metrics:
+        if self.cfg.perf_collect:
             from pathlib import Path as _P
-            from whisp.utils.benchmark_utils import write_perf_entry
+            from whisp.utils.performance import write_perf_entry
 
             perf_entry = {
                 "date": rec_start_dt.strftime("%Y-%m-%d"),
@@ -142,7 +142,7 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
     def _show_aipp_dialog():
         show_aipp_dialog(dialog, cfg)
 
-    def show_log():
+    def session_log():
         """Open a window that shows the current session log with Save/Close."""
 
         log_view = QDialog(dialog)
@@ -198,7 +198,7 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
     for label, action in [
         ("Whisper Models", _show_whisper_models),
         ("AI Post-Processing", _show_aipp_dialog),
-        ("Show Log", show_log),
+        ("Session Log", session_log),
         ("Settings", edit_config),
         ("Performance", show_performance),
         ("Quit", quit_app),
@@ -361,7 +361,7 @@ def show_manage_prompts(parent, cfg, after_save_cb=None, modal=True):
 #   Shared session-log viewer
 # ----------------------------------------------------------------------------
 
-def show_log_dialog(parent, logger):
+def session_log_dialog(parent, logger):
     """Open a (modal) window that shows the current session log and offers
     the user to save it via a native file-dialog.
 
@@ -411,7 +411,7 @@ def show_log_dialog(parent, logger):
 def show_performance_dialog(parent, cfg):
     """Open the Performance window showing metrics for the last run."""
 
-    from whisp.paths import CACHE_DIR as _CACHE_DIR
+    from whisp.paths import DATA_DIR as _DATA_DIR
     import csv
     from pathlib import Path
 
@@ -424,19 +424,19 @@ def show_performance_dialog(parent, cfg):
 
     # --- Collect toggles ---------------------------------------------------
     perf_cb = QCheckBox("Collect performance data")
-    perf_cb.setChecked(cfg.data.get("collect_metrics", False))
+    perf_cb.setChecked(cfg.data.get("perf_collect", False))
 
     acc_cb = QCheckBox("Collect user transcript accuracy rating")
-    acc_cb.setChecked(cfg.data.get("collect_accuracy_rating", True))
+    acc_cb.setChecked(cfg.data.get("perf_accuracy_rating_collect", True))
 
     def on_perf_toggled(state):
-        cfg.data["collect_metrics"] = bool(state)
-        cfg.collect_metrics = bool(state)
+        cfg.data["perf_collect"] = bool(state)
+        cfg.perf_collect = bool(state)
         cfg.save()
 
     def on_acc_toggled(state):
-        cfg.data["collect_accuracy_rating"] = bool(state)
-        cfg.collect_accuracy_rating = bool(state)
+        cfg.data["perf_accuracy_rating_collect"] = bool(state)
+        cfg.perf_accuracy_rating_collect = bool(state)
         cfg.save()
 
     perf_cb.stateChanged.connect(on_perf_toggled)
@@ -461,8 +461,8 @@ def show_performance_dialog(parent, cfg):
         row_idx += 1
 
     last_entry = None
-    csv_path = _CACHE_DIR / "performance_data.csv"
-    if cfg.collect_metrics and csv_path.exists():
+    csv_path = _DATA_DIR / "whisp_perf_data.csv"
+    if cfg.perf_collect and csv_path.exists():
         try:
             with open(csv_path, "r", newline="") as f:
                 reader = csv.DictReader(f)

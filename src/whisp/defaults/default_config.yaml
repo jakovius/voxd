@@ -1,11 +1,9 @@
-app_mode: whisp
-clipboard_backend: auto
+# app_mode: whisp
 hotkey_record: ctrl+alt+r
 log_enabled: true
 log_location: ''
-collect_metrics: false
-collect_accuracy_rating: true
-performance_log_file: performance_data.csv
+perf_collect: false
+perf_accuracy_rating_collect: true
 simulate_typing: true
 typing_delay: 1
 typing_start_delay: 0.15

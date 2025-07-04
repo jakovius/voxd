@@ -8,7 +8,7 @@ from whisp.core.config import get_config
 from whisp.core.logger import SessionLogger
 from whisp.utils.ipc_server import start_ipc_server  # <-- Add this import
 from whisp.core.whisp_core import CoreProcessThread, show_options_dialog
-from whisp.utils.benchmark_utils import update_last_perf_entry
+from whisp.utils.performance import update_last_perf_entry
 
 
 class WhispApp(QWidget):
@@ -130,7 +130,7 @@ class WhispApp(QWidget):
             
             self.clipboard_notice.setText("Copied to clipboard")
             # Prompt user for accuracy rating (optional)
-            if getattr(self.cfg, "collect_metrics", False) and getattr(self.cfg, "collect_accuracy_rating", False):
+            if getattr(self.cfg, "perf_collect", False) and getattr(self.cfg, "perf_accuracy_rating_collect", False):
                 s, ok = QInputDialog.getText(
                     self,
                     "Accuracy Rating",

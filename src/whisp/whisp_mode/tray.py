@@ -15,10 +15,11 @@ from whisp.core.whisp_core import (
     show_options_dialog,
     show_config_editor,
     show_manage_prompts,
-    show_log_dialog,
+    session_log_dialog,
     show_performance_dialog,
 )
 from whisp.core.model_manager import show_model_manager  # NEW
+from whisp.utils.performance import update_last_perf_entry
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Icon resources & animation frames
@@ -60,10 +61,10 @@ class WhispTrayApp(QObject):
         self.menu.addAction(self.record_action)
 
         # --- New top-level actions --------------------------------------
-        # Show Log (opens viewer with option to save)
-        self.show_log_action = QAction("Show Log")
-        self.show_log_action.triggered.connect(
-            lambda _=False: show_log_dialog(None, self.logger)
+        # Session Log (opens viewer with option to save)
+        self.session_log_action = QAction("Session Log")
+        self.session_log_action.triggered.connect(
+            lambda _=False: session_log_dialog(None, self.logger)
         )
 
         # Settings (config editor)
@@ -95,7 +96,7 @@ class WhispTrayApp(QObject):
         self.menu.addSeparator()
 
         # Add the new flat actions right away
-        self.menu.addAction(self.show_log_action)
+        self.menu.addAction(self.session_log_action)
         self.menu.addAction(self.settings_action)
         self.menu.addAction(self.performance_action)
         self.menu.addAction(self.quit_action)
@@ -140,7 +141,7 @@ class WhispTrayApp(QObject):
             self.last_transcript = tscript
             # Optionally, show a notification here
             # ── Prompt for accuracy rating (GUI thread safe) -------------
-            if self.cfg.collect_metrics and self.cfg.collect_accuracy_rating:
+            if self.cfg.perf_collect and self.cfg.perf_accuracy_rating_collect:
                 from PyQt6.QtWidgets import QInputDialog
                 s, ok = QInputDialog.getText(
                     None,
@@ -150,7 +151,6 @@ class WhispTrayApp(QObject):
                 if ok and s.strip():
                     try:
                         val = float(s.strip())
-                        from whisp.utils.benchmark_utils import update_last_perf_entry
                         update_last_perf_entry(val)
                     except ValueError:
                         pass  # ignore invalid input
@@ -241,7 +241,7 @@ class WhispTrayApp(QObject):
         self.menu.addSeparator()
 
         # Top-level helpers (already created in __init__)
-        self.menu.addAction(self.show_log_action)
+        self.menu.addAction(self.session_log_action)
         self.menu.addAction(self.settings_action)
         self.menu.addAction(self.performance_action)
         self.menu.addAction(self.quit_action)

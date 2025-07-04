@@ -7,14 +7,11 @@ from importlib.resources import files
 from whisp.paths import resolve_whisper_binary, resolve_model_path, DATA_DIR  # <-- add this import
 
 DEFAULT_CONFIG = {
-    "app_mode": "whisp",
-    "clipboard_backend": "auto",
-    "collect_metrics": False,
-    "collect_accuracy_rating": True,
+    "perf_collect": False,
+    "perf_accuracy_rating_collect": True,
     "hotkey_record": "ctrl+alt+r",
     "log_enabled": True,
     "log_location": "",
-    "performance_log_file": "performance_data.csv",
     "simulate_typing": True,
     "typing_delay": 1,
     "typing_start_delay": 0.15,

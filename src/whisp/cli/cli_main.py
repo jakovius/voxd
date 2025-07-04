@@ -47,7 +47,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
             print(" Simple mode | Recording... (ENTER to stop and output into the terminal)")
             recorder = AudioRecorder()
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
-            clipboard = ClipboardManager(backend=cfg.clipboard_backend)
+            clipboard = ClipboardManager()
             typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
 
             recorder.start_recording()
@@ -75,7 +75,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
             # Create reusable instances outside the loop
             recorder = AudioRecorder()
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
-            clipboard = ClipboardManager(backend=cfg.clipboard_backend)
+            clipboard = ClipboardManager()
             typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
 
             try:
@@ -190,7 +190,7 @@ def main():
             print("Recording... (press ENTER to stop)")
             recorder = AudioRecorder()
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
-            clipboard = ClipboardManager(backend=cfg.clipboard_backend)
+            clipboard = ClipboardManager()
             typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
 
             recorder.start_recording()
@@ -223,7 +223,7 @@ def main():
             print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit")
             recorder = AudioRecorder()
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
-            clipboard = ClipboardManager(backend=cfg.clipboard_backend)
+            clipboard = ClipboardManager()
             typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
             try:
                 while True:

@@ -9,7 +9,7 @@ from utils.core_runner import run_core_process
 from core.transcriber import WhisperTranscriber
 
 
-PERF_LOG_FILE = "performance_data.csv"
+PERF_LOG_FILE = "whisp_perf_data.csv"
 
 
 def test_mode(cfg: AppConfig):
@@ -140,7 +140,6 @@ def dry_run():
     print("==> DRY RUN")
     print("Config + core modules load OK.")
     cfg = AppConfig()
-    print("App mode:", cfg.app_mode)
     print("Model:", cfg.model_path)
     print("Whisper binary:", cfg.whisper_binary)
     print("Dry-run successful.")

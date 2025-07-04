@@ -5,7 +5,7 @@ from whisp.core.typer import SimulatedTyper
 from whisp.core.logger import SessionLogger
 from whisp.core.config import AppConfig
 from whisp.core.aipp import run_aipp
-from whisp.utils.benchmark_utils import write_perf_entry
+from whisp.utils.performance import write_perf_entry
 from whisp.utils.libw import verbo
 
 from time import time
@@ -23,7 +23,7 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=Fa
 
     recorder = AudioRecorder()
     transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not preserve_audio)
-    clipboard = ClipboardManager(backend=cfg.clipboard_backend)
+    clipboard = ClipboardManager()
     typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
     if logger is None:
         logger = SessionLogger(cfg.log_enabled, cfg.log_location)
@@ -75,7 +75,7 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=Fa
 
     # === Accuracy rating
     usr_trans_acc = None
-    if cfg.collect_metrics and cfg.collect_accuracy_rating:
+    if cfg.perf_collect and cfg.perf_accuracy_rating_collect:
         if "PyQt6" in sys.modules:
             from PyQt6.QtWidgets import QApplication
             app = QApplication.instance() or QApplication(sys.argv)
@@ -94,7 +94,7 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=Fa
                 usr_trans_acc = 0.0
 
     # === Performance Logging
-    if cfg.collect_metrics:
+    if cfg.perf_collect:
         perf_entry = {
             "date": rec_start.strftime("%Y-%m-%d"),
             "rec_start_time": rec_start.strftime("%H:%M:%S"),

@@ -47,7 +47,7 @@
 - [ ] Transcribing and uptake to clipboard executes
 - [ ] Typing into any active input window of any app is executed
 - [ ] the process completes and tray returns to idle
-- [ ] Tray > Show Log displays and allows saving
+- [ ] Tray > Session Log displays and allows saving
 - [ ] Tray > Settings opens config
 - [ ] Tray > Test placeholder works
 - [ ] Tray > Quit exits and unregisters hotkey

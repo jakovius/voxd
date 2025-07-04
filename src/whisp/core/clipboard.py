@@ -3,8 +3,9 @@ from whisp.utils.libw import verbo
 
 
 class ClipboardManager:
-    def __init__(self, backend="auto"):
-        self.backend = backend.lower()
+    def __init__(self, backend: str | None = None):
+        # Accept optional override but default to automatic detection.
+        self.backend = (backend or "auto").lower()
         self._resolve_backend()
 
     def _resolve_backend(self):

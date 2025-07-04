@@ -70,7 +70,7 @@ def main():
     elif args.tray:
         mode = "whisp"  # internal identifier for tray mode
     else:
-        mode = cfg.app_mode.lower()  # type: ignore[attr-defined]
+        mode = "whisp"
 
     if args.diagnose:
         print(f"[Diagnose] Current mode: {mode}")
