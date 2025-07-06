@@ -7,19 +7,19 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QIcon, QAction
 from PyQt6.QtCore import Qt, QObject, QTimer, QThread
 
-from whisp.core.config import get_config, CONFIG_PATH
+from whisp.core.config import get_config
 from whisp.core.logger import SessionLogger
 from whisp.utils.ipc_server import start_ipc_server
 from whisp.core.whisp_core import (
     CoreProcessThread,
     show_options_dialog,
-    show_config_editor,
     show_manage_prompts,
     session_log_dialog,
     show_performance_dialog,
 )
 from whisp.core.model_manager import show_model_manager  # NEW
 from whisp.utils.performance import update_last_perf_entry
+from whisp.gui.settings_dialog import SettingsDialog
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Icon resources & animation frames
@@ -70,11 +70,7 @@ class WhispTrayApp(QObject):
         # Settings (config editor)
         self.settings_action = QAction("Settings")
         self.settings_action.triggered.connect(
-            lambda _=False: show_config_editor(
-                None,
-                str(CONFIG_PATH),
-                after_save_cb=self.refresh_tray_menu,
-            )
+            lambda _=False: self._open_settings()
         )
 
         # Performance window
@@ -297,6 +293,13 @@ class WhispTrayApp(QObject):
         # reload config in case model changed
         self.cfg.load()
         self.refresh_tray_menu()
+
+    def _open_settings(self):
+        dlg = SettingsDialog(self.cfg, parent=None)
+        if dlg.exec():
+            # After saving, refresh menu and cfg instance
+            self.cfg.load()  # reload from disk
+            self.refresh_tray_menu()
 
 def main():
     app = QApplication(sys.argv)

@@ -23,7 +23,7 @@ Optionally, have your transcript rewritten by local or remote AI model before ou
 
 ## 📦 Installation
 
-**Works on any modern Linux** – Ubuntu 24.04, Fedora 40, Pop!\_OS 22, etc.  
+**Works on modern Linux** – Ubuntu 24.04, Fedora 40, Pop!\_OS 22, etc.  
 After this you will have a global `whisp` command available in any shell.
 
 ```bash
@@ -75,9 +75,9 @@ You never have to remember “`source .venv/bin/activate`” again — just run 
 ### Quick-start examples
 
 ```bash
-whisp --mode gui      # friendly pill-button window
-whisp --mode whisp    # sits in the tray; perfect for continuous dictation
-whisp --mode cli      # terminal REPL; 'h' shows commands
+whisp --gui      # friendly pill-button window
+whisp --tray    # sits in the tray; perfect for continuous dictation
+whisp --cli      # terminal REPL; 'h' shows commands
 ```
 
 *(The very first run may download/build its own `whisper-cli` into `~/.cache/whisp/` — subsequent starts are instant.)*
@@ -103,7 +103,7 @@ whisp-model remove tiny.en	# delete a model
 whisp-model use tiny.en	# make that model the default (edits config.yaml)
 ```
 
-A complete catalogue of available keys (size MB):
+Some of the available keys (size MB):
 
 tiny.en 75 · tiny 142 · base.en 142 · base 142 ·
 small.en 466 · small 466 · medium.en 1500 · medium 1500 · large-v3 2900
@@ -115,11 +115,9 @@ small.en 466 · small 466 · medium.en 1500 · medium 1500 · large-v3 2900
 `~/.config/whisp/config.yaml`
 
 ```yaml
-app_mode: whisp            # default launch mode
 model_path: whisper.cpp/models/ggml-base.en.bin
 hotkey_record: ctrl+alt+r  # for reference only – DE shortcut does the real work
 simulate_typing: true
-clipboard_backend: auto    # xclip / wl-copy / pyperclip fallback
 aipp_enabled: false        # AI post-processing off by default
 verbosity: true            # extra console logs
 ```

@@ -118,8 +118,9 @@ class AppConfig:
         if self.aipp_provider not in ("ollama", "openai", "anthropic", "xai"):
             print(f"  ⚠️ Invalid AIPP provider: {self.aipp_provider}")
 
-        if not isinstance(self.typing_delay, (int, float)) or not (0.001 <= self.typing_delay <= 1):
-            print(f"  ⚠️ Typing delay out of range: {self.typing_delay}")
+        # typing_delay: allow 0 (→ instant paste) up to 1 s per char
+        if not isinstance(self.typing_delay, (int, float)) or not (0 <= self.typing_delay <= 1):
+            print(f"  ⚠️ Typing delay out of range: {self.typing_delay} (allowed 0–1)")
 
         if not isinstance(self.typing_start_delay, (int, float)) or not (0.0 <= self.typing_start_delay <= 5):
             # Using .data avoids mypy complaints about dynamic attrs

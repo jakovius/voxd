@@ -5,6 +5,7 @@ import os
 import sys
 import select
 from whisp.utils.libw import verbo
+import pyperclip  # New: clipboard helper for instant paste
 
 def detect_backend():
     """
@@ -25,7 +26,19 @@ def detect_backend():
 
 class SimulatedTyper:
     def __init__(self, delay=None, start_delay=None):
-        self.delay = str(delay or 10)
+        # Accept delay in milliseconds or seconds – treat ≤0 as instant paste.
+        if delay is None:
+            delay_val = 10
+        else:
+            delay_val = delay
+
+        # Store as float for logic but keep string form for tool calls.
+        try:
+            self.delay_ms = float(delay_val)
+        except (TypeError, ValueError):
+            self.delay_ms = 10.0
+
+        self.delay_str = str(int(self.delay_ms))
         # Extra delay (in seconds) inserted before the first keystroke so
         # that the key-release events from the hot-key that stopped the
         # recording have time to reach the focused window. Prevents the
@@ -66,6 +79,11 @@ class SimulatedTyper:
             print("[typer] ⚠️ Typing disabled - required tool not available.")
             return
 
+        # If delay ≤ 0 → use fast clipboard paste instead of typing
+        if self.delay_ms <= 0:
+            self._paste(text)
+            return
+
         # Give the window manager a moment to process key-release events
         if self.start_delay > 0:
             time.sleep(self.start_delay)
@@ -79,10 +97,55 @@ class SimulatedTyper:
 
         verbo(f"[typer] Typing transcript using {self.tool}...")
         if self.tool == "ydotool":
-            subprocess.run(["ydotool", "type", "-d", self.delay, text])
+            subprocess.run(["ydotool", "type", "-d", self.delay_str, text])
         elif self.tool == "xdotool":
-            subprocess.run(["xdotool", "type", "--delay", self.delay, text])
+            subprocess.run(["xdotool", "type", "--delay", self.delay_str, text])
         else:
             print("[typer] ⚠️ No valid typing tool found.")
             return
         self.flush_stdin() # Flush pending input before any new prompt
+
+    # ------------------------------------------------------------------
+    # Helper: fast clipboard paste
+    # ------------------------------------------------------------------
+    def _paste(self, text: str):
+        """Copy *text* to clipboard and hit Ctrl+V/ydotool key sequence"""
+        # Copy to clipboard first
+        try:
+            pyperclip.copy(text.rstrip())
+        except Exception:
+            verbo("[typer] Clipboard copy failed – falling back to typing mode.")
+            # set minimal key delay and fall back
+            self.delay_ms = 10.0
+            self.delay_str = "10"
+            self.type(text)
+            return
+
+        # Allow clipboard daemon to update and window to process modifiers
+        time.sleep(0.10)  # clipboard settle
+        if self.start_delay > 0:
+            time.sleep(self.start_delay)
+
+        verbo(f"[typer] Pasting transcript via {self.tool}…")
+
+        if self.tool == "xdotool":
+            # Try common paste shortcuts; Shift+Insert removed (caused stray dash)
+            for seq in ("ctrl+v", "ctrl+shift+v"):
+                subprocess.run(
+                    ["xdotool", "key", "--clearmodifiers", seq],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+        elif self.tool == "ydotool":
+            sequences = [
+                ["29:1", "47:1", "47:0", "29:0"],  # ctrl+v
+                ["29:1", "42:1", "47:1", "47:0", "42:0", "29:0"],  # ctrl+shift+v (42=Shift)
+            ]
+            for seq in sequences:
+                subprocess.run(["ydotool", "key", *seq],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            print("[typer] ⚠️ Paste shortcut not supported for this backend.")
+
+        # Clean up stdin to avoid stray inputs next prompt
+        self.flush_stdin()

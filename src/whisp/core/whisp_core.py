@@ -2,7 +2,8 @@ from PyQt6.QtCore import QThread, pyqtSignal, Qt
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QPushButton, QFileDialog, QMessageBox,
     QGroupBox, QHBoxLayout, QCheckBox, QComboBox, QLineEdit, QLabel,
-    QTextEdit, QDialogButtonBox, QRadioButton, QGridLayout, QLayout
+    QTextEdit, QDialogButtonBox, QRadioButton, QGridLayout, QLayout,
+    QWidget
 )
 import yaml
 from whisp.core.aipp import get_final_text
@@ -179,11 +180,10 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
         log_view.exec()
 
     def edit_config():
-        from whisp.core.config import CONFIG_PATH
-        # After saving the YAML config we don't need to refresh any inline
-        # widgets because the Options window no longer hosts dynamic AIPP
-        # controls.  Hence we omit an *after_save* callback here.
-        show_config_editor(dialog, str(CONFIG_PATH))
+        """Open the Settings form dialog."""
+        from whisp.gui.settings_dialog import SettingsDialog
+        editor = SettingsDialog(cfg, parent=dialog)
+        editor.exec()
 
     # ------------------------------------------------------------------
     # Performance dialog ------------------------------------------------
@@ -422,28 +422,31 @@ def show_performance_dialog(parent, cfg):
 
     vbox = QVBoxLayout(dlg)
 
-    # --- Collect toggles ---------------------------------------------------
-    perf_cb = QCheckBox("Collect performance data")
-    perf_cb.setChecked(cfg.data.get("perf_collect", False))
+    # --- Collect toggles (styled) -----------------------------------------
+    perf_widget = _create_styled_checkbox("Collect performance data", cfg.data.get("perf_collect", False))
+    perf_cb = perf_widget.checkbox_button  # type: ignore[attr-defined]
 
-    acc_cb = QCheckBox("Collect user transcript accuracy rating")
-    acc_cb.setChecked(cfg.data.get("perf_accuracy_rating_collect", True))
+    acc_widget = _create_styled_checkbox(
+        "Collect user transcript accuracy rating",
+        cfg.data.get("perf_accuracy_rating_collect", True),
+    )
+    acc_cb = acc_widget.checkbox_button  # type: ignore[attr-defined]
 
-    def on_perf_toggled(state):
+    def on_perf_toggled(state: bool):
         cfg.data["perf_collect"] = bool(state)
         cfg.perf_collect = bool(state)
         cfg.save()
 
-    def on_acc_toggled(state):
+    def on_acc_toggled(state: bool):
         cfg.data["perf_accuracy_rating_collect"] = bool(state)
         cfg.perf_accuracy_rating_collect = bool(state)
         cfg.save()
 
-    perf_cb.stateChanged.connect(on_perf_toggled)
-    acc_cb.stateChanged.connect(on_acc_toggled)
+    perf_cb.toggled.connect(on_perf_toggled)
+    acc_cb.toggled.connect(on_acc_toggled)
 
-    vbox.addWidget(perf_cb)
-    vbox.addWidget(acc_cb)
+    vbox.addWidget(perf_widget)
+    vbox.addWidget(acc_widget)
 
     # --- Data ----------------------------------------------------------------
     data_group = QGroupBox("Last run data")
@@ -547,16 +550,16 @@ def show_aipp_dialog(parent, cfg, modal=True):
     layout = QVBoxLayout(dlg)
 
     # Enable AIPP -----------------------------------------------------------
-    aipp_enable_cb = QCheckBox("Enable AIPP")
-    aipp_enable_cb.setChecked(cfg.data.get("aipp_enabled", False))
+    aipp_widget = _create_styled_checkbox("Enable AIPP", cfg.data.get("aipp_enabled", False))
+    aipp_enable_cb = aipp_widget.checkbox_button  # type: ignore[attr-defined]
 
-    def on_aipp_enable(state):
+    def on_aipp_enable(state: bool):
         cfg.data["aipp_enabled"] = bool(state)
         cfg.aipp_enabled = bool(state)  # type: ignore[attr-defined]
         cfg.save()
 
-    aipp_enable_cb.stateChanged.connect(on_aipp_enable)
-    layout.addWidget(aipp_enable_cb)
+    aipp_enable_cb.toggled.connect(on_aipp_enable)
+    layout.addWidget(aipp_widget)
 
     # Provider --------------------------------------------------------------
     layout.addWidget(QLabel("Provider:"))
@@ -629,3 +632,63 @@ def show_aipp_dialog(parent, cfg, modal=True):
         dlg.show()
 
     return dlg
+
+# ────────────────────────────────────────────────────────────────────────────
+#  Tiny helper   (styled QPushButton acting as a checkbox)
+# ---------------------------------------------------------------------------
+
+def _create_styled_checkbox(text: str, checked: bool = False) -> QWidget:
+    """Return a widget consisting of a styled, check-able QPushButton + label.
+
+    The button shows a green background + tick when checked, grey otherwise.
+    The returned widget exposes the *button* via attribute ``checkbox_button``
+    so callers can connect to its ``toggled`` signal.
+    """
+
+    btn = QPushButton()
+    btn.setCheckable(True)
+    btn.setChecked(checked)
+    btn.setFixedSize(20, 20)
+
+    def _update():
+        if btn.isChecked():
+            btn.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: #E03D00;
+                    border: 2px solid #777;
+                    border-radius: 3px;
+                    color: white;
+                    font-weight: bold;
+                }
+                """
+            )
+            btn.setText("✓")
+        else:
+            btn.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: #555;
+                    border: 2px solid #777;
+                    border-radius: 3px;
+                    color: white;
+                }
+                """
+            )
+            btn.setText("")
+
+    _update()
+    btn.toggled.connect(lambda _: _update())
+
+    container = QWidget()
+    layout = QHBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(6)
+    layout.addWidget(btn)
+    layout.addWidget(QLabel(text))
+    layout.addStretch(1)
+
+    # Expose the inner button to callers
+    container.checkbox_button = btn  # type: ignore[attr-defined]
+
+    return container
