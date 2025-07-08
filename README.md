@@ -10,9 +10,9 @@ Optionally, have your transcript **AI-rewritten** by **LOCAL** (Ollama) or remot
 
 | Feature                          | Notes                                                                   |
 | -------------------------------- | ----------------------------------------------------------------------- |
-| **Whisper.cpp backend**          | Local, offline, MIT-licensed large-vocab ASR.                           |
-| **Simulated typing**             | Works on Wayland (*ydotool*) **and** X11 (*xdotool*).                   |
-| **Clipboard**                    | Auto-copies or types straight into the currently focused window.        |
+| **Whisper.cpp** backend          | Local, offline  ASR.   |
+| **Simulated typing**             | types straight into any currently focused input window. Even on Wayland! (*ydotool*).                   |
+| **Clipboard**                    | Auto-copies into clipboard - ready for pasting        |
 | **Multiple UI** surfaces             | CLI, GUI (minimal PyQt6), TRAY (system tray) |
 | **Logging** & **performance**             | Session log plus opt-in local performance data (CSV).                          |
 | AI Post-Processing (**AIPP**)	     | Process transcripts via local or cloud LLMs. GUI prompt editor.         |
@@ -71,7 +71,7 @@ whisp --tray    # sits in the tray; perfect for continuous dictation
 whisp --cli      # terminal REPL; 'h' shows commands
 ```
 
-*(The very first run may download/build its own `whisper-cli` into `~/.cache/whisp/` — subsequent starts are instant.)*
+*(The very first run may download/build its own `whisper-cli` into the app's root — symlinks it to `~/.local/bin/` — subsequent starts are instant.)*
 
 
 ### 🎙️  Managing speech models
@@ -82,7 +82,7 @@ Use the built-in model-manager to fetch the default (≈142 MB):
 ```bash
 whisp-model install base.en     # or tiny.en / small / medium … see list below
 ```
-That downloads into ~/.cache/whisp/models/ and Whisp will
+That downloads into ~/.local/share/whisp/models/ and Whisp will
 automatically pick it up.
 
 Common commands:
@@ -103,47 +103,35 @@ small.en 466 · small 466 · medium.en 1500 · medium 1500 · large-v3 2900
 
 ## ⚙️ Config (first-run auto-generated)
 
+Available to edit in GUI and TRAY modes, as well as for power-users here:
 `~/.config/whisp/config.yaml`
-
-```yaml
-model_path: whisper.cpp/models/ggml-base.en.bin
-hotkey_record: ctrl+alt+r  # for reference only – DE shortcut does the real work
-simulate_typing: true
-aipp_enabled: false        # AI post-processing off by default
-verbosity: true            # extra console logs
-```
-
-Change values, restart Whisp.  Unknown keys are ignored.
+Unknown keys are ignored.
 
 ---
 
 ## 🧠 AI Post-Processing (AIPP)
-Whisp can optionally post-process your transcripts using local or cloud LLMs (like Ollama, OpenAI, Anthropic, or xAI).
+Your spoken words can be magically cleaned and rendered into e.g. neatly formated email, or straight away into a programing code!  
+
+Whisp can optionally post-process your transcripts using LOCAL (on-machine, **Ollama**) or cloud LLMs (like **OpenAI, Anthropic, or xAI**).  
+For the local processing, first **[install Ollama](https://ollama.ai)** and download a model that can be run on your machine, e.g. `ollama pull gemma3:latest`.   
 You can enable, configure, and manage prompts directly from the GUI.
 
-### Enabling AIPP
-Open the Options dialog in GUI or tray mode.
-Check Enable AIPP.
-Select a provider and model.
-Click Manage prompts… to edit or select prompts.
-
-### Editing Prompts
-Use the Manage prompts… button in the Options dialog to edit or select which prompt is active.
-Changes are saved to your config and take effect after restart.
-
-***Tip:*** 
-You can also edit the YAML config directly from the app via the Settings button, which opens a built-in editor.
+### Enable AIPP:
+In CLI mode, use `--aipp` argument.  
+In GUI or TRAY mode, all relevant settings are in: "*AI Post-Processing*".  
+**Seleting provider & model** - models are tied to their respective providers!  
+**Editing Prompts** - Select "*Manage prompts*" or "*Prompts*" to edit up to 4 of them.
 
 ## Supported providers:
 
-local: Ollama
-openai
-anthropic
-xai
+- Ollama (local)  
+- OpenAI  
+- Anthropic  
+- xAI  
 
 ---
 
-## 🔑 Setting API Keys for AIPP Providers
+### 🔑 Setting API Keys for the remote API providers
 
 For security, Whisp does **not** store API keys in config files.  
 To use cloud AIPP providers, set the required API key(s) in your shell environment before running Whisp:
@@ -172,17 +160,17 @@ If an API key is missing, cloud-based AIPP providers will not work and you will 
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | *Press hotkey, nothing happens*    | Troubleshoot with this command: `gnome-terminal -- bash -c "whisp --trigger-record; read -p 'Press Enter...'"` |
 | *Transcript printed but not typed* | Wayland: `ydotool` not installed or user not in `input` group → run `setup_ydotool.sh`, relog.                 |
-| *"whisper-cli not found"*          | Build failed - rerun `./setup.sh` and check cmake output.                                                      |
-| *Mic not recording*                | Verify in system settings (or e.g.`pavucontrol`) input device mic is active and not muted.                                         |
-| Clipboard empty                    | Disable/enable SPICE clipboard sync in VM; ensure `xclip` or `wl-copy` present.                                |
+| *"whisper-cli not found"*          | Build failed - rerun `./setup.sh` and check any diagnostic output.                                                      |
+| *Mic not recording*                | Verify in system settings: **input device available**? / **active**? / **not muted**?                                        |
+| Clipboard empty                    | ensure `xclip` or `wl-copy`  present (re-run `setup.sh`).                                |
 
 ---
 
 ## 📜 License & Credits
 
-* Whisp – © 2025 Jakov Ivkovic.
-* **MIT** license (see `LICENSE`).
+* Whisp – © 2025 Jakov Ivkovic – **MIT** license (see [`LICENSE`](LICENSE)).
 * Speech engine powered by [**ggml-org/whisper.cpp**](https://github.com/ggml-org/whisper.cpp) (MIT) and OpenAI Whisper models (MIT).
+* Auto-typing/pasting powered by [**ReimuNotMoe/ydotool**](https://github.com/ReimuNotMoe/ydotool) (AGPLv3).
 
 ---
 
