@@ -67,7 +67,6 @@ CATALOGUE = {
     "large-v3-turbo-q8_0":( 834,"01bf15bedffe9f39d65c1b6ff9b687ea91f59e0e",HF+"ggml-large-v3-turbo-q8_0.bin"),
 }
 
-# Models now live in the XDG *data* dir so they survive cache clean-ups
 # ~/.local/share/whisp/models (or $XDG_DATA_HOME/whisp/models)
 CACHE_DIR   = DATA_DIR / "models"  # renamed variable kept for minimal diff
 REPO_MODELS = Path(__file__).resolve().parents[2] / "whisper.cpp" / "models"   # keeps legacy path working
