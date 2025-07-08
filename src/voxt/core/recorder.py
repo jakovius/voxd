@@ -4,7 +4,7 @@ import wave
 from datetime import datetime
 from pathlib import Path
 import tempfile
-from whisp.utils.libw import verbo
+from voxt.utils.libw import verbo
 
 
 class AudioRecorder:
@@ -13,7 +13,7 @@ class AudioRecorder:
         self.channels = channels
         self.recording = []
         self.is_recording = False
-        self.temp_dir = Path(tempfile.gettempdir()) / "whisp_temp"
+        self.temp_dir = Path(tempfile.gettempdir()) / "voxt_temp"
         self.temp_dir.mkdir(exist_ok=True)
         self.last_temp_file = None
 
@@ -49,7 +49,7 @@ class AudioRecorder:
 
         audio_data = np.concatenate(self.recording, axis=0)
 
-        from whisp.paths import OUTPUT_DIR
+        from voxt.paths import OUTPUT_DIR
         if preserve:
             rec_dir = OUTPUT_DIR / "recordings"
             rec_dir.mkdir(exist_ok=True)

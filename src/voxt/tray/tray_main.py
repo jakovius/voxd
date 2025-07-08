@@ -8,19 +8,19 @@ from PyQt6.QtGui import QIcon, QAction
 from PyQt6.QtCore import Qt, QObject, QTimer, QThread
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QApplication, QStyle
 
-from whisp.core.config import get_config
-from whisp.core.logger import SessionLogger
-from whisp.utils.ipc_server import start_ipc_server
-from whisp.core.whisp_core import (
+from voxt.core.config import get_config
+from voxt.core.logger import SessionLogger
+from voxt.utils.ipc_server import start_ipc_server
+from voxt.core.voxt_core import (
     CoreProcessThread,
     show_options_dialog,
     show_manage_prompts,
     session_log_dialog,
     show_performance_dialog,
 )
-from whisp.core.model_manager import show_model_manager  # NEW
-from whisp.utils.performance import update_last_perf_entry
-from whisp.gui.settings_dialog import SettingsDialog
+from voxt.core.model_manager import show_model_manager  # NEW
+from voxt.utils.performance import update_last_perf_entry
+from voxt.gui.settings_dialog import SettingsDialog
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Icon resources & animation frames
@@ -28,16 +28,16 @@ from whisp.gui.settings_dialog import SettingsDialog
 ASSETS_DIR = (Path(__file__).resolve().parent / ".." / "assets").resolve()
 
 # Filename lists only – actual QIcon objects are created *after* QApplication
-_IDLE_NAME = "whisp-0.png"
-_REC_NAMES = [f"whisp-{i}.png" for i in range(1, 10)]  # 1 … 9
-_TRANS_ORDER = ["whisp-0.png", "whisp-9.png", "whisp-1.png", "whisp-9.png"]
+_IDLE_NAME = "voxt-0.png"
+_REC_NAMES = [f"voxt-{i}.png" for i in range(1, 10)]  # 1 … 9
+_TRANS_ORDER = ["voxt-0.png", "voxt-9.png", "voxt-1.png", "voxt-9.png"]
 
-class WhispTrayApp(QObject):
+class VoxtTrayApp(QObject):
     def __init__(self):
         super().__init__()
         self.cfg = get_config()
         self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_location)
-        self.status = "Whisp"
+        self.status = "VOXT"
         self.last_transcript = ""
         self.thread = None
 
@@ -106,7 +106,7 @@ class WhispTrayApp(QObject):
             QTimer.singleShot(0, lambda: self.set_status(text))
             return
         self.status = text
-        self.tray.setToolTip(f"Whisp - {text}")
+        self.tray.setToolTip(f"VOXT - {text}")
         # ── Animation handling based on status ─────────────────────────────
         if text == "Recording":
             self._start_animation(self.icons_recording, total_period_ms=500)
@@ -115,7 +115,7 @@ class WhispTrayApp(QObject):
         else:  # idle or unknown → stop anim
             self._stop_animation()
         self.record_action.setText(
-            "Start Recording" if text == "Whisp" else ("Stop Recording" if text == "Recording" else f"{text}...")
+            "Start Recording" if text == "VOXT" else ("Stop Recording" if text == "Recording" else f"{text}...")
         )
         self.refresh_tray_menu()
         QApplication.processEvents()
@@ -151,7 +151,7 @@ class WhispTrayApp(QObject):
                         update_last_perf_entry(val)
                     except ValueError:
                         pass  # ignore invalid input
-        self.set_status("Whisp")
+        self.set_status("VOXT")
 
     def show_options(self):
         show_options_dialog(None, self.logger, cfg=self.cfg)
@@ -306,7 +306,7 @@ def main():
     app = QApplication(sys.argv)
     # Prevent tray-only sessions from quitting when the last dialog closes
     app.setQuitOnLastWindowClosed(False)
-    tray_app = WhispTrayApp()
+    tray_app = VoxtTrayApp()
 
     def on_ipc_trigger():
         QTimer.singleShot(0, tray_app.toggle_recording)

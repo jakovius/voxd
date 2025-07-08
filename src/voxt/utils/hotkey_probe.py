@@ -4,7 +4,7 @@ from typing import Optional
 __all__ = ["get_record_shortcut"]
 
 def _probe_gnome() -> Optional[str]:
-    """Return binding string if GNOME custom keybinding executes whisp trigger."""
+    """Return binding string if GNOME custom keybinding executes voxt trigger."""
     try:
         paths_raw = subprocess.check_output([
             "gsettings", "get",
@@ -18,7 +18,7 @@ def _probe_gnome() -> Optional[str]:
         paths = json.loads(paths_raw.replace("'", '"'))
         for p in paths:
             cmd = subprocess.check_output(["gsettings", "get", p, "command"], text=True).strip("' \n")
-            if "whisp --trigger-record" in cmd:
+            if "voxt --trigger-record" in cmd:
                 key = subprocess.check_output(["gsettings", "get", p, "binding"], text=True).strip("' \n")
                 return key
     except Exception:
@@ -29,9 +29,9 @@ def _probe_kde() -> Optional[str]:
     """Probe KDE GlobalAccel via qdbus."""
     try:
         out = subprocess.check_output([
-            "qdbus", "org.kde.kglobalaccel", "/component/whisp",
+            "qdbus", "org.kde.kglobalaccel", "/component/voxt",
             "org.kde.kglobalaccel.Component.shortcutList"], text=True)
-        m = re.search(r"whisp --trigger-record.*key:\s*([^\n]+)", out)
+        m = re.search(r"voxt --trigger-record.*key:\s*([^\n]+)", out)
         if m:
             return m.group(1).strip()
     except Exception:
@@ -39,7 +39,7 @@ def _probe_kde() -> Optional[str]:
     return None
 
 def get_record_shortcut() -> Optional[str]:
-    """Return the keybinding string for the Whisp trigger shortcut, or None."""
+    """Return the keybinding string for the voxt trigger shortcut, or None."""
     for fn in (_probe_gnome, _probe_kde):
         key = fn()
         if key:

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from platformdirs import user_config_dir
 from importlib.resources import files
-from whisp.paths import resolve_whisper_binary, resolve_model_path, DATA_DIR  # <-- add this import
+from voxt.paths import resolve_whisper_binary, resolve_model_path, DATA_DIR  # <-- add this import
 
 DEFAULT_CONFIG = {
     "perf_collect": False,
@@ -47,10 +47,10 @@ DEFAULT_CONFIG = {
     }
 }
 
-CONFIG_DIR = Path(user_config_dir("whisp"))
+CONFIG_DIR = Path(user_config_dir("voxt"))
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_PATH = CONFIG_DIR / "config.yaml"
-_TPL = files("whisp.defaults").joinpath("default_config.yaml")
+_TPL = files("voxt.defaults").joinpath("default_config.yaml")
 # first run?  copy pristine template
 if not CONFIG_PATH.exists():
     shutil.copy(_TPL, CONFIG_PATH)

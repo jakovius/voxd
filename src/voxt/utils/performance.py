@@ -2,10 +2,10 @@ import csv
 from pathlib import Path
 from datetime import datetime
 
-from whisp.paths import DATA_DIR
+from voxt.paths import DATA_DIR
 
 # Path to CSV collecting per-run performance data
-PERF_CSV = DATA_DIR / "whisp_perf_data.csv"
+PERF_CSV = DATA_DIR / "voxt_perf_data.csv"
 
 
 def write_perf_entry(entry: dict):
@@ -27,7 +27,7 @@ def write_perf_entry(entry: dict):
 def summarize_perf_data() -> None:
     """Print a quick textual summary of the CSV (avg durations, etc.)."""
     if not PERF_CSV.exists():
-        print("[perf] No whisp_perf_data.csv found.")
+        print("[perf] No voxt_perf_data.csv found.")
         return
 
     with PERF_CSV.open("r", newline="") as f:

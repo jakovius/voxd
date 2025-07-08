@@ -4,7 +4,7 @@
 set -e
 
 echo "=== 🧰 ydotool Setup Script (User-Level Daemon) ==="
-echo "Required by Whisp app for typing support. Required on Wayland and will work for X11 too."
+echo "Required by VOXT app for typing support. Required on Wayland and will work for X11 too."
 
 # 1. Install dependencies
 echo "🔧 Installing build dependencies..."

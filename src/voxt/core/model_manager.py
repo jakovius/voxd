@@ -1,7 +1,7 @@
-"""whisp.core.model_manager - Qt dialog for managing Whisper models.
+"""voxt.core.model_manager - Qt dialog for managing Whisper models.
 
 Usage:
-    from whisp.core.model_manager import show_model_manager
+    from voxt.core.model_manager import show_model_manager
     show_model_manager(parent)
 """
 
@@ -16,8 +16,8 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QProgressBar, QMessageBox
 )
 
-from whisp.core.config import get_config
-from whisp import models as mdl
+from voxt.core.config import get_config
+from voxt import models as mdl
 
 _CFG = get_config()
 

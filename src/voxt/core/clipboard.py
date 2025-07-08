@@ -1,5 +1,5 @@
 import os, shutil, subprocess, pyperclip, logging
-from whisp.utils.libw import verbo
+from voxt.utils.libw import verbo
 
 
 class ClipboardManager:

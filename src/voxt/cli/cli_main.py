@@ -5,13 +5,13 @@ import sys
 import threading
 from typing import Any, cast
 
-from whisp.core.config import AppConfig
-from whisp.core.logger import SessionLogger
-from whisp.core.transcriber import WhisperTranscriber
-from whisp.core.aipp import get_final_text
-from whisp.utils.core_runner import AudioRecorder, ClipboardManager, SimulatedTyper
-from whisp.utils.ipc_server import start_ipc_server
-from whisp.utils.libw import verbo
+from voxt.core.config import AppConfig
+from voxt.core.logger import SessionLogger
+from voxt.core.transcriber import voxterTranscriber
+from voxt.core.aipp import get_final_text
+from voxt.utils.core_runner import AudioRecorder, ClipboardManager, SimulatedTyper
+from voxt.utils.ipc_server import start_ipc_server
+from voxt.utils.libw import verbo
         
 def print_help():
     print("""
@@ -26,7 +26,7 @@ def print_help():
 
 def edit_config(config_path="config.yaml"):
     verbo("[cli] Opening config file...")
-    from whisp.core.config import CONFIG_PATH
+    from voxt.core.config import CONFIG_PATH
     subprocess.run(["xdg-open", str(CONFIG_PATH)])
 
 def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
@@ -39,10 +39,10 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
     # Start IPC server for hotkey triggers
     start_ipc_server(on_ipc_trigger)
 
-    print("🌀 Whisp CLI Mode:\n--- ALWAYS picking up into clipboard\n--- Type 'h' for help")
+    print("🌀 VOXT CLI Mode:\n--- ALWAYS picking up into clipboard\n--- Type 'h' for help")
 
     while True:
-        cmd = input("\nwhisp> ").strip().lower()
+        cmd = input("\VOXT> ").strip().lower()
         if cmd == "r":
             print(" Simple mode | Recording... (ENTER to stop and output into the terminal)")
             recorder = AudioRecorder()
@@ -137,7 +137,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
             print("[cli] Unknown command. Type 'h' for help.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Whisp CLI Mode")
+    parser = argparse.ArgumentParser(description="VOXT CLI Mode")
     parser.add_argument("--save-audio", action="store_true", help="Preserve audio recordings.")
     # --- Quick action flags (non-interactive shortcuts) ---
     qa = parser.add_argument_group("Quick actions")

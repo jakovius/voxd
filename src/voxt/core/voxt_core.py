@@ -6,8 +6,8 @@ from PyQt6.QtWidgets import (
     QWidget
 )
 import yaml
-from whisp.core.aipp import get_final_text
-from whisp.core.model_manager import show_model_manager
+from voxt.core.aipp import get_final_text
+from voxt.core.model_manager import show_model_manager
 
 class CoreProcessThread(QThread):
     finished = pyqtSignal(str)
@@ -23,10 +23,10 @@ class CoreProcessThread(QThread):
         self.should_stop = True
 
     def run(self):
-        from whisp.core.recorder import AudioRecorder
-        from whisp.core.transcriber import WhisperTranscriber
-        from whisp.core.typer import SimulatedTyper
-        from whisp.core.clipboard import ClipboardManager
+        from voxt.core.recorder import AudioRecorder
+        from voxt.core.transcriber import voxterTranscriber
+        from voxt.core.typer import SimulatedTyper
+        from voxt.core.clipboard import ClipboardManager
         from time import time
         from datetime import datetime
         import psutil
@@ -100,7 +100,7 @@ class CoreProcessThread(QThread):
         # ── Performance logging ---------------------------------------
         if self.cfg.perf_collect:
             from pathlib import Path as _P
-            from whisp.utils.performance import write_perf_entry
+            from voxt.utils.performance import write_perf_entry
 
             perf_entry = {
                 "date": rec_start_dt.strftime("%Y-%m-%d"),
@@ -132,7 +132,7 @@ class CoreProcessThread(QThread):
 
 def show_options_dialog(parent, logger, cfg=None, modal=True):
     if cfg is None:
-        from whisp.core.config import get_config
+        from voxt.core.config import get_config
         cfg = get_config()
     dialog = QDialog(parent)
     dialog.setWindowTitle("Options")
@@ -190,14 +190,14 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
 
     def edit_config():
         """Open the Settings form dialog."""
-        from whisp.gui.settings_dialog import SettingsDialog
+        from voxt.gui.settings_dialog import SettingsDialog
         editor = SettingsDialog(cfg, parent=dialog)
         editor.exec()
 
     # ------------------------------------------------------------------
     # Performance dialog ------------------------------------------------
     def show_performance():
-        from whisp.core.whisp_core import show_performance_dialog as _perf
+        from voxt.core.voxt_core import show_performance_dialog as _perf
         _perf(dialog, cfg)
 
     def quit_app():
@@ -259,7 +259,7 @@ def show_config_editor(parent, config_path, after_save_cb=None):
             with open(config_path, "w") as f:
                 f.write(editor.toPlainText())
             # Reload shared config so changes apply immediately
-            from whisp.core.config import get_config
+            from voxt.core.config import get_config
             get_config().load()
             if after_save_cb is not None:
                 after_save_cb()          # propagate changes to Options UI
@@ -345,7 +345,7 @@ def show_manage_prompts(parent, cfg, after_save_cb=None, modal=True):
 
         # Reload the global singleton so every running component sees
         # up-to-date data immediately.
-        from whisp.core.config import get_config
+        from voxt.core.config import get_config
         get_config().load()
 
         if after_save_cb is not None:
@@ -420,7 +420,7 @@ def session_log_dialog(parent, logger):
 def show_performance_dialog(parent, cfg):
     """Open the Performance window showing metrics for the last run."""
 
-    from whisp.paths import DATA_DIR as _DATA_DIR
+    from voxt.paths import DATA_DIR as _DATA_DIR
     import csv
     from pathlib import Path
 
@@ -473,7 +473,7 @@ def show_performance_dialog(parent, cfg):
         row_idx += 1
 
     last_entry = None
-    csv_path = _DATA_DIR / "whisp_perf_data.csv"
+    csv_path = _DATA_DIR / "voxt_perf_data.csv"
     if cfg.perf_collect and csv_path.exists():
         try:
             with open(csv_path, "r", newline="") as f:
@@ -548,7 +548,7 @@ def show_aipp_dialog(parent, cfg, modal=True):
     """
 
     if cfg is None:
-        from whisp.core.config import get_config  # lazy import to avoid cycles
+        from voxt.core.config import get_config  # lazy import to avoid cycles
         cfg = get_config()
 
     dlg = QDialog(parent)

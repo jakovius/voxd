@@ -2,8 +2,8 @@ import subprocess
 import os
 from pathlib import Path
 import re
-from whisp.utils.libw import verbo
-from whisp.paths import find_whisper_cli, find_base_model
+from voxt.utils.libw import verbo
+from voxt.paths import find_whisper_cli, find_base_model
 
 
 class WhisperTranscriber:
@@ -24,7 +24,7 @@ class WhisperTranscriber:
             verbo(f"[transcriber] Falling back to auto-detected whisper-cli: {self.binary_path}")
 
         self.delete_input = delete_input
-        from whisp.paths import OUTPUT_DIR
+        from voxt.paths import OUTPUT_DIR
         self.output_dir = OUTPUT_DIR
 
     def transcribe(self, audio_path):

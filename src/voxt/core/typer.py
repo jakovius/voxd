@@ -4,7 +4,7 @@ import shutil
 import os
 import sys
 import select
-from whisp.utils.libw import verbo
+from voxt.utils.libw import verbo
 import pyperclip  # New: clipboard helper for instant paste
 from pathlib import Path
 
@@ -132,7 +132,11 @@ class SimulatedTyper:
             print("[typer] ⚠️ Typing disabled - required tool not available.")
             return
 
-        # Always use character-by-character typing to avoid clipboard conflicts
+        # If delay ≤ 0 → use fast clipboard paste instead of typing
+        if self.delay_ms <= 0:
+            self._paste(text)
+            return
+
         # Give the window manager a moment to process key-release events
         if self.start_delay > 0:
             time.sleep(self.start_delay)

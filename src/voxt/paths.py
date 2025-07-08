@@ -1,5 +1,5 @@
 """
-whisp.paths - all filesystem look-ups live here.
+voxt.paths - all filesystem look-ups live here.
 """
 
 from __future__ import annotations
@@ -9,13 +9,13 @@ import shutil
 from pathlib import Path
 from typing import Final
 from functools import lru_cache
-from whisp.utils.libw import diagn
+from voxt.utils.libw import diagn
 
 # ─────────────────────────────────────────────────────────────────────────────
 # XDG-compatible base dirs
 HOME: Final = Path.home()
-CONFIG_DIR: Final = Path(os.getenv("XDG_CONFIG_HOME", HOME / ".config")) / "whisp"
-DATA_DIR: Final = Path(os.getenv("XDG_DATA_HOME", HOME / ".local" / "share")) / "whisp"
+CONFIG_DIR: Final = Path(os.getenv("XDG_CONFIG_HOME", HOME / ".config")) / "voxt"
+DATA_DIR: Final = Path(os.getenv("XDG_DATA_HOME", HOME / ".local" / "share")) / "voxt"
 
 CONFIG_FILE: Final = CONFIG_DIR / "config.yaml"
 
@@ -27,7 +27,7 @@ def _locate_whisper_cli() -> Path:
     """Return an absolute :class:`pathlib.Path` to *whisper-cli*.
 
     Order (first hit wins):
-      1. ``$WHISP_WC_BIN`` – explicit override.
+      1. ``$VOXT_WC_BIN`` – explicit override.
       2. Repo-local build  → ``whisper.cpp/build/bin/whisper-cli``.
       3. First executable named *whisper-cli* found on ``$PATH``.
 
@@ -35,7 +35,7 @@ def _locate_whisper_cli() -> Path:
     """
 
     # 1. Environment override ---------------------------------------------
-    env = os.getenv("WHISP_WC_BIN")
+    env = os.getenv("VOXT_WC_BIN")
     if env:
         p = Path(env).expanduser().resolve()
         if p.is_file():
@@ -56,7 +56,7 @@ def _locate_whisper_cli() -> Path:
 
     # Nothing worked ------------------------------------------------------
     raise FileNotFoundError(
-        "Could not locate *whisper-cli*. Checked $WHISP_WC_BIN, repo-local build and $PATH. "
+        "Could not locate *whisper-cli*. Checked $VOXT_WC_BIN, repo-local build and $PATH. "
         "Run setup.sh or build whisper.cpp manually."
     )
 
@@ -91,7 +91,7 @@ def _locate_base_model() -> Path:
     """Return absolute Path to the default base model (ggml-base.en.bin)."""
 
     # 1. Environment override -------------------------------------------
-    env = os.getenv("WHISP_MODEL_PATH")
+    env = os.getenv("VOXT_MODEL_PATH")
     if env:
         env_path = Path(env).expanduser().resolve()
         if env_path.is_file():
@@ -112,7 +112,7 @@ def _locate_base_model() -> Path:
 
     raise FileNotFoundError(
         "Could not locate the default Whisper model (ggml-base.en.bin).\n"
-        "Checked $WHISP_MODEL_PATH, XDG data dir, and repo-local.\n"
+        "Checked $VOXT_MODEL_PATH, XDG data dir, and repo-local.\n"
         "Run setup.sh or download the model manually."
     )
 

@@ -1,9 +1,9 @@
-# whisp.utils.libw
+# voxt.utils.libw
 # -----------------------------------------------------------------------------
 # Misc utility helpers that are safe to import from anywhere in the project.
 #
 # IMPORTANT: Do **not** put heavy top-level imports here (especially ones that
-# in turn import `whisp.paths`, `whisp.core.config`, …) as that easily leads to
+# in turn import `voxt.paths`, `voxt.core.config`, …) as that easily leads to
 # circular-import hell.  Keep everything lightweight and import lazily inside
 # the individual helpers instead.
 # -----------------------------------------------------------------------------
@@ -19,11 +19,11 @@ from functools import lru_cache
 
 @lru_cache(maxsize=1)
 def _app_cfg():
-    """Return a cached instance of :class:`whisp.core.config.AppConfig`."""
+    """Return a cached instance of :class:`voxt.core.config.AppConfig`."""
     # Import **inside** the function to avoid circular imports during the Python
     # module import phase.  The first call constructs the config object; later
     # calls re-use that same instance.
-    from whisp.core.config import AppConfig  # local import – deliberate
+    from voxt.core.config import AppConfig  # local import – deliberate
 
     return AppConfig()
 

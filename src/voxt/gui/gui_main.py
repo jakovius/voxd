@@ -4,28 +4,28 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from whisp.core.config import get_config
-from whisp.core.logger import SessionLogger
-from whisp.utils.ipc_server import start_ipc_server  # <-- Add this import
-from whisp.core.whisp_core import CoreProcessThread, show_options_dialog
-from whisp.utils.performance import update_last_perf_entry
+from voxt.core.config import get_config
+from voxt.core.logger import SessionLogger
+from voxt.utils.ipc_server import start_ipc_server  # <-- Add this import
+from voxt.core.voxt_core import CoreProcessThread, show_options_dialog
+from voxt.utils.performance import update_last_perf_entry
 
 
-class WhispApp(QWidget):
+class VoxtApp(QWidget):
     def __init__(self):
         super().__init__()
         self.cfg = get_config()
         self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_location)  # type: ignore[attr-defined]
 
-        self.setWindowTitle("whisp")
+        self.setWindowTitle("voxt")
         self.setFixedWidth(300)  # Fix the width
         self.setMinimumHeight(200)  # Only set minimum height
         self.setStyleSheet("background-color: #1e1e1e; color: white;")
 
-        self.status = "Whisp"
+        self.status = "VOXT"
         self.last_transcript = ""
 
-        self.status_button = QPushButton("Whisp")
+        self.status_button = QPushButton("VOXT")
         self.status_button.setFixedSize(200, 50)
         self.status_button.setStyleSheet("""
             QPushButton {
@@ -106,7 +106,7 @@ class WhispApp(QWidget):
             if self.runner_thread and self.runner_thread.isRunning():
                 self.runner_thread.stop_recording()
             return
-        # Ensure the Whisp window does **not** receive the keystrokes we
+        # Ensure the VOXT window does **not** receive the keystrokes we
         # are about to send with ydotool/xdotool.
         self.clearFocus()            # drop keyboard-focus
         self.setWindowState(self.windowState() | Qt.WindowState.WindowMinimized)
@@ -142,7 +142,7 @@ class WhispApp(QWidget):
                         update_last_perf_entry(val)
                     except ValueError:
                         pass
-        self.set_status("Whisp")
+        self.set_status("VOXT")
         # Restore window after typing (optional; comment out if you prefer it
         # to stay minimised)
         self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
@@ -153,7 +153,7 @@ class WhispApp(QWidget):
 
 def main():
     app = QApplication(sys.argv)
-    gui = WhispApp()
+    gui = VoxtApp()
     gui.show()
 
     # IPC server triggers the same as clicking the main button

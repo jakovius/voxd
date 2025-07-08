@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from whisp.utils.libw import verbo
+from voxt.utils.libw import verbo
 
 
 class SessionLogger:
@@ -31,7 +31,7 @@ class SessionLogger:
             if qt_app is not None:  # we are inside GUI / tray → safe to use Qt
                 file_name, _ = QFileDialog.getSaveFileName(
                     parent=None,
-                    caption="Save Whisp Session Log",
+                    caption="Save VOXT Session Log",
                     directory=self.log_location or str(Path.home()),
                     filter="Text files (*.txt);;All files (*)",
                 )
@@ -52,7 +52,7 @@ class SessionLogger:
         file_name = filedialog.asksaveasfilename(
             parent=root,
             initialdir=self.log_location or str(Path.home()),
-            title="Save Whisp Session Log",
+            title="Save VOXT Session Log",
             defaultextension=".txt",
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
         )

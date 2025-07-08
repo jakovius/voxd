@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  Whisp – one-shot installer / updater
+#  VOXT – one-shot installer / updater
 #
 #  • Installs system packages        (apt | dnf | pacman – auto-detected)
 #  • Creates / re-uses Python venv    (.venv)
-#  • Installs Python dependencies & Whisp itself (editable)
+#  • Installs Python dependencies & VOXT itself (editable)
 #  • Clones + builds whisper.cpp      → whisper.cpp/build/bin/whisper-cli
 #  • (Wayland) ensures ydotool + daemon, with fallback source build
 #
@@ -192,7 +192,7 @@ ensure_ydotool() {
       systemctl --user enable --now ydotoold.service || true
       msg "ydotool installed – log out/in once to refresh group membership."
   else
-      msg "${YEL}ydotool could not be installed – Whisp will fall back to clipboard-paste only.${NC}"
+      msg "${YEL}ydotool could not be installed – VOXT will fall back to clipboard-paste only.${NC}"
   fi
 }
 
@@ -236,7 +236,7 @@ msg "Installing Python dependencies…"
 PIP_DISABLE_PIP_VERSION_CHECK=1 \
 pip install --prefer-binary -q -r requirements.txt
 msg "(If you noticed a lengthy C compile: that's 'sounddevice' building against PortAudio headers.)"
-msg "Installing Whisp into venv (editable)…"
+msg "Installing VOXT into venv (editable)…"
 pip install -e .    > /dev/null
 
 # ──────────────────  5. whisper.cpp (once)  ─────────────────────────────────––
@@ -293,12 +293,12 @@ fi
 # ──────────────────  8b. persist absolute paths in config.yaml  ──────────────
 python - <<PY
 from pathlib import Path
-from whisp.core.config import AppConfig
+from voxt.core.config import AppConfig
 cfg = AppConfig()
 cfg.set("whisper_binary", str(Path("$WHISPER_BIN").resolve()))
 cfg.set("model_path", str(Path("$PWD/whisper.cpp/models/ggml-base.en.bin").resolve()))
 cfg.save()
-print("[setup] Absolute paths written to ~/.config/whisp/config.yaml")
+print("[setup] Absolute paths written to ~/.config/voxt/config.yaml")
 PY
 
 # ──────────────────  9. done  ───────────────────────────────────────────────––
@@ -308,7 +308,7 @@ if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && command -v ydotool >/dev/null; the
   echo "ℹ️  Wayland detected – please log out and back in so 'ydotool' gains access to /dev/uinput."
 fi
 echo "Activate venv:   source .venv/bin/activate"
-echo "Run GUI mode:    python -m whisp --mode gui"
+echo "Run GUI mode:    python -m voxt --mode gui"
 echo "---> see in README.md on easy use setup."
 
 # ──────────────────  5b. SELinux policy for whisper-cli  ────────────────────
@@ -334,10 +334,10 @@ if [[ $SELINUX_ACTIVE ]]; then
 fi
 
 # ────────────────── 10. optional pipx global install  ───────────────────────
-# Offer to install pipx (if missing) and register whisp command globally.
+# Offer to install pipx (if missing) and register voxt command globally.
 
 if ! command -v pipx >/dev/null; then
-  read -r -p "pipx not detected – install pipx for a global 'whisp' command? [Y/n]: " reply
+  read -r -p "pipx not detected – install pipx for a global 'voxt' command? [Y/n]: " reply
   reply=${reply:-Y}
   if [[ $reply =~ ^[Yy]$ ]]; then
     case "$PM" in
@@ -351,11 +351,11 @@ if ! command -v pipx >/dev/null; then
 fi
 
 if command -v pipx >/dev/null; then
-  read -r -p "Install Whisp into pipx (global command) now? [Y/n]: " ans
+  read -r -p "Install voxt into pipx (global command) now? [Y/n]: " ans
   ans=${ans:-Y}
   if [[ $ans =~ ^[Yy]$ ]]; then
     pipx install --force "$PWD"
-    echo "✔  'whisp' command installed globally via pipx. Open a new shell if not yet on PATH."
+    echo "✔  'voxt' command installed globally via pipx. Open a new shell if not yet on PATH."
   else
     echo "You can later run: pipx install $PWD"
   fi

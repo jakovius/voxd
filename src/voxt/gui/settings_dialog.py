@@ -32,11 +32,11 @@ from PyQt6.QtWidgets import (
     QAbstractButton,
 )
 
-from whisp.core.config import AppConfig
+from voxt.core.config import AppConfig
 
 
 class SettingsDialog(QDialog):
-    """Modal dialog to view & edit Whisp configuration."""
+    """Modal dialog to view & edit VOXT configuration."""
 
     settingsChanged = pyqtSignal()  # emitted after successful save
 
@@ -56,7 +56,7 @@ class SettingsDialog(QDialog):
         # Notice about global shortcut
         hint = QLabel(
             "<b>Global shortcut</b>: <i>Set up a custom keyboard shortcut that runs: </i>"
-            "<code>bash -c 'whisp --trigger-record'</code> <i>(e.g. Super+R)</i>."
+            "<code>bash -c 'voxt --trigger-record'</code> <i>(e.g. Super+R)</i>."
         )
         hint.setWordWrap(True)
         main_vbox.addWidget(hint)

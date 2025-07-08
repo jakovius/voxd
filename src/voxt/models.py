@@ -1,20 +1,20 @@
-# src/whisp/models.py
+# src/voxt/models.py
 """
 Download, list, remove and activate Whisper GGML models.
 
 CLI usage:
-    python -m whisp.models list
-    python -m whisp.models install  tiny.en      # or base   / medium.en / large
-    python -m whisp.models remove   tiny.en
-    python -m whisp.models use      tiny.en      # marks it active in config.yaml
+    python -m voxt.models list
+    python -m voxt.models install  tiny.en      # or base   / medium.en / large
+    python -m voxt.models remove   tiny.en
+    python -m voxt.models use      tiny.en      # marks it active in config.yaml
 """
 
 from __future__ import annotations
 import argparse, sys, shutil, hashlib
 from pathlib import Path
-from whisp.paths import DATA_DIR
-from whisp.core.config import AppConfig
-from whisp.utils.setup_utils import print_section
+from voxt.paths import DATA_DIR
+from voxt.core.config import AppConfig
+from voxt.utils.setup_utils import print_section
 
 # --------------------------------------------------------------------------- #
 # 0.  Model catalogue – keep in sync with whisper.cpp/download-ggml-model.sh
@@ -67,7 +67,7 @@ CATALOGUE = {
     "large-v3-turbo-q8_0":( 834,"01bf15bedffe9f39d65c1b6ff9b687ea91f59e0e",HF+"ggml-large-v3-turbo-q8_0.bin"),
 }
 
-# ~/.local/share/whisp/models (or $XDG_DATA_HOME/whisp/models)
+# ~/.local/share/voxt/models (or $XDG_DATA_HOME/voxt/models)
 CACHE_DIR   = DATA_DIR / "models"  # renamed variable kept for minimal diff
 REPO_MODELS = Path(__file__).resolve().parents[2] / "whisper.cpp" / "models"   # keeps legacy path working
 
@@ -135,7 +135,7 @@ def ensure(key: str, quiet=False, *, no_check=False, progress_cb=None) -> Path:
     the original tqdm behaviour for CLI usage (when *progress_cb* is None).
     """
     if key not in CATALOGUE:
-        raise ValueError(f"Unknown model '{key}'. See `whisp models list`")
+        raise ValueError(f"Unknown model '{key}'. See `voxt models list`")
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     dest = CACHE_DIR / _pretty_name(key)
@@ -188,7 +188,7 @@ def set_active(key: str | None):
 # --------------------------------------------------------------------------- #
 def _cli(argv=None):
     p = argparse.ArgumentParser(
-        prog="whisp models",
+        prog="voxt models",
         description="Manage ggml Whisper models"
     )
     p.add_argument("--no-check", action="store_true",

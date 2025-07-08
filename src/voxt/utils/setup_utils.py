@@ -3,9 +3,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from whisp.paths import DATA_DIR
+from voxt.paths import DATA_DIR
 import yaml
-from whisp.core.config import AppConfig
+from voxt.core.config import AppConfig
 import tempfile
 import platform
 
@@ -31,12 +31,12 @@ def detect_backend() -> str:
     """
     Return "wayland", "x11", or "unknown".
 
-    This is a pass-through to whisp.core.typer.detect_backend so that
+    This is a pass-through to voxt.core.typer.detect_backend so that
     external callers (and the pytest suite) can import it from the
     utilities namespace.
     """
     try:
-        from whisp.core.typer import detect_backend as _impl
+        from voxt.core.typer import detect_backend as _impl
         return _impl()
     except Exception:
         # Fallback copy-pasted from the original implementation
