@@ -1,6 +1,7 @@
 import sys
 import argparse
 from whisp.core.config import AppConfig
+from whisp.utils.hotkey_probe import get_record_shortcut
 
 from whisp.paths import CONFIG_FILE, resource_path
 import shutil, yaml
@@ -10,20 +11,6 @@ def ensure_user_config() -> dict:
         default_tpl = resource_path("defaults/config.yaml")
         shutil.copy(default_tpl, CONFIG_FILE)
     return yaml.safe_load(CONFIG_FILE.read_text())
-
-def check_hotkey(cfg, mode):
-    # Only check for hotkey in modes that require it
-    if mode in ("cli", "gui", "whisp"):
-        hotkey = getattr(cfg, "hotkey_record", None)
-        if not hotkey:
-            print(
-                "[Whisp App] ⚠️  No global hotkey configured for recording.\n"
-                "Please set up a system-wide shortcut for recording in your OS settings,\n"
-                "and add the shortcut (e.g., 'ctrl+alt+r') as 'hotkey_record' in your config.yaml.\n"
-                "See documentation for details."
-            )
-            # Optionally, continue with fallback (manual trigger), or exit:
-            # sys.exit(1)
 
 def main():
     parser = argparse.ArgumentParser(description="Whisp App Entry Point", add_help=False)
@@ -74,12 +61,19 @@ def main():
 
     if args.diagnose:
         print(f"[Diagnose] Current mode: {mode}")
-        print(f"[Diagnose] Configured hotkey_record: {getattr(cfg, 'hotkey_record', None)}")
+        key_dbg = get_record_shortcut() or "(none detected)"
+        print(f"[Diagnose] Detected shortcut: {key_dbg}")
         sys.exit(0)
 
     print(f"Launching Whisp app in '{mode}' mode...")
 
-    check_hotkey(cfg, mode)
+    # show detected shortcut or hint
+    key = get_record_shortcut()
+    if mode == "cli":
+        if key:
+            print(f"[Whisp] Record shortcut detected: {key}")
+        else:
+            print("[Whisp] Tip: create a global shortcut that runs `bash -c 'whisp --trigger-record'` (e.g. Super+R)")
 
     if mode == "cli":
         # Forward unknown args to cli_main
@@ -87,10 +81,10 @@ def main():
         sys.argv = [sys.argv[0]] + unknown
         cli_main_mod.main()
     elif mode == "gui":
-        from whisp.gui.main import main as gui_main
+        from whisp.gui.gui_main import main as gui_main
         gui_main()
     elif mode == "whisp":
-        from whisp.whisp_mode.tray import main as tray_main
+        from whisp.tray.tray_main import main as tray_main
         tray_main()
     else:
         print(f"[__main__] ❌ Unknown app_mode: {mode}")

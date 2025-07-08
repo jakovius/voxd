@@ -1,5 +1,4 @@
 # app_mode: whisp
-hotkey_record: ctrl+alt+r
 log_enabled: true
 log_location: ''
 perf_collect: false

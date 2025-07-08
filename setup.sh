@@ -44,24 +44,99 @@ elif command -v pacman>/dev/null; then
 else die "Unsupported distro – need apt, dnf or pacman."; fi
 msg "Package manager: $PM"
 
+# ────────────────── Pre-flight: ensure curl & internet ──────────────────────
+if ! command -v curl >/dev/null; then
+  msg "${RED}curl not found – required for downloads.${NC}"
+  case "$PM" in
+    apt)   echo "Install with: sudo apt install curl"   ;;
+    dnf)   echo "Install with: sudo dnf install curl"   ;;
+    pacman)echo "Install with: sudo pacman -S curl"     ;;
+  esac
+  die "Please install curl and re-run setup.sh."
+fi
+
+# Detect offline mode (no outbound HTTPS)
+OFFLINE=""
+if ! curl -s --head https://github.com >/dev/null 2>&1; then
+  OFFLINE=1
+  msg "${YEL}No internet connectivity – remote downloads will be skipped.${NC}"
+fi
+
+# ────────────────── SELinux detection (Fedora) ─────────────────────────────–
+SELINUX_ACTIVE=""
+if command -v getenforce >/dev/null && [[ $(getenforce) == Enforcing && $PM == dnf ]]; then
+    SELINUX_ACTIVE=1
+    msg "SELinux enforcing mode detected – will prepare local policy for whisper-cli."
+fi
+
 # ──────────────────  0. make sure compilers exist  ───────────────────────────–
 need_compiler
 
-# ──────────────────  1. common system deps list  ─────────────────────────────–
-SYS_DEPS=( git ffmpeg gcc make cmake curl xclip xsel wl-clipboard )
-
+# ──────────────────  1. distro-specific dependency list  ────────────────────
 case "$PM" in
-  apt)   SYS_DEPS+=(python3-venv libxcb-cursor0 libxcb-xinerama0
-                    libportaudio2 portaudio19-dev) ;;
-  dnf)   SYS_DEPS+=("@development-tools" gcc-c++
-                    python3-devel python3-virtualenv
-                    xcb-util-cursor xcb-util-wm
-                    portaudio portaudio-devel) ;;
-  pacman)SYS_DEPS+=(base-devel python-virtualenv
-                    xcb-util-cursor xcb-util-wm portaudio) ;;
+  apt)
+      SYS_DEPS=( git ffmpeg gcc make cmake curl xclip xsel wl-clipboard \
+                 python3-venv libxcb-cursor0 libxcb-xinerama0 \
+                 libportaudio2 portaudio19-dev )
+      ;;
+  dnf)
+      SYS_DEPS=( git ffmpeg gcc gcc-c++ make cmake curl xclip xsel wl-clipboard \
+                 python3-devel python3-virtualenv \
+                 xcb-util-cursor-devel xcb-util-wm-devel \
+                 portaudio portaudio-devel )
+      ;;
+  pacman)
+      SYS_DEPS=( git ffmpeg gcc make cmake curl xclip xsel wl-clipboard \
+                 base-devel python-virtualenv \
+                 xcb-util-cursor xcb-util-wm portaudio )
+      ;;
 esac
 
+# Append SELinux dev package when needed (Fedora only)
+if [[ $SELINUX_ACTIVE ]]; then
+  SYS_DEPS+=(policycoreutils-devel)
+fi
+
+# Helper – install a package, trying an alternate name if provided
+install_pkg() {
+  local pkg="$1" alt="${2:-}"
+  if $INSTALL "$pkg"; then
+      return 0
+  elif [[ -n "$alt" ]]; then
+      $INSTALL "$alt"
+  fi
+}
+
 # ──────────────────  2. Wayland?  figure out ydotool path  ────────────────────
+# Helper to fetch latest release asset URLs from GitHub (no jq dependency)
+get_latest_ydotool_asset() {
+  [[ $OFFLINE ]] && return 1
+  local ext="$1"
+  curl -sL https://api.github.com/repos/ReimuNotMoe/ydotool/releases/latest \
+    | grep -oE "https://[^\"]+ydotool[^\"]+\.${ext}" | head -n1
+}
+
+# Attempt to install pre-built .deb / .rpm released upstream
+install_ydotool_prebuilt() {
+  case "$PM" in
+    apt)
+        local url tmp
+        url=$(get_latest_ydotool_asset deb) || return 1
+        [[ -z "$url" ]] && return 1
+        tmp=$(mktemp --suffix=.deb)
+        curl -L -o "$tmp" "$url" && sudo dpkg -i "$tmp"
+        ;;
+    dnf)
+        local url tmp
+        url=$(get_latest_ydotool_asset rpm) || return 1
+        [[ -z "$url" ]] && return 1
+        tmp=$(mktemp --suffix=.rpm)
+        curl -L -o "$tmp" "$url" && sudo dnf install -y "$tmp"
+        ;;
+    *) return 1 ;;
+  esac
+}
+
 install_ydotool_pkg() {
   case "$PM" in
     apt)   $INSTALL ydotool   && return 0 ;;
@@ -85,37 +160,68 @@ ensure_ydotool() {
   [[ ${XDG_SESSION_TYPE:-} != wayland* ]] && return 0
   command -v ydotool >/dev/null && return 0
 
-  msg "ydotool missing – trying distro package first…"
-  if ! install_ydotool_pkg; then
-     # add build deps that our distro doesn't already have
-     case "$PM" in
-       apt)   SYS_DEPS+=(libevdev-dev libudev-dev libconfig++-dev \
-                         libboost-program-options-dev) ;;
-       dnf)   SYS_DEPS+=(libevdev-devel libudev-devel libconfig++-devel \
-                         boost-program-options-devel) ;;
-       pacman)SYS_DEPS+=(libevdev libconfig++ boost) ;;
-     esac
-     $INSTALL "${SYS_DEPS[@]}"      # top-up missing headers, if any
-     install_ydotool_src
+  msg "ydotool missing – attempting installation…"
+  # 1) distro repo
+  install_ydotool_pkg || true
+  # 2) upstream pre-built package
+  if ! command -v ydotool >/dev/null; then
+      install_ydotool_prebuilt || true
+  fi
+  # 3) build from source as last resort
+  if ! command -v ydotool >/dev/null; then
+      msg "Building ydotool from source (this may take a few minutes)…"
+      case "$PM" in
+        apt)   SYS_DEPS+=(libevdev-dev libudev-dev libconfig++-dev \
+                          libboost-program-options-dev) ;;
+        dnf)   SYS_DEPS+=(libevdev-devel libudev-devel libconfig++-devel \
+                          boost-program-options-devel) ;;
+        pacman)SYS_DEPS+=(libevdev libconfig++ boost) ;;
+      esac
+      $INSTALL "${SYS_DEPS[@]}" || true
+      install_ydotool_src || true
   fi
 
-  # groups / uinput
-  sudo groupadd -f input
-  sudo usermod -aG input "$USER"
-  printf 'KERNEL=="uinput", MODE="0660", GROUP="input"\n' \
-      | sudo tee /etc/udev/rules.d/99-uinput.rules >/dev/null
-  sudo udevadm control --reload-rules && sudo udevadm trigger
-
-  # enable & start the per-user daemon
-  systemctl --user daemon-reload
-  systemctl --user enable --now ydotoold.service || true
-
-  msg "ydotool installed – log out/in once to refresh group membership."
+  # Post-install setup if binary exists
+  if command -v ydotool >/dev/null; then
+      sudo groupadd -f input
+      sudo usermod -aG input "$USER"
+      printf 'KERNEL=="uinput", MODE="0660", GROUP="input"\n' \
+          | sudo tee /etc/udev/rules.d/99-uinput.rules >/dev/null
+      sudo udevadm control --reload-rules && sudo udevadm trigger
+      systemctl --user daemon-reload
+      systemctl --user enable --now ydotoold.service || true
+      msg "ydotool installed – log out/in once to refresh group membership."
+  else
+      msg "${YEL}ydotool could not be installed – Whisp will fall back to clipboard-paste only.${NC}"
+  fi
 }
 
 # ──────────────────  3. install system packages  ─────────────────────────────–
 msg "Installing system deps: ${SYS_DEPS[*]}"
-$INSTALL "${SYS_DEPS[@]}"
+
+# ---------- 1) try one big transaction ----------
+if $INSTALL "${SYS_DEPS[@]}"; then
+    msg "System deps installed / already present."
+else
+    msg "Some packages failed – resolving individually…"
+    failed_pkgs=()
+
+    # ---------- 2) fallback: try each package alone ----------
+    for pkg in "${SYS_DEPS[@]}"; do
+        if ! $INSTALL "$pkg" 2>/dev/null; then
+            failed_pkgs+=("$pkg")
+        fi
+    done
+
+    # ---------- 3) final aliases ----------
+    for pkg in "${failed_pkgs[@]}"; do
+        case "$pkg" in
+          xcb-util-cursor-devel) install_pkg "$pkg" xcb-util-cursor ;;  # Fedora alias
+          xcb-util-wm-devel)     install_pkg "$pkg" xcb-util-wm     ;;
+          *)                     msg "⚠️  Could not install $pkg (may be obsolete on this distro)" ;;
+        esac
+    done
+fi
 
 # ──────────────────  4. python venv & deps  ─────────────────────────────────––
 if [[ ! -d .venv ]]; then
@@ -123,9 +229,13 @@ if [[ ! -d .venv ]]; then
   python3 -m venv .venv
 fi
 source .venv/bin/activate
-python -m pip install -U pip > /dev/null
+# Upgrade pip quietly
+python -m pip install -U pip -q
 msg "Installing Python dependencies…"
-pip install -r requirements.txt > /dev/null
+# Prefer binary wheels to avoid noisy C-builds; keep output minimal
+PIP_DISABLE_PIP_VERSION_CHECK=1 \
+pip install --prefer-binary -q -r requirements.txt
+msg "(If you noticed a lengthy C compile: that's 'sounddevice' building against PortAudio headers.)"
 msg "Installing Whisp into venv (editable)…"
 pip install -e .    > /dev/null
 
@@ -136,16 +246,20 @@ if command -v whisper-cli >/dev/null; then
   msg "Found existing whisper-cli at $WHISPER_BIN – skipping source build."
 else
   # Build from source inside repo_root/whisper.cpp  (old behaviour)
-  if [[ ! -d whisper.cpp ]]; then
-    msg "Cloning whisper.cpp…"
-    git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+  if [[ $OFFLINE ]]; then
+    msg "Offline mode – skipping whisper.cpp git clone. Assuming sources are present."
+  else
+    if [[ ! -d whisper.cpp ]]; then
+        msg "Cloning whisper.cpp…"
+        git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+    fi
   fi
   if [[ ! -x whisper.cpp/build/bin/whisper-cli ]]; then
-    msg "Building whisper.cpp (first time only)…"
-    cmake -S whisper.cpp -B whisper.cpp/build
-    cmake --build whisper.cpp/build -j"$(nproc)"
+      msg "Building whisper.cpp (this may take a while)…"
+      cmake -S whisper.cpp -B whisper.cpp/build
+      cmake --build whisper.cpp/build -j"$(nproc)"
   else
-    msg "whisper.cpp already built."
+      msg "whisper.cpp already built."
   fi
   WHISPER_BIN="$PWD/whisper.cpp/build/bin/whisper-cli"
 fi
@@ -153,10 +267,14 @@ fi
 # ──────────────────  6. default model  ───────────────────────────────────────–
 MODEL_DIR=whisper.cpp/models ; MODEL_FILE=$MODEL_DIR/ggml-base.en.bin
 if [[ ! -f $MODEL_FILE ]]; then
-  msg "Downloading default Whisper model (base.en)…"
-  mkdir -p "$MODEL_DIR"
-  curl -L -o "$MODEL_FILE" \
-       https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+  if [[ $OFFLINE ]]; then
+    msg "Offline mode – model file not found. Please place ggml-base.en.bin into $MODEL_DIR manually."
+  else
+    msg "Downloading default Whisper model (base.en)…"
+    mkdir -p "$MODEL_DIR"
+    curl -L -o "$MODEL_FILE" \
+         https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+  fi
 fi
 
 # ──────────────────  7. ydotool (Wayland helper)  ─────────────────────────────
@@ -185,6 +303,62 @@ PY
 
 # ──────────────────  9. done  ───────────────────────────────────────────────––
 msg "${GRN}Setup complete!${NC}"
+# Wayland reminder for ydotool permissions
+if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && command -v ydotool >/dev/null; then
+  echo "ℹ️  Wayland detected – please log out and back in so 'ydotool' gains access to /dev/uinput."
+fi
 echo "Activate venv:   source .venv/bin/activate"
 echo "Run GUI mode:    python -m whisp --mode gui"
 echo "---> see in README.md on easy use setup."
+
+# ──────────────────  5b. SELinux policy for whisper-cli  ────────────────────
+if [[ $SELINUX_ACTIVE ]]; then
+  msg "Configuring SELinux policy for whisper-cli (execmem)…"
+  cat > whisper_execmem.te <<'EOF'
+module whisper_execmem 1.0;
+require {
+    type user_home_t;
+    class process execmem;
+}
+allow user_home_t self:process execmem;
+EOF
+  checkmodule -M -m -o whisper_execmem.mod whisper_execmem.te
+  semodule_package -o whisper_execmem.pp -m whisper_execmem.mod
+  sudo semodule -i whisper_execmem.pp
+  rm -f whisper_execmem.te whisper_execmem.mod whisper_execmem.pp
+fi
+
+# SELinux reminder
+if [[ $SELINUX_ACTIVE ]]; then
+  echo "ℹ️  SELinux policy 'whisper_execmem' installed. If whisper-cli still throws execmem denials, consult README or run 'sudo setenforce 0' for a temporary test."
+fi
+
+# ────────────────── 10. optional pipx global install  ───────────────────────
+# Offer to install pipx (if missing) and register whisp command globally.
+
+if ! command -v pipx >/dev/null; then
+  read -r -p "pipx not detected – install pipx for a global 'whisp' command? [Y/n]: " reply
+  reply=${reply:-Y}
+  if [[ $reply =~ ^[Yy]$ ]]; then
+    case "$PM" in
+      apt)   sudo apt install -y pipx ;;
+      dnf)   sudo dnf install -y pipx ;;
+      pacman)sudo pacman -S --noconfirm pipx ;;
+    esac
+    pipx ensurepath
+    export PATH="$HOME/.local/bin:$PATH"
+  fi
+fi
+
+if command -v pipx >/dev/null; then
+  read -r -p "Install Whisp into pipx (global command) now? [Y/n]: " ans
+  ans=${ans:-Y}
+  if [[ $ans =~ ^[Yy]$ ]]; then
+    pipx install --force "$PWD"
+    echo "✔  'whisp' command installed globally via pipx. Open a new shell if not yet on PATH."
+  else
+    echo "You can later run: pipx install $PWD"
+  fi
+else
+  echo "pipx not available – skip global command install. You can install pipx later."
+fi

@@ -1,0 +1,10 @@
+GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
+
+This file is a placeholder copy of the first header paragraphs. For the full
+license text, see https://www.gnu.org/licenses/agpl-3.0.txt or the upstream
+`ydotool` repository.
+
+Whisp includes or depends on the external tool "ydotool" which is distributed
+under the GNU AGPLv3. Whisp itself remains MIT-licensed; this file is provided
+in compliance with §5 AGPL (conveying a copy of the Licence). 

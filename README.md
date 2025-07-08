@@ -1,8 +1,8 @@
 # Whisp - Talk & Type on Linux 🗣️⌨️
 
-A lightning-fast voice-to-text helper for **any** Linux app, using local voice processing.  
-Hit a global shortcut, speak, and watch your words appear wherever the cursor lives.  
-Optionally, have your transcript rewritten by local or remote AI model before output. 
+A fast voice-to-text helper for **any** Linux app, using **LOCAL** voice processing.  
+Hit a **global shortcut**, speak, and watch your words appear wherever the cursor lives.  
+Optionally, have your transcript **AI-rewritten** by **LOCAL** (Ollama) or remote AI model before output. 
 
 ---
 
@@ -13,10 +13,9 @@ Optionally, have your transcript rewritten by local or remote AI model before ou
 | **Whisper.cpp backend**          | Local, offline, MIT-licensed large-vocab ASR.                           |
 | **Simulated typing**             | Works on Wayland (*ydotool*) **and** X11 (*xdotool*).                   |
 | **Clipboard**                    | Auto-copies or types straight into the currently focused window.        |
-| Multiple UI surfaces             | CLI, GUI (minimal PyQt6), WHISP (system tray) & HEAR (one-shot via cli) |
-| Optional AI post-process         | Type/copy-to-clipboard an AI-rewritten output via local or remote LLM   |
-| Logging & benchmarks             | Session log plus opt-in local performance data (CSV).                          |
-| AI Post-Processing (AIPP)	     | Process transcripts via local or cloud LLMs. GUI prompt editor.         |
+| **Multiple UI** surfaces             | CLI, GUI (minimal PyQt6), TRAY (system tray) |
+| **Logging** & **performance**             | Session log plus opt-in local performance data (CSV).                          |
+| AI Post-Processing (**AIPP**)	     | Process transcripts via local or cloud LLMs. GUI prompt editor.         |
 
 ---
 
@@ -28,32 +27,24 @@ After this you will have a global `whisp` command available in any shell.
 
 ```bash
 git clone https://github.com/jacob8472/whisp.git
-cd whisp
-./setup.sh               # builds whisper.cpp + checks OS dependencies
-pipx install .   # ⏱️ <15 s → drops ~/.local/bin/whisp
-# if you are developing/hacking, consider instead: `pipx install --editable .`
+cd whisp && ./setup.sh    # builds deps *and* installs a global `whisp` command
 ```
-> **Note:**  
-> The setup script will symlink the `whisper-cli` binary to `~/.local/bin/whisper-cli` so it is always available on your `$PATH`.  
-> If you see errors about `whisper-cli not found`, make sure `~/.local/bin` is in your `$PATH` (run `pipx ensurepath` and restart your shell).
 
-If you don’t have pipx yet:
+The setup script now offers to install **pipx** automatically (default *Yes*)
+and registers the `whisp` command on your `$PATH`.  Developers can still run
 
 ```bash
-sudo apt install -y pipx          # Debian/Ubuntu – use dnf / pacman on other distros
-pipx ensurepath                    # makes sure ~/.local/bin is on your $PATH
-logout && login                    # or: source ~/.bashrc
+pipx install --editable .
 ```
-*Why pipx?*
-`pipx` builds its **own** isolated venv under `~/.local/pipx/venvs/whisp/` and writes a tiny shim script to `~/.local/bin/whisp`.
-You never have to remember “`source .venv/bin/activate`” again — just run `whisp` like any normal program.
+
+after cloning if they prefer an editable install.
 
 ---
 
 ## 🏃 Usage — Setting up a **global Record/Stop shortcut**
 
 1. **Open your system keyboard-shortcuts panel**
-   *GNOME:* Settings → Keyboard → “Custom Shortcuts”
+   *GNOME:* Settings → Keyboard → "Custom Shortcuts"
    *KDE / XFCE / Cinnamon:* similar path.
 
 2. **Add a new shortcut:**
@@ -62,7 +53,7 @@ You never have to remember “`source .venv/bin/activate`” again — just run 
 | ------------ | ---------------------------------- |
 | **Name**     | Whisp • Record                     |
 | **Command**  | `bash -c 'whisp --trigger-record'` |
-| **Shortcut** | e.g. `Ctrl + Alt + R`              |
+| **Shortcut** | e.g. `Super + r`              |
 
 3. Click **Add / Save**.
 4. Launch Whisp in any mode (CLI, GUI, or tray). From now on:
@@ -181,7 +172,7 @@ If an API key is missing, cloud-based AIPP providers will not work and you will 
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | *Press hotkey, nothing happens*    | Troubleshoot with this command: `gnome-terminal -- bash -c "whisp --trigger-record; read -p 'Press Enter...'"` |
 | *Transcript printed but not typed* | Wayland: `ydotool` not installed or user not in `input` group → run `setup_ydotool.sh`, relog.                 |
-| *“whisper-cli not found”*          | Build failed - rerun `./setup.sh` and check cmake output.                                                      |
+| *"whisper-cli not found"*          | Build failed - rerun `./setup.sh` and check cmake output.                                                      |
 | *Mic not recording*                | Verify in system settings (or e.g.`pavucontrol`) input device mic is active and not muted.                                         |
 | Clipboard empty                    | Disable/enable SPICE clipboard sync in VM; ensure `xclip` or `wl-copy` present.                                |
 
@@ -225,7 +216,7 @@ systemctl --user stop  ydotoold.service 2>/dev/null
 systemctl --user disable ydotoold.service 2>/dev/null
 rm -f ~/.config/systemd/user/ydotoold.service
 
-# 3. wipe Whisp’s XDG dirs
+# 3. wipe Whisp's XDG dirs
 rm -rf ~/.config/whisp        # settings file
 rm -rf ~/.cache/whisp         # auto-built whisper.cpp, downloaded models, logs
 

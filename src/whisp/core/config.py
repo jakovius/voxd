@@ -9,7 +9,6 @@ from whisp.paths import resolve_whisper_binary, resolve_model_path, DATA_DIR  # 
 DEFAULT_CONFIG = {
     "perf_collect": False,
     "perf_accuracy_rating_collect": True,
-    "hotkey_record": "ctrl+alt+r",
     "log_enabled": True,
     "log_location": "",
     "simulate_typing": True,

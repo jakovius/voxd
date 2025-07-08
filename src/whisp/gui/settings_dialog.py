@@ -53,6 +53,14 @@ class SettingsDialog(QDialog):
         # ---- Layout scaffold ------------------------------------------------
         main_vbox = QVBoxLayout(self)
 
+        # Notice about global shortcut
+        hint = QLabel(
+            "<b>Global shortcut</b>: <i>Set up a custom keyboard shortcut that runs: </i>"
+            "<code>bash -c 'whisp --trigger-record'</code> <i>(e.g. Super+R)</i>."
+        )
+        hint.setWordWrap(True)
+        main_vbox.addWidget(hint)
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         inner = QWidget()
@@ -68,7 +76,6 @@ class SettingsDialog(QDialog):
         self._add_checkbox(form, "simulate_typing", "Simulate typing")
         self._add_spin(form, "typing_delay", "Typing delay (ms)", 0, 1000)
         self._add_doublespin(form, "typing_start_delay", "Start delay (s)", 0, 5, step=0.05)
-        self._add_line(form, "hotkey_record", "Record hot-key")
 
         # ------------------------------------------------------------------
         #  Logging & Performance
@@ -219,12 +226,6 @@ class SettingsDialog(QDialog):
         form.addRow(label, dsb)
         self._widgets[key] = dsb
         return dsb
-
-    def _add_line(self, form: QFormLayout, key: str, label: str) -> QLineEdit:
-        le = QLineEdit(str(self.cfg.data.get(key, "")))
-        form.addRow(label, le)
-        self._widgets[key] = le
-        return le
 
     def _add_filepicker(
         self,

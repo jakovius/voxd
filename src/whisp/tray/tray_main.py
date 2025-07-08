@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon, QAction
 from PyQt6.QtCore import Qt, QObject, QTimer, QThread
+from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QApplication, QStyle
 
 from whisp.core.config import get_config
 from whisp.core.logger import SessionLogger
