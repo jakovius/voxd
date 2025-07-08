@@ -71,6 +71,12 @@ whisp --tray    # sits in the tray; perfect for continuous dictation
 whisp --cli      # terminal REPL; 'h' shows commands
 ```
 
+**Add app-menu launchers later**
+```bash
+./launcher_setup.sh        # pick GUI, Tray, or both
+./launcher_setup.sh --edit # fix existing launchers (if they freeze on "Typing...")
+```
+
 *(The very first run may download/build its own `whisper-cli` into the app's root — symlinks it to `~/.local/bin/` — subsequent starts are instant.)*
 
 
@@ -174,43 +180,71 @@ If an API key is missing, cloud-based AIPP providers will not work and you will 
 
 ---
 
-## Removal
+## 🗑️  Removal / Uninstall
 
-**If the app was installed via `git clone` and running `setup.sh`:**
+### 1. Repo-clone install (`./setup.sh`)
+If you cloned this repository and ran `./setup.sh` inside it:
 
 ```bash
-cd ~/where/you/cloned/whisp
-rm -rf .venv # kill the virtual-env
-rm -rf whisper.cpp # if whisper.cpp was built in the same folder
-cd .. && rm -rf whisp # remove the repo folder
+# From inside the repo folder
+# (1) leave the venv if it is currently active
+deactivate 2>/dev/null || true
+
+# (2) delete everything that the helper script created in-place
+rm -rf .venv              # Python virtual-env
+rm -rf whisper.cpp        # whisper.cpp sources + binaries
+rm -f  ~/.local/bin/whisper-cli   # symlink created by setup.sh
+
+# (3) finally remove the repo folder itself
+cd .. && rm -rf whisp
 ```
 
-**If the app was installed via `pipx install .`:**
+### 2. pipx install
+If Whisp was installed through **pipx** (either directly or via the prompt at the end of `setup.sh`):
 
 ```bash
-pipx uninstall whisp # removes venv, script, deps
+pipx uninstall whisp
 ```
----
 
-**Optional housekeeping:**
+### 3. Optional runtime clean-up
+These steps remove user-level state that Whisp (or its Wayland helper) may have created. They are **safe to skip** – do them only if you want a fully pristine system.
 
 ```bash
-# 1. kill anything still running
-pkill -f whisp || true
-pkill -f ydotoold || true
+# Stop any live processes
+pkill -f whisp      || true
+pkill -f ydotoold   || true
 
-# 2. user-level systemd bits (only if you ran setup_ydotool.sh)
-systemctl --user stop  ydotoold.service 2>/dev/null
-systemctl --user disable ydotoold.service 2>/dev/null
+# Systemd user service (only if you previously ran setup_ydotool.sh)
+systemctl --user stop    ydotoold.service   2>/dev/null || true
+systemctl --user disable ydotoold.service   2>/dev/null || true
 rm -f ~/.config/systemd/user/ydotoold.service
 
-# 3. wipe Whisp's XDG dirs
-rm -rf ~/.config/whisp        # settings file
-rm -rf ~/.cache/whisp         # auto-built whisper.cpp, downloaded models, logs
+# XDG config & cache
+rm -rf ~/.config/whisp      # settings file, absolute paths, etc.
+rm -rf ~/.cache/whisp       # logs, downloaded models (if any)
 
-# 4. any stray desktop launchers or symlinks
+# Desktop launcher
 rm -f ~/.local/share/applications/whisp.desktop
-sudo rm -f /usr/local/bin/whisp  # only if you manually linked it
+rm -f ~/.local/share/applications/whisp-*.desktop
+
+# Udev rule (Wayland only ‑ created for ydotool)
+sudo rm -f /etc/udev/rules.d/99-uinput.rules 2>/dev/null || true
+
+# Optionally remove yourself from the 'input' group again
+# (Only necessary if you added it just for ydotool)
+sudo gpasswd -d "$USER" input 2>/dev/null || true
 ```
+
+### 4. System packages
+`setup.sh` installs broadly useful distro packages (ffmpeg, gcc, cmake, portaudio, …). Most users keep them. If you **really** want to roll back, remove them with your package manager, e.g.
+
+```bash
+# Debian / Ubuntu example
+sudo apt remove ffmpeg portaudio19-dev cmake
+```
+
+That's it – Whisp is now completely removed from your system.
+
+---
 
 Enjoy seamless voice-typing on Linux - and if you build something cool on top, open a PR or say hi!

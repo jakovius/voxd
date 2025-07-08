@@ -78,11 +78,20 @@ class CoreProcessThread(QThread):
         except Exception:
             pass  # logging failures should never crash the thread
 
-        clipboard.copy(final_text)
+        # Copy to clipboard unless typing is enabled with paste mode (delay <= 0)
+        # to avoid double-copying to clipboard
+        typing_will_paste = (self.cfg.simulate_typing and 
+                           self.cfg.typing_delay <= 0)
+        
+        if not typing_will_paste and final_text:
+            clipboard.copy(final_text)
 
         if self.cfg.simulate_typing and final_text:
             self.status_changed.emit("Typing")
-            typer.type(final_text)
+            try:
+                typer.type(final_text)
+            except Exception as e:
+                print(f"[core] Typing failed: {e}")
             print()
 
         # ── Accuracy rating (GUI prompt handled in main thread) ---------
