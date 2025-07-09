@@ -5,9 +5,12 @@ import sys
 import threading
 from typing import Any, cast
 
+# Runtime auto-setup helper
+from voxt.utils.whisper_auto import ensure_whisper_cli
+
 from voxt.core.config import AppConfig
 from voxt.core.logger import SessionLogger
-from voxt.core.transcriber import voxterTranscriber
+from voxt.core.transcriber import WhisperTranscriber  # type: ignore
 from voxt.core.aipp import get_final_text
 from voxt.utils.core_runner import AudioRecorder, ClipboardManager, SimulatedTyper
 from voxt.utils.ipc_server import start_ipc_server
@@ -155,6 +158,8 @@ def main():
     args = parser.parse_args()
 
     cfg = cast(Any, AppConfig())
+    # Ensure whisper-cli exists (auto-build if missing)
+    ensure_whisper_cli("cli")
     logger = SessionLogger(cfg.log_enabled, cfg.log_location)
 
     # --- Apply CLI AIPP overrides (in-memory only) ---

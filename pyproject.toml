@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "voxt"
-version = "0.9.0"
+dynamic = ["version"]
 description = "Voice-typing helper powered by whisper.cpp"
 authors = [{ name = "Jakov", email = "jakov.iv@proton.me" }]
 requires-python = ">=3.9"
@@ -25,3 +25,22 @@ dependencies = [
 [project.scripts]
 voxt = "voxt.__main__:main"
 voxt-model = "voxt.models:_cli"
+
+[tool.hatch.build]
+package-dir = "src"
+include = [
+  "setup.sh",
+  "setup_ydotool.sh",
+  "src/voxt/assets/*.png",
+  "src/voxt/defaults/*.yaml",
+  "launcher_setup.sh"
+]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["voxt"]
+
+[tool.hatch.build.targets.editable]
+packages = ["voxt"]

@@ -1,5 +1,6 @@
-from PyQt6.QtCore import QThread, pyqtSignal, Qt
-from PyQt6.QtWidgets import (
+# pyright: reportMissingImports=false
+from PyQt6.QtCore import QThread, pyqtSignal, Qt  # type: ignore
+from PyQt6.QtWidgets import (  # type: ignore
     QDialog, QVBoxLayout, QPushButton, QFileDialog, QMessageBox,
     QGroupBox, QHBoxLayout, QCheckBox, QComboBox, QLineEdit, QLabel,
     QTextEdit, QDialogButtonBox, QRadioButton, QGridLayout, QLayout,
@@ -8,6 +9,7 @@ from PyQt6.QtWidgets import (
 import yaml
 from voxt.core.aipp import get_final_text
 from voxt.core.model_manager import show_model_manager
+from voxt.core.transcriber import WhisperTranscriber  # type: ignore
 
 class CoreProcessThread(QThread):
     finished = pyqtSignal(str)
@@ -24,7 +26,6 @@ class CoreProcessThread(QThread):
 
     def run(self):
         from voxt.core.recorder import AudioRecorder
-        from voxt.core.transcriber import voxterTranscriber
         from voxt.core.typer import SimulatedTyper
         from voxt.core.clipboard import ClipboardManager
         from time import time
@@ -32,10 +33,26 @@ class CoreProcessThread(QThread):
         import psutil
 
         recorder = AudioRecorder()
-        transcriber = WhisperTranscriber(
-            model_path=self.cfg.model_path,
-            binary_path=self.cfg.whisper_binary
-        )
+
+        # Ensure whisper-cli exists – attempt auto-build when missing
+        from voxt.utils.whisper_auto import ensure_whisper_cli  # local import to avoid GUI deps in headless tests
+
+        try:
+            transcriber = WhisperTranscriber(
+                model_path=self.cfg.model_path,
+                binary_path=self.cfg.whisper_binary,
+            )
+        except FileNotFoundError:
+            # Try to build on the fly (GUI prompt)
+            if ensure_whisper_cli("gui") is None:
+                # User declined or build failed – abort gracefully
+                self.status_changed.emit("VOXT")
+                self.finished.emit("")
+                return
+            transcriber = WhisperTranscriber(
+                model_path=self.cfg.model_path,
+                binary_path=self.cfg.whisper_binary,
+            )
         typer = SimulatedTyper(delay=self.cfg.typing_delay, start_delay=self.cfg.typing_start_delay)
         clipboard = ClipboardManager()
 
