@@ -1,7 +1,6 @@
 import sys
 import argparse
 from voxt.core.config import AppConfig
-from voxt.utils.hotkey_probe import get_record_shortcut
 
 from voxt.paths import CONFIG_FILE, resource_path
 import shutil, yaml
@@ -61,19 +60,15 @@ def main():
 
     if args.diagnose:
         print(f"[Diagnose] Current mode: {mode}")
-        key_dbg = get_record_shortcut() or "(none detected)"
-        print(f"[Diagnose] Detected shortcut: {key_dbg}")
+        print(f"[Diagnose] Detected shortcut: (use './hotkey_setup.sh list' for hotkey detection)")
         sys.exit(0)
 
     print(f"Launching VOXT app in '{mode}' mode...")
 
-    # show detected shortcut or hint
-    key = get_record_shortcut()
+    # show shortcut hint
     if mode == "cli":
-        if key:
-            print(f"[VOXT] Record shortcut detected: {key}")
-        else:
-            print("[VOXT] Tip: create a global shortcut that runs `bash -c 'voxt --trigger-record'` (e.g. Super+R)")
+        print("[VOXT] Tip: create a global shortcut that runs `bash -c 'voxt --trigger-record'` (e.g. Super+R)")
+        print("[VOXT] Use './hotkey_setup.sh guide' for setup instructions")
 
     if mode == "cli":
         # Forward unknown args to cli_main

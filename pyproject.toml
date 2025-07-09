@@ -40,7 +40,7 @@ include = [
 source = "vcs"
 
 [tool.hatch.build.targets.wheel]
-packages = ["voxt"]
+packages = ["src/voxt"]
 
 [tool.hatch.build.targets.editable]
-packages = ["voxt"]
+packages = ["src/voxt"]

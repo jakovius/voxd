@@ -446,3 +446,40 @@ if command -v pipx >/dev/null; then
 else
   echo "pipx not available – skip global command install. You can install pipx later."
 fi
+
+# ────────────────── 11. Hotkey Setup Assistant  ─────────────────────────────
+# Delegate hotkey setup to the specialized hotkey_setup.sh tool
+
+setup_voxt_hotkey() {
+  if [[ -x "./hotkey_setup.sh" ]]; then
+    echo ""
+    msg "Setting up VOXT hotkey..."
+    echo "Using specialized hotkey setup tool for better reliability and safety."
+    echo ""
+    
+    read -r -p "Would you like to set up or check your VOXT hotkey? [Y/n]: " setup_hotkey
+    setup_hotkey=${setup_hotkey:-Y}
+    
+    if [[ $setup_hotkey =~ ^[Yy]$ ]]; then
+      ./hotkey_setup.sh guide
+    else
+      echo ""
+      echo "🔧 Hotkey setup skipped. You can set it up later with:"
+      echo "  ./hotkey_setup.sh guide    - GUI setup instructions"
+      echo "  ./hotkey_setup.sh diagnose - Troubleshoot issues"
+      echo "  ./hotkey_setup.sh list     - Check current status"
+    fi
+  else
+    echo ""
+    msg "⚠️  hotkey_setup.sh not found or not executable"
+    echo "Manual hotkey setup required:"
+    echo "  Command: bash -c 'voxt --trigger-record'"
+    echo "  Key: your choice (e.g., Super+R)"
+    echo "  Path: System Settings → Keyboard → Custom Shortcuts"
+  fi
+}
+
+# Main hotkey setup prompt
+if command -v voxt >/dev/null 2>&1; then
+  setup_voxt_hotkey
+fi
