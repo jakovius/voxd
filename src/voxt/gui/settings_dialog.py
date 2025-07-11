@@ -76,6 +76,7 @@ class SettingsDialog(QDialog):
         self._add_checkbox(form, "simulate_typing", "Simulate typing")
         self._add_spin(form, "typing_delay", "Typing delay (ms)", 0, 1000)
         self._add_doublespin(form, "typing_start_delay", "Start delay (s)", 0, 5, step=0.05)
+        self._add_checkbox(form, "legacy_paste", "Legacy paste mode (Ctrl+V)")
 
         # ------------------------------------------------------------------
         #  Logging & Performance

@@ -33,7 +33,7 @@ def detect_backend():
     return "unknown"
 
 class SimulatedTyper:
-    def __init__(self, delay=None, start_delay=None):
+    def __init__(self, delay=None, start_delay=None, cfg=None):
         # Accept delay in milliseconds or seconds – treat ≤0 as instant paste.
         if delay is None:
             delay_val = 10
@@ -57,6 +57,9 @@ class SimulatedTyper:
         self.tool = None
         self.enabled = self._detect_typing_tool()
         verbo(f"[typer] Typing {'enabled' if self.enabled else 'disabled'} (backend: {self.backend}, tool: {self.tool})")
+        
+        # Store config for terminal paste mode
+        self.cfg = cfg
 
     def _detect_typing_tool(self):
         search_dirs = ["/usr/local/bin", "/usr/bin", str(Path.home() / ".local/bin")]
@@ -163,52 +166,57 @@ class SimulatedTyper:
     # Helper: fast clipboard paste
     # ------------------------------------------------------------------
     def _paste(self, text: str):
-        """Copy *text* to clipboard and hit Ctrl+V/ydotool key sequence"""
+        """Copy *text* to clipboard and use Ctrl+Shift+V (default) or Ctrl+V (legacy)"""
         # Copy to clipboard first
         try:
             pyperclip.copy(text.rstrip())
         except Exception as e:
             verbo(f"[typer] Clipboard copy failed: {e} – falling back to typing mode.")
-            # Fall back to character-by-character typing with minimal delay
-            # but prevent infinite recursion by calling _type_char_by_char directly
             self._type_char_by_char(text)
             return
 
         # Allow clipboard daemon to update and window to process modifiers
-        time.sleep(0.10)  # clipboard settle
+        time.sleep(0.10)
         if self.start_delay > 0:
             time.sleep(self.start_delay)
 
-        verbo(f"[typer] Pasting transcript via {self.tool}…")
+        # Determine paste shortcut: Ctrl+Shift+V by default, Ctrl+V for legacy mode
+        use_legacy_paste = self.cfg and self.cfg.data.get("legacy_paste", False)
+        paste_keys = "ctrl+v" if use_legacy_paste else "ctrl+shift+v"
+        
+        verbo(f"[typer] Pasting transcript via {self.tool} using {paste_keys}...")
 
         try:
-            # Determine which tool to use based on the actual tool path, not just backend
             tool_name = os.path.basename(self.tool) if self.tool else ""
             
             if "xdotool" in tool_name:
-                # Try Ctrl+V first (most common)
                 subprocess.run(
-                    ["xdotool", "key", "--clearmodifiers", "ctrl+v"],
+                    ["xdotool", "key", "--clearmodifiers", paste_keys],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     timeout=5
                 )
             elif "ydotool" in tool_name:
-                # Use Ctrl+V sequence for ydotool
-                subprocess.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               timeout=5)
+                if use_legacy_paste:
+                    # Legacy Ctrl+V: Ctrl(29) + V(47)
+                    subprocess.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   timeout=5)
+                else:
+                    # Default Ctrl+Shift+V: Ctrl(29) + Shift(42) + V(47)
+                    subprocess.run(["ydotool", "key", "29:1", "42:1", "47:1", "47:0", "42:0", "29:0"],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   timeout=5)
             else:
                 print(f"[typer] ⚠️ Paste shortcut not supported for tool: {self.tool}")
-                # Fall back to typing if paste not supported
                 self._type_char_by_char(text)
                 return
+                
         except subprocess.TimeoutExpired:
             print("[typer] ⚠️ Paste operation timed out")
         except Exception as e:
             print(f"[typer] ⚠️ Paste operation failed: {e}")
 
-        # Clean up stdin to avoid stray inputs next prompt
         self.flush_stdin()
 
     def _type_char_by_char(self, text: str):

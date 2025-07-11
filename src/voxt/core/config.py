@@ -14,6 +14,7 @@ DEFAULT_CONFIG = {
     "simulate_typing": True,
     "typing_delay": 1,
     "typing_start_delay": 0.15,
+    "legacy_paste": False,  # NEW: if typing_delay is 0, use Ctrl+V instead of default Ctrl+Shift+V
     "verbosity": True,
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
     "model_path": "whisper.cpp/models/ggml-base.en.bin",
@@ -33,7 +34,7 @@ DEFAULT_CONFIG = {
 
     # New: Selected model per provider
     "aipp_selected_models": {
-        "ollama": "llama3.2:latest",
+        "ollama": "gemma3:latest",
         "openai": "gpt-4o-mini-2024-07-18",
         "anthropic": "claude-3-opus-20240229",
         "xai": "grok-3-latest"

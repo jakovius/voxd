@@ -53,7 +53,7 @@ class CoreProcessThread(QThread):
                 model_path=self.cfg.model_path,
                 binary_path=self.cfg.whisper_binary,
             )
-        typer = SimulatedTyper(delay=self.cfg.typing_delay, start_delay=self.cfg.typing_start_delay)
+        typer = SimulatedTyper(delay=self.cfg.typing_delay, start_delay=self.cfg.typing_start_delay, cfg=self.cfg)
         clipboard = ClipboardManager()
 
         # ── Recording ---------------------------------------------------
