@@ -14,7 +14,7 @@ DEFAULT_CONFIG = {
     "simulate_typing": True,
     "typing_delay": 1,
     "typing_start_delay": 0.15,
-    "legacy_paste": False,  # NEW: if typing_delay is 0, use Ctrl+V instead of default Ctrl+Shift+V
+    "ctrl_v_paste": False,  # Use Ctrl+V instead of default Ctrl+Shift+V
     "verbosity": True,
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
     "model_path": "whisper.cpp/models/ggml-base.en.bin",

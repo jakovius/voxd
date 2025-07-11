@@ -6,6 +6,7 @@ perf_accuracy_rating_collect: true
 simulate_typing: true
 typing_delay: 1
 typing_start_delay: 0.15
+ctrl_v_paste: false  # Use Ctrl+V instead of default Ctrl+Shift+V
 verbosity: true
 whisper_binary: whisper.cpp/build/bin/whisper-cli
 model_path: whisper.cpp/models/ggml-base.en.bin

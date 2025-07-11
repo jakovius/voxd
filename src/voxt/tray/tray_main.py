@@ -236,11 +236,9 @@ class VoxtTrayApp(QObject):
         # AIPP
         self.menu.addMenu(self.build_aipp_menu())
         self.menu.addSeparator()
-        # Typing options - NEW
-        self.menu.addMenu(self.build_typing_menu())
-        self.menu.addSeparator()
+        # NO PASTE OPTIONS MENU HERE
 
-        # Top-level helpers (already created in __init__)
+        # Top-level helpers
         self.menu.addAction(self.session_log_action)
         self.menu.addAction(self.settings_action)
         self.menu.addAction(self.performance_action)
@@ -304,29 +302,6 @@ class VoxtTrayApp(QObject):
             # After saving, refresh menu and cfg instance
             self.cfg.load()  # reload from disk
             self.refresh_tray_menu()
-
-    def build_typing_menu(self):
-        """Return menu for typing-related options."""
-        typing_menu = QMenu("Typing Options", self.menu)
-        
-        # Legacy paste mode checkbox
-        legacy_paste_enabled = self.cfg.data.get("legacy_paste", False)
-        legacy_action = QAction("Legacy (Ctrl+V)", self.menu, checkable=True)
-        legacy_action.setChecked(legacy_paste_enabled)
-        legacy_action.toggled.connect(self.toggle_legacy_paste)
-        # Style with pale yellow background when checked
-        if legacy_paste_enabled:
-            legacy_action.setStyleSheet("background-color: #FFFFE0;")
-        typing_menu.addAction(legacy_action)
-        
-        return typing_menu
-    
-    def toggle_legacy_paste(self, checked):
-        """Toggle legacy paste mode."""
-        self.cfg.data["legacy_paste"] = checked
-        self.cfg.legacy_paste = checked
-        self.cfg.save()
-        self.refresh_tray_menu()
 
 def main():
     app = QApplication(sys.argv)

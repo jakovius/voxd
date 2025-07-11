@@ -58,7 +58,7 @@ class SimulatedTyper:
         self.enabled = self._detect_typing_tool()
         verbo(f"[typer] Typing {'enabled' if self.enabled else 'disabled'} (backend: {self.backend}, tool: {self.tool})")
         
-        # Store config for terminal paste mode
+        # Store config reference for real-time updates
         self.cfg = cfg
 
     def _detect_typing_tool(self):
@@ -166,7 +166,7 @@ class SimulatedTyper:
     # Helper: fast clipboard paste
     # ------------------------------------------------------------------
     def _paste(self, text: str):
-        """Copy *text* to clipboard and use Ctrl+Shift+V (default) or Ctrl+V (legacy)"""
+        """Copy *text* to clipboard and use Ctrl+Shift+V (default) or Ctrl+V (when enabled)"""
         # Copy to clipboard first
         try:
             pyperclip.copy(text.rstrip())
@@ -180,9 +180,9 @@ class SimulatedTyper:
         if self.start_delay > 0:
             time.sleep(self.start_delay)
 
-        # Determine paste shortcut: Ctrl+Shift+V by default, Ctrl+V for legacy mode
-        use_legacy_paste = self.cfg and self.cfg.data.get("legacy_paste", False)
-        paste_keys = "ctrl+v" if use_legacy_paste else "ctrl+shift+v"
+        # Determine paste shortcut: Check config for real-time updates
+        use_ctrl_v = self.cfg and self.cfg.data.get("ctrl_v_paste", False)
+        paste_keys = "ctrl+v" if use_ctrl_v else "ctrl+shift+v"
         
         verbo(f"[typer] Pasting transcript via {self.tool} using {paste_keys}...")
 
@@ -197,8 +197,8 @@ class SimulatedTyper:
                     timeout=5
                 )
             elif "ydotool" in tool_name:
-                if use_legacy_paste:
-                    # Legacy Ctrl+V: Ctrl(29) + V(47)
+                if use_ctrl_v:
+                    # Ctrl+V: Ctrl(29) + V(47)
                     subprocess.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                    timeout=5)
