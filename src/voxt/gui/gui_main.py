@@ -22,10 +22,10 @@ class VoxtApp(QWidget):
         self.setMinimumHeight(200)  # Only set minimum height
         self.setStyleSheet("background-color: #1e1e1e; color: white;")
 
-        self.status = "VOXT"
+        self.status = "Record"
         self.last_transcript = ""
 
-        self.status_button = QPushButton("VOXT")
+        self.status_button = QPushButton("Record")
         self.status_button.setFixedSize(200, 50)
         self.status_button.setStyleSheet("""
             QPushButton {
@@ -142,7 +142,7 @@ class VoxtApp(QWidget):
                         update_last_perf_entry(val)
                     except ValueError:
                         pass
-        self.set_status("VOXT")
+        self.set_status("Record")
         # Restore window after typing (optional; comment out if you prefer it
         # to stay minimised)
         self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
