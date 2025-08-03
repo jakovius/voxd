@@ -27,8 +27,9 @@ need_compiler() {
   case "$PM" in
     apt)   sudo apt update -qq && sudo apt install -y build-essential ;;
     dnf)   sudo dnf groupinstall -y "Development Tools" ;;
+    dnf5)  sudo dnf5 group install -y "Development Tools" ;;
     pacman)sudo pacman -Sy --noconfirm base-devel ;;
-  esac
+esac
 }
 
 # version compare  ver_ge <found> <needed-min>
@@ -37,23 +38,26 @@ ver_ge() { [ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]; }
 # ─────────────────── detect distro / pkg-manager ──────────────────────────────
 if   command -v apt   >/dev/null; then
      PM=apt   ; INSTALL="sudo apt install -y"
+elif command -v dnf5  >/dev/null; then
+     PM=dnf5  ; INSTALL="sudo dnf5 install -y"
 elif command -v dnf   >/dev/null; then
      PM=dnf   ; INSTALL="sudo dnf install -y"
 elif command -v pacman>/dev/null; then
      PM=pacman; INSTALL="sudo pacman -S --noconfirm"
-else die "Unsupported distro – need apt, dnf or pacman."; fi
+else die "Unsupported distro – need apt, dnf/dnf5 or pacman."; fi
 msg "Package manager: $PM"
 
-# ────────────────── Pre-flight: ensure curl & internet ──────────────────────
-if ! command -v curl >/dev/null; then
-  msg "${RED}curl not found – required for downloads.${NC}"
-  case "$PM" in
-    apt)   echo "Install with: sudo apt install curl"   ;;
-    dnf)   echo "Install with: sudo dnf install curl"   ;;
-    pacman)echo "Install with: sudo pacman -S curl"     ;;
-  esac
-  die "Please install curl and re-run setup.sh."
-fi
+# ────────────────── Pre-flight: ensure curl, git & internet ──────────────────────
+for cmd in curl git; do
+  if ! command -v "$cmd" >/dev/null; then
+    msg "$cmd missing – installing…"
+    case "$PM" in
+      apt)   sudo apt update -qq && sudo apt install -y "$cmd" ;;
+      dnf|dnf5) sudo $PM install -y "$cmd" ;;
+      pacman) sudo pacman -Sy --noconfirm "$cmd" ;;
+    esac
+  fi
+done
 
 # Detect offline mode (no outbound HTTPS)
 OFFLINE=""
@@ -75,18 +79,18 @@ need_compiler
 # ──────────────────  1. distro-specific dependency list  ────────────────────
 case "$PM" in
   apt)
-      SYS_DEPS=( git ffmpeg gcc make cmake curl xclip xsel wl-clipboard \
+      SYS_DEPS=( git ffmpeg gcc make cmake curl xclip xsel wl-clipboard xdotool \
                  python3-venv libxcb-cursor0 libxcb-xinerama0 \
                  libportaudio2 portaudio19-dev )
       ;;
   dnf)
-      SYS_DEPS=( git ffmpeg gcc gcc-c++ make cmake curl xclip xsel wl-clipboard \
+      SYS_DEPS=( git ffmpeg gcc gcc-c++ make cmake curl xclip xsel wl-clipboard xdotool \
                  python3-devel python3-virtualenv \
                  xcb-util-cursor-devel xcb-util-wm-devel \
                  portaudio portaudio-devel )
       ;;
   pacman)
-      SYS_DEPS=( git ffmpeg gcc make cmake curl xclip xsel wl-clipboard \
+      SYS_DEPS=( git ffmpeg gcc make cmake curl xclip xsel wl-clipboard xdotool \
                  base-devel python-virtualenv \
                  xcb-util-cursor xcb-util-wm portaudio )
       ;;
@@ -389,7 +393,7 @@ fi
 msg "${GRN}Setup complete!${NC}"
 # Wayland reminder for ydotool permissions
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && command -v ydotool >/dev/null; then
-  echo "ℹ️  Wayland detected – please log out and back in so 'ydotool' gains access to /dev/uinput."
+  echo -e "${GRN}➡  IMPORTANT:${NC} Log out or reboot once so 'ydotool' gains access to /dev/uinput."; read -n1 -r -p "Press any key to acknowledge…"
 fi
 echo "Activate venv:   source .venv/bin/activate"
 echo "Run GUI mode:    python -m voxt --mode gui"
@@ -426,11 +430,17 @@ if ! command -v pipx >/dev/null; then
   if [[ $reply =~ ^[Yy]$ ]]; then
     case "$PM" in
       apt)   sudo apt install -y pipx ;;
-      dnf)   sudo dnf install -y pipx ;;
-      pacman)sudo pacman -S --noconfirm pipx ;;
+      dnf|dnf5)   sudo $PM install -y pipx ;;
+      pacman)
+        if ! sudo pacman -S --noconfirm pipx; then
+          sudo pacman -S --noconfirm python-pipx || true
+        fi ;;
     esac
     pipx ensurepath
     export PATH="$HOME/.local/bin:$PATH"
+    # Refresh current shell PATH for the remainder of this script
+    if [[ $SHELL =~ /bash$ ]] && [[ -f "$HOME/.bashrc" ]]; then source "$HOME/.bashrc"; fi
+    if [[ $SHELL =~ /zsh$ ]]  && [[ -f "$HOME/.zshrc"  ]]; then source "$HOME/.zshrc" ; fi
   fi
 fi
 
@@ -457,7 +467,7 @@ setup_voxt_hotkey() {
     echo "Using specialized hotkey setup tool for better reliability and safety."
     echo ""
     
-    read -r -p "Would you like to set up or check your VOXT hotkey? [Y/n]: " setup_hotkey
+    read -r -p "Open the Hotkey Guide & diagnostics? (instructions only – nothing will be changed) [Y/n]: " setup_hotkey
     setup_hotkey=${setup_hotkey:-Y}
     
     if [[ $setup_hotkey =~ ^[Yy]$ ]]; then

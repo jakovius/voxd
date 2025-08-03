@@ -52,7 +52,7 @@ class SimulatedTyper:
         # that the key-release events from the hot-key that stopped the
         # recording have time to reach the focused window. Prevents the
         # first character from being interpreted as Ctrl/Alt+<char>.
-        self.start_delay = float(start_delay) if start_delay is not None else 0.15
+        self.start_delay = float(start_delay) if start_delay is not None else 0.25
         self.backend = detect_backend()
         self.tool = None
         self.enabled = self._detect_typing_tool()
@@ -135,8 +135,8 @@ class SimulatedTyper:
             print("[typer] ⚠️ Typing disabled - required tool not available.")
             return
 
-        # If delay ≤ 0 → use fast clipboard paste instead of typing
-        if self.delay_ms <= 0:
+        # If delay ≤ 0, or typing tool is missing, use fast clipboard paste instead of typing
+        if self.delay_ms <= 0 or not self.tool:
             self._paste(text)
             return
 

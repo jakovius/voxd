@@ -527,7 +527,7 @@ show_hotkey_guide() {
   # Check for existing hotkey first
   local existing_key
   existing_key=$(get_voxt_hotkey)
-  if [[ -n "$existing_key" ]]; then
+  if [[ -n "$existing_key" && "$existing_key" != "(none detected)" ]]; then
     echo "✅ Existing VOXT hotkey detected: $existing_key"
     echo ""
     
@@ -792,7 +792,7 @@ case "${1:-help}" in
   list)
     msg "Current VOXT hotkeys:"
     key=$(get_voxt_hotkey)
-    if [[ -n "$key" ]]; then
+    if [[ -n "$key" && "$key" != "(none detected)" ]]; then
       echo "✅ Detected: $key"
       
       # Verify the hotkey is properly configured
