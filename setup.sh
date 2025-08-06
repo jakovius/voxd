@@ -27,7 +27,14 @@ need_compiler() {
   case "$PM" in
     apt)   sudo apt update -qq && sudo apt install -y build-essential ;;
     dnf)   sudo dnf groupinstall -y "Development Tools" ;;
-    dnf5)  sudo dnf5 group install -y "Development Tools" ;;
+    dnf5)  
+      # Try group install first, fallback to individual packages
+      if ! sudo dnf5 group install -y "Development Tools" 2>/dev/null; then
+        if ! sudo dnf5 group install -y "C Development Tools and Libraries" 2>/dev/null; then
+          # Fallback to essential individual packages
+          sudo dnf5 install -y gcc gcc-c++ make
+        fi
+      fi ;;
     pacman)sudo pacman -Sy --noconfirm base-devel ;;
 esac
 }
@@ -83,7 +90,7 @@ case "$PM" in
                  python3-venv libxcb-cursor0 libxcb-xinerama0 \
                  libportaudio2 portaudio19-dev )
       ;;
-  dnf)
+  dnf|dnf5)
       SYS_DEPS=( git ffmpeg gcc gcc-c++ make cmake curl xclip xsel wl-clipboard xdotool \
                  python3-devel python3-virtualenv \
                  xcb-util-cursor-devel xcb-util-wm-devel \
@@ -130,12 +137,12 @@ install_ydotool_prebuilt() {
         tmp=$(mktemp --suffix=.deb)
         curl -L -o "$tmp" "$url" && sudo dpkg -i "$tmp"
         ;;
-    dnf)
+    dnf|dnf5)
         local url tmp
         url=$(get_latest_ydotool_asset rpm) || return 1
         [[ -z "$url" ]] && return 1
         tmp=$(mktemp --suffix=.rpm)
-        curl -L -o "$tmp" "$url" && sudo dnf install -y "$tmp"
+        curl -L -o "$tmp" "$url" && sudo $PM install -y "$tmp"
         ;;
     *) return 1 ;;
   esac
@@ -144,7 +151,7 @@ install_ydotool_prebuilt() {
 install_ydotool_pkg() {
   case "$PM" in
     apt)   $INSTALL ydotool   && return 0 ;;
-    dnf)   $INSTALL ydotool   && return 0 ;;
+    dnf|dnf5) $INSTALL ydotool   && return 0 ;;
     pacman)$INSTALL ydotool   && return 0 || true ;;   # Arch users might use AUR
   esac
   return 1
