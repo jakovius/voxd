@@ -6,7 +6,7 @@
 #  • Creates / re-uses Python venv    (.venv)
 #  • Installs Python dependencies & VOXT itself (editable)
 #  • Clones + builds whisper.cpp      → whisper.cpp/build/bin/whisper-cli
-#  • (Wayland) ensures ydotool + daemon, with fallback source build
+#  • (Wayland) ensures ydotool + daemon, validates completeness, forces source build if needed
 #
 #  Idempotent: re-running skips finished steps.
 # =============================================================================
@@ -154,57 +154,152 @@ install_ydotool_src() {
   msg "Building ydotool from source (docs disabled)…"
   tmpd=$(mktemp -d)
   git clone --depth 1 https://github.com/ReimuNotMoe/ydotool.git "$tmpd/ydotool"
-  cmake -DENABLE_DOCUMENTATION=OFF -S "$tmpd/ydotool" -B "$tmpd/ydotool/build"
+  
+  # Disable manpage build to avoid documentation dependencies
+  sed -i 's/add_subdirectory(manpage)/#add_subdirectory(manpage)/' "$tmpd/ydotool/CMakeLists.txt"
+  
+  cmake -DCMAKE_INSTALL_PREFIX=/usr/local -S "$tmpd/ydotool" -B "$tmpd/ydotool/build"
   sudo cmake --build "$tmpd/ydotool/build" --target install -j"$(nproc)"
   rm -rf "$tmpd"
+}
+
+# Helper function to check if ydotool installation is complete (includes daemon)
+ydotool_complete() {
+  command -v ydotool >/dev/null && command -v ydotoold >/dev/null
 }
 
 ensure_ydotool() {
   # only on Wayland and if not in $PATH
   [[ ${XDG_SESSION_TYPE:-} != wayland* ]] && return 0
-  command -v ydotool >/dev/null && return 0
-
-  msg "ydotool missing – attempting installation…"
-
-  # Temporarily disable exit-on-error for installation attempts
-  set +e
-
-  # 1) distro repo
-  install_ydotool_pkg
-  # 2) upstream pre-built package
-  if ! command -v ydotool >/dev/null; then
-      install_ydotool_prebuilt
+  
+  # Check if everything is already properly set up
+  if ydotool_complete && [[ -f ~/.config/systemd/user/ydotoold.service ]] && systemctl --user is-active --quiet ydotoold.service; then
+    return 0
   fi
-  # 3) build from source as last resort
-  if ! command -v ydotool >/dev/null; then
-      msg "Building ydotool from source (this may take a few minutes)…"
+
+  msg "Setting up ydotool for Wayland typing support…"
+
+  # Install ydotool + daemon if missing or incomplete
+  if ! ydotool_complete; then
+    if command -v ydotool >/dev/null && ! command -v ydotoold >/dev/null; then
+      msg "ydotool found but daemon missing – package installation incomplete"
+      msg "Removing incomplete installation and building from source…"
+      # Remove incomplete package installation
       case "$PM" in
-        apt)   SYS_DEPS+=(libevdev-dev libudev-dev libconfig++-dev \
-                          libboost-program-options-dev) ;;
-        dnf)   SYS_DEPS+=(libevdev-devel libudev-devel libconfig++-devel \
-                          boost-program-options-devel) ;;
-        pacman)SYS_DEPS+=(libevdev libconfig++ boost) ;;
+        apt)   sudo apt remove -y ydotool 2>/dev/null || true ;;
+        dnf|dnf5) sudo $PM remove -y ydotool 2>/dev/null || true ;;
+        pacman)sudo pacman -R --noconfirm ydotool 2>/dev/null || true ;;
       esac
-      $INSTALL "${SYS_DEPS[@]}"
-      install_ydotool_src
+    fi
+    
+    msg "Installing ydotool with daemon support…"
+    
+    # Temporarily disable exit-on-error for installation attempts
+    set +e
+    
+    # 1) distro repo - but validate it includes daemon
+    install_ydotool_pkg
+    if command -v ydotool >/dev/null && ! command -v ydotoold >/dev/null; then
+      msg "Package manager version lacks daemon – removing and building from source"
+      case "$PM" in
+        apt)   sudo apt remove -y ydotool 2>/dev/null || true ;;
+        dnf|dnf5) sudo $PM remove -y ydotool 2>/dev/null || true ;;
+        pacman)sudo pacman -R --noconfirm ydotool 2>/dev/null || true ;;
+      esac
+    fi
+    
+    # 2) upstream pre-built package (if distro repo failed/incomplete)
+    if ! ydotool_complete; then
+        install_ydotool_prebuilt
+        if command -v ydotool >/dev/null && ! command -v ydotoold >/dev/null; then
+          msg "Pre-built package lacks daemon – removing and building from source"
+          sudo rm -f /usr/bin/ydotool /usr/local/bin/ydotool 2>/dev/null || true
+        fi
+    fi
+    
+    # 3) build from source if still incomplete
+    if ! ydotool_complete; then
+        msg "Building ydotool from source with daemon support (this may take a few minutes)…"
+        # Install build dependencies
+        case "$PM" in
+          apt)   build_deps=(libevdev-dev libudev-dev libconfig++-dev libboost-program-options-dev) ;;
+          dnf|dnf5) build_deps=(libevdev-devel libudev-devel libconfig++-devel boost-program-options-devel) ;;
+          pacman)build_deps=(libevdev libconfig++ boost) ;;
+        esac
+        $INSTALL "${build_deps[@]}"
+        install_ydotool_src
+    fi
+    
+    # Re-enable exit-on-error
+    set -e
   fi
 
-  # Re-enable exit-on-error
-  set -e
-
-  # Post-install setup if binary exists
-  if command -v ydotool >/dev/null; then
+  # Setup daemon and permissions if both tools are available
+  if ydotool_complete; then
+      # 1. User groups and permissions
       sudo groupadd -f input || true
       sudo usermod -aG input "$USER" || true
+      
+      # 2. udev rule for /dev/uinput access
       printf 'KERNEL=="uinput", MODE="0660", GROUP="input"\n' \
           | sudo tee /etc/udev/rules.d/99-uinput.rules >/dev/null || true
       sudo udevadm control --reload-rules || true
       sudo udevadm trigger || true
+      
+      # 3. Create systemd user service
+      mkdir -p ~/.config/systemd/user
+      
+      # Get actual ydotoold path
+      YDOTOOLD_PATH=$(command -v ydotoold)
+      if [[ -z "$YDOTOOLD_PATH" ]]; then
+        msg "${RED}Error: ydotoold not found in PATH after installation${NC}"
+        return 1
+      fi
+      
+      cat > ~/.config/systemd/user/ydotoold.service <<EOF
+[Unit]
+Description=ydotool user daemon
+After=default.target
+
+[Service]
+ExecStart=${YDOTOOLD_PATH} --socket-path=%h/.ydotool_socket --socket-own=%U:%G
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+EOF
+      
+      # 4. Environment variable setup
+      SOCKET_LINE='export YDOTOOL_SOCKET="$HOME/.ydotool_socket"'
+      for rcfile in ~/.bashrc ~/.zshrc; do
+        if [[ -f "$rcfile" ]] && ! grep -Fxq "$SOCKET_LINE" "$rcfile"; then
+          echo "$SOCKET_LINE" >> "$rcfile"
+        fi
+      done
+      export YDOTOOL_SOCKET="$HOME/.ydotool_socket"
+      
+      # 5. Start daemon
       systemctl --user daemon-reload || true
-      systemctl --user enable --now ydotoold.service || true
-      msg "ydotool installed – log out/in once to refresh group membership."
+      systemctl --user enable ydotoold.service || true
+      systemctl --user start ydotoold.service || true
+      
+      # 6. Verify daemon is running
+      if systemctl --user is-active --quiet ydotoold.service; then
+        msg "ydotool daemon started successfully"
+        msg "Testing ydotool functionality…"
+        # Quick test to ensure everything works
+        if ydotool key 1:0 2>/dev/null; then
+          msg "ydotool fully functional"
+        else
+          msg "${YEL}ydotool daemon running but may need logout/login for permissions${NC}"
+        fi
+      else
+        msg "${YEL}ydotool daemon setup completed but not running – log out/in to refresh permissions${NC}"
+      fi
+      
+      msg "ydotool configured – log out/in once to finalize group membership."
   else
-      msg "${YEL}ydotool could not be installed – VOXT will fall back to clipboard-paste only.${NC}"
+      msg "${YEL}ydotool could not be installed completely – VOXT will fall back to clipboard-paste only.${NC}"
   fi
 }
 

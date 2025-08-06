@@ -1,5 +1,7 @@
 import sys
 import argparse
+import subprocess
+import os
 from voxt.core.config import AppConfig
 
 from voxt.paths import CONFIG_FILE, resource_path
@@ -61,6 +63,25 @@ def main():
     if args.diagnose:
         print(f"[Diagnose] Current mode: {mode}")
         print(f"[Diagnose] Detected shortcut: (use './hotkey_setup.sh list' for hotkey detection)")
+        
+        # Check ydotool daemon status on Wayland
+        if os.environ.get("XDG_SESSION_TYPE") == "wayland":
+            if shutil.which("ydotool"):
+                try:
+                    result = subprocess.run(
+                        ["systemctl", "--user", "is-active", "ydotoold.service"],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    if result.returncode == 0:
+                        print("[Diagnose] ydotool daemon: ✅ running")
+                    else:
+                        print(f"[Diagnose] ydotool daemon: ❌ {result.stdout.strip()}")
+                        print("[Diagnose] → Fix: systemctl --user start ydotoold.service")
+                except Exception:
+                    print("[Diagnose] ydotool daemon: ❌ cannot check status")
+            else:
+                print("[Diagnose] ydotool: ❌ not installed")
+        
         sys.exit(0)
 
     print(f"Launching VOXT app in '{mode}' mode...")

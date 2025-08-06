@@ -56,6 +56,12 @@ class SimulatedTyper:
         self.backend = detect_backend()
         self.tool = None
         self.enabled = self._detect_typing_tool()
+        
+        # Check daemon status for ydotool
+        if self.enabled and not self._check_ydotool_daemon():
+            print("[typer] ⚠️ ydotool available but daemon not running - typing may be unreliable")
+            print("[typer] → To fix: 'systemctl --user start ydotoold.service' or re-run setup.sh")
+        
         verbo(f"[typer] Typing {'enabled' if self.enabled else 'disabled'} (backend: {self.backend}, tool: {self.tool})")
         
         # Store config reference for real-time updates
@@ -102,6 +108,26 @@ class SimulatedTyper:
         
         print("[typer] ⚠️ No typing tools found (tried ydotool and xdotool). Typing disabled.")
         return False
+
+    def _check_ydotool_daemon(self):
+        """Check if ydotoold daemon is running when using ydotool"""
+        if not self.tool or "ydotool" not in os.path.basename(self.tool):
+            return True
+            
+        try:
+            # Check if systemd service exists and is active
+            result = subprocess.run(
+                ["systemctl", "--user", "is-active", "ydotoold.service"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                return True
+            else:
+                verbo(f"[typer] ydotoold daemon not running (status: {result.stdout.strip()})")
+                return False
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            verbo("[typer] Cannot check ydotoold daemon status")
+            return False
 
     def _run_tool(self, cmd: list[str]):
         """Run *cmd* catching FileNotFoundError so GUI won't freeze."""
