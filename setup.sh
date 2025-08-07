@@ -180,7 +180,8 @@ ensure_ydotool() {
   [[ ${XDG_SESSION_TYPE:-} != wayland* ]] && return 0
   
   # Check if everything is already properly set up
-  if ydotool_complete && [[ -f ~/.config/systemd/user/ydotoold.service ]] && systemctl --user is-active --quiet ydotoold.service; then
+  if ydotool_complete && [[ -f ~/.config/systemd/user/ydotoold.service ]] && (systemctl --user is-active --quiet ydotoold.service || pgrep -x ydotoold >/dev/null); then
+    msg "ydotool already configured and running"
     return 0
   fi
 
@@ -293,26 +294,64 @@ EOF
       service_started=0
       for attempt in {1..3}; do
         if systemctl --user start ydotoold.service 2>/dev/null; then
-          service_started=1
-          break
+          # Check if daemon actually started (systemctl can return success but daemon fails)
+          sleep 1
+          if systemctl --user is-active --quiet ydotoold.service; then
+            service_started=1
+            break
+          else
+            msg "Attempt $attempt: systemctl succeeded but daemon not active, retrying..."
+            sleep 1
+          fi
         else
           msg "Attempt $attempt to start ydotoold service failed, retrying in 1 second..."
           sleep 1
         fi
       done
       
-      # 6. Verify daemon is running
+
+      
+      # If systemctl failed, try with sg input for immediate group access (Fedora/RHEL fix)
+      if [[ $service_started -eq 0 ]]; then
+        msg "Trying to start ydotool daemon with temporary group privileges..."
+        if command -v sg >/dev/null; then
+          # Use sg to temporarily assume input group membership
+          msg "Running: sg input -c \"ydotoold --socket-path='$HOME/.ydotool_socket' --socket-own=$(id -u):$(id -g) &\""
+          sg input -c "ydotoold --socket-path='$HOME/.ydotool_socket' --socket-own=$(id -u):$(id -g) &" >/dev/null 2>&1
+          sleep 3  # Give more time for daemon to start
+          if pgrep -x ydotoold >/dev/null; then
+            service_started=1
+            msg "✅ ydotool daemon started manually with group privileges"
+          else
+            msg "❌ Failed to start ydotool daemon with sg input"
+          fi
+        else
+          msg "❌ sg command not available for fallback"
+        fi
+      else
+        msg "✅ Systemctl start succeeded, skipping fallback"
+      fi
+      
+      # 6. Verify daemon is running (check both systemctl and manual start)
+      daemon_running=0
       if systemctl --user is-active --quiet ydotoold.service; then
-        msg "ydotool daemon started successfully"
+        daemon_running=1
+        msg "✅ ydotool daemon started successfully via systemd"
+      elif pgrep -x ydotoold >/dev/null; then
+        daemon_running=1
+        msg "✅ ydotool daemon running manually (temporary group privileges)"
+      fi
+      
+      if [[ $daemon_running -eq 1 ]]; then
         msg "Testing ydotool functionality…"
         # Quick test to ensure everything works
         if ydotool key 1:0 2>/dev/null; then
-          msg "ydotool fully functional"
+          msg "✅ ydotool fully functional"
         else
-          msg "${YEL}ydotool daemon running but may need logout/login for permissions${NC}"
+          msg "${YEL}⚠️ ydotool daemon running but may need logout/login for full permissions${NC}"
         fi
       else
-        msg "${YEL}ydotool daemon failed to start automatically${NC}"
+        msg "${YEL}❌ ydotool daemon failed to start automatically${NC}"
         msg "You can start it manually with: systemctl --user start ydotoold.service"
         msg "Or log out/in to refresh permissions and try again"
       fi

@@ -75,8 +75,16 @@ def main():
                     if result.returncode == 0:
                         print("[Diagnose] ydotool daemon: ✅ running")
                     else:
-                        print(f"[Diagnose] ydotool daemon: ❌ {result.stdout.strip()}")
-                        print("[Diagnose] → Fix: systemctl --user start ydotoold.service")
+                        # Check if daemon is running manually
+                        pgrep_result = subprocess.run(
+                            ["pgrep", "-x", "ydotoold"],
+                            capture_output=True, timeout=3
+                        )
+                        if pgrep_result.returncode == 0:
+                            print("[Diagnose] ydotool daemon: ⚠️ running manually (not via systemd)")
+                        else:
+                            print(f"[Diagnose] ydotool daemon: ❌ {result.stdout.strip()}")
+                            print("[Diagnose] → Fix: systemctl --user start ydotoold.service")
                 except Exception:
                     print("[Diagnose] ydotool daemon: ❌ cannot check status")
             else:
