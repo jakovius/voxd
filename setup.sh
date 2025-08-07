@@ -286,9 +286,20 @@ EOF
       export YDOTOOL_SOCKET="$HOME/.ydotool_socket"
       
       # 5. Start daemon
-      systemctl --user daemon-reload || true
-      systemctl --user enable ydotoold.service || true
-      systemctl --user start ydotoold.service || true
+      systemctl --user daemon-reload
+      systemctl --user enable ydotoold.service
+      
+      # Attempt to start the service with retry logic for Fedora
+      service_started=0
+      for attempt in {1..3}; do
+        if systemctl --user start ydotoold.service 2>/dev/null; then
+          service_started=1
+          break
+        else
+          msg "Attempt $attempt to start ydotoold service failed, retrying in 1 second..."
+          sleep 1
+        fi
+      done
       
       # 6. Verify daemon is running
       if systemctl --user is-active --quiet ydotoold.service; then
@@ -301,7 +312,9 @@ EOF
           msg "${YEL}ydotool daemon running but may need logout/login for permissions${NC}"
         fi
       else
-        msg "${YEL}ydotool daemon setup completed but not running – log out/in to refresh permissions${NC}"
+        msg "${YEL}ydotool daemon failed to start automatically${NC}"
+        msg "You can start it manually with: systemctl --user start ydotoold.service"
+        msg "Or log out/in to refresh permissions and try again"
       fi
       
       msg "ydotool configured – log out/in once to finalize group membership."
@@ -541,8 +554,15 @@ if ! command -v pipx >/dev/null; then
     pipx ensurepath
     export PATH="$HOME/.local/bin:$PATH"
     # Refresh current shell PATH for the remainder of this script
-    if [[ $SHELL =~ /bash$ ]] && [[ -f "$HOME/.bashrc" ]]; then source "$HOME/.bashrc"; fi
-    if [[ $SHELL =~ /zsh$ ]]  && [[ -f "$HOME/.zshrc"  ]]; then source "$HOME/.zshrc" ; fi
+    # Handle Fedora bashrc unbound variable issue
+    if [[ $SHELL =~ /bash$ ]] && [[ -f "$HOME/.bashrc" ]]; then 
+      set +u  # Temporarily disable unbound variable checking
+      source "$HOME/.bashrc" 2>/dev/null || true
+      set -u  # Re-enable unbound variable checking
+    fi
+    if [[ $SHELL =~ /zsh$ ]]  && [[ -f "$HOME/.zshrc"  ]]; then
+      source "$HOME/.zshrc" 2>/dev/null || true
+    fi
   fi
 fi
 
@@ -550,13 +570,25 @@ if command -v pipx >/dev/null; then
   read -r -p "Install voxt into pipx (global command) now? [Y/n]: " ans
   ans=${ans:-Y}
   if [[ $ans =~ ^[Yy]$ ]]; then
-    pipx install --force "$PWD"
-    echo "✔  'voxt' command installed globally via pipx. Open a new shell if not yet on PATH."
+    # Use --force to handle PATH warnings and existing installations
+    if pipx install --force "$PWD" 2>/dev/null; then
+      echo "✔  'voxt' command installed globally via pipx. Open a new shell if not yet on PATH."
+    else
+      msg "Attempting pipx install with error handling..."
+      pipx install --force "$PWD" || {
+        msg "${YEL}pipx install had warnings but may have succeeded. Testing...${NC}"
+        if command -v voxt >/dev/null 2>&1; then
+          echo "✔  'voxt' command is available globally."
+        else
+          msg "${RED}pipx install failed. You can try manually: pipx install --force $PWD${NC}"
+        fi
+      }
+    fi
   else
-    echo "You can later run: pipx install $PWD"
+    echo "You can later run: pipx install --force $PWD"
   fi
 else
-  echo "pipx not available – skip global command install. You can install pipx later."
+  echo "pipx not available – skip global command install. You can install pipx later and run: pipx install --force $PWD"
 fi
 
 # ────────────────── 11. Hotkey Setup Assistant  ─────────────────────────────
