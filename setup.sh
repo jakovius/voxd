@@ -476,7 +476,200 @@ fi
 # ──────────────────  7. ydotool (Wayland helper)  ─────────────────────────────
 ensure_ydotool
 
-# ──────────────────  8. symlink whisper-cli to ~/.local/bin  ─────────────────
+# ──────────────────  8. llama.cpp setup (optional)  ─────────────────────────────
+
+# Model download helper with verification
+download_gemma_model() {
+    local model_dir="$1"
+    local model_file="$model_dir/gemma-3-270m-it-Q4_0.gguf"
+    local download_url="https://huggingface.co/unsloth/gemma-3-270m-it-GGUF/resolve/main/gemma-3-270m-it-Q4_0.gguf?download=true"
+    
+    if [[ -f "$model_file" ]]; then
+        msg "gemma-3-270m model already exists at $model_file"
+        return 0
+    fi
+    
+    mkdir -p "$model_dir"
+    msg "Downloading gemma-3-270m model (approx. 150MB)..."
+    
+    if curl -L -f --progress-bar -o "$model_file.tmp" "$download_url"; then
+        mv "$model_file.tmp" "$model_file"
+        msg "✅ Downloaded gemma-3-270m model successfully"
+        return 0
+    else
+        rm -f "$model_file.tmp"
+        msg "${RED}❌ Failed to download gemma-3-270m model${NC}"
+        echo ""
+        echo "Please download manually from:"
+        echo "  $download_url"
+        echo ""
+        echo "Or choose an alternative gemma-3 model from:"
+        echo "  https://huggingface.co/models?search=gemma-3+gguf"
+        echo ""
+        echo "Place the .gguf file in: $model_dir/"
+        echo "Supported formats: Q4_0, Q4_1, Q5_0, Q5_1, Q8_0"
+        return 1
+    fi
+}
+
+setup_llamacpp() {
+    local skip_prompt="${1:-}"
+    
+    # Check if already available
+    if command -v llama-server >/dev/null && command -v llama-cli >/dev/null; then
+        msg "llama.cpp already available system-wide"
+        
+        # Still offer to download the model
+        local model_dir="$HOME/.local/share/voxt/llamacpp_models"
+        if [[ ! -f "$model_dir/gemma-3-270m-it-Q4_0.gguf" ]]; then
+            read -r -p "Download default gemma-3-270m model for AIPP? [Y/n]: " download_model
+            download_model=${download_model:-Y}
+            if [[ $download_model =~ ^[Yy]$ ]]; then
+                download_gemma_model "$model_dir"
+            fi
+        fi
+        return 0
+    fi
+    
+    if [[ -x "llama.cpp/build/bin/llama-server" ]] && [[ -x "llama.cpp/build/bin/llama-cli" ]]; then
+        msg "llama.cpp already built locally"
+        return 0
+    fi
+    
+    # User prompt (unless auto-mode)
+    if [[ -z "$skip_prompt" ]]; then
+        echo ""
+        msg "llama.cpp provides fast local LLM inference for AIPP (AI post-processing)."
+        echo ""
+        echo "Benefits:"
+        echo "  🔒 Complete privacy (no data leaves your machine)"
+        echo "  ⚡ Low latency (no network requests)"
+        echo "  📱 Lightweight model (gemma-3-270m ~150MB)"
+        echo "  💰 No API costs"
+        echo ""
+        echo "Requirements:"
+        echo "  📁 ~1GB disk space (build + model)"
+        echo "  ⏱️  5-10 minutes build time"
+        echo "  🧠 2GB+ RAM recommended"
+        echo ""
+        read -r -p "Build llama.cpp for local LLM support? [y/N]: " build_llama
+        build_llama=${build_llama:-N}
+        [[ ! $build_llama =~ ^[Yy]$ ]] && return 0
+    fi
+    
+    # Hardware detection for optimizations
+    CUDA_AVAILABLE=""
+    METAL_AVAILABLE=""
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        CUDA_AVAILABLE=1
+        msg "🎮 NVIDIA GPU detected – will enable CUDA acceleration"
+    fi
+    if [[ $(uname) == "Darwin" ]]; then
+        METAL_AVAILABLE=1
+        msg "🍎 macOS detected – will enable Metal acceleration"
+    fi
+    
+    # Install build dependencies
+    msg "Installing llama.cpp build dependencies..."
+    case "$PM" in
+        apt)   build_deps=(cmake build-essential) ;;
+        dnf|dnf5) build_deps=(cmake gcc gcc-c++ make) ;;
+        pacman) build_deps=(cmake base-devel) ;;
+    esac
+    $INSTALL "${build_deps[@]}" 2>/dev/null || true
+    
+    # Clone if needed
+    if [[ $OFFLINE ]]; then
+        msg "Offline mode – assuming llama.cpp sources are present"
+        [[ ! -d llama.cpp ]] && {
+            msg "${RED}llama.cpp directory not found in offline mode${NC}"
+            return 1
+        }
+    else
+        if [[ ! -d llama.cpp ]]; then
+            msg "Cloning llama.cpp repository..."
+            git clone --depth 1 https://github.com/ggerganov/llama.cpp.git
+        else
+            msg "llama.cpp repository already exists"
+        fi
+    fi
+    
+    # Build with optimizations
+    if [[ ! -x "llama.cpp/build/bin/llama-server" ]]; then
+        msg "Building llama.cpp with optimizations (5-10 minutes)..."
+        
+        # Configure build with hardware-specific optimizations
+        local cmake_args=(
+            -S llama.cpp
+            -B llama.cpp/build
+            -DBUILD_SHARED_LIBS=OFF
+            -DLLAMA_SERVER=ON
+            -DLLAMA_CURL=ON
+        )
+        
+        # Add GPU acceleration if available
+        [[ $CUDA_AVAILABLE ]] && cmake_args+=(-DLLAMA_CUDA=ON)
+        [[ $METAL_AVAILABLE ]] && cmake_args+=(-DLLAMA_METAL=ON)
+        
+        # Build
+        cmake "${cmake_args[@]}"
+        cmake --build llama.cpp/build -j"$(nproc)" --target llama-server llama-cli
+        
+        # Verify build success
+        if [[ -x "llama.cpp/build/bin/llama-server" ]] && [[ -x "llama.cpp/build/bin/llama-cli" ]]; then
+            msg "✅ llama.cpp built successfully"
+        else
+            msg "${RED}❌ llama.cpp build failed${NC}"
+            return 1
+        fi
+    fi
+    
+    # Create symlinks in ~/.local/bin
+    LOCAL_BIN="$HOME/.local/bin"
+    mkdir -p "$LOCAL_BIN"
+    
+    for binary in llama-server llama-cli; do
+        local src="$PWD/llama.cpp/build/bin/$binary"
+        local dst="$LOCAL_BIN/$binary"
+        
+        if [[ -x "$src" ]] && [[ ! -e "$dst" ]]; then
+            ln -s "$src" "$dst"
+            msg "Symlinked $binary to $LOCAL_BIN"
+        fi
+    done
+    
+    # Download default model
+    local model_dir="$HOME/.local/share/voxt/llamacpp_models"
+    download_gemma_model "$model_dir"
+    
+    # Optional: Install Python bindings
+    echo ""
+    read -r -p "Install llama-cpp-python for direct integration? (more memory but potentially faster) [y/N]: " install_python
+    install_python=${install_python:-N}
+    if [[ $install_python =~ ^[Yy]$ ]]; then
+        msg "Installing llama-cpp-python with optimizations..."
+        
+        # Set build flags for hardware acceleration
+        local cmake_flags="-DLLAMA_CURL=on"
+        [[ $CUDA_AVAILABLE ]] && cmake_flags+=" -DLLAMA_CUDA=on"
+        [[ $METAL_AVAILABLE ]] && cmake_flags+=" -DLLAMA_METAL=on"
+        
+        CMAKE_ARGS="$cmake_flags" pip install llama-cpp-python --verbose --no-cache-dir
+        
+        if python -c "import llama_cpp" 2>/dev/null; then
+            msg "✅ llama-cpp-python installed successfully"
+        else
+            msg "${YEL}⚠️ llama-cpp-python installation may have issues${NC}"
+        fi
+    fi
+    
+    msg "✅ llama.cpp setup complete"
+}
+
+# Call llama.cpp setup
+setup_llamacpp
+
+# ──────────────────  9. symlink whisper-cli to ~/.local/bin  ─────────────────
 LOCAL_BIN="$HOME/.local/bin"
 mkdir -p "$LOCAL_BIN"
 SYMLINK_PATH="$LOCAL_BIN/whisper-cli"
@@ -509,7 +702,7 @@ else
    fi
 fi
 
-# ──────────────────  8b. persist absolute paths in config.yaml  ──────────────
+# ──────────────────  9b. persist absolute paths in config.yaml  ──────────────
 if [[ -n "$WHISPER_BIN" ]]; then
   $PY - <<PY
 import sys, os
@@ -522,6 +715,7 @@ if repo_src.exists():
 
 try:
     from voxt.core.config import AppConfig  # type: ignore
+    from voxt.paths import LLAMACPP_MODELS_DIR  # type: ignore
 except ModuleNotFoundError as e:
     print("[setup] Warning: could not import voxt (", e, ") – skipping config update.")
     sys.exit(0)
@@ -536,14 +730,27 @@ model_path = Path(os.getcwd()) / "whisper.cpp" / "models" / "ggml-base.en.bin"
 cfg = AppConfig()
 cfg.set("whisper_binary", str(whisper_bin))
 cfg.set("model_path", str(model_path))
+
+# Update llama.cpp paths if available
+llama_server_path = Path(os.getcwd()) / "llama.cpp" / "build" / "bin" / "llama-server"
+llama_cli_path = Path(os.getcwd()) / "llama.cpp" / "build" / "bin" / "llama-cli"
+llamacpp_model_path = LLAMACPP_MODELS_DIR / "gemma-3-270m-it-Q4_0.gguf"
+
+if llama_server_path.exists():
+    cfg.set("llamacpp_server_path", str(llama_server_path))
+if llama_cli_path.exists():
+    cfg.set("llamacpp_cli_path", str(llama_cli_path))
+if llamacpp_model_path.exists():
+    cfg.set("llamacpp_default_model", str(llamacpp_model_path))
+
 cfg.save()
-print("[setup] Absolute paths written to ~/.config/voxt/config.yaml")
+print("[setup] Configuration updated with resolved paths")
 PY
 else
   msg "Warning: No whisper-cli binary found – skipping config update."
 fi
 
-# ──────────────────  9. done  ───────────────────────────────────────────────––
+# ──────────────────  10. done  ───────────────────────────────────────────────––
 msg "${GRN}Setup complete!${NC}"
 # Wayland reminder for ydotool permissions
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && command -v ydotool >/dev/null; then

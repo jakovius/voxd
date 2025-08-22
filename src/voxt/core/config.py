@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from platformdirs import user_config_dir
 from importlib.resources import files
-from voxt.paths import resolve_whisper_binary, resolve_model_path, DATA_DIR  # <-- add this import
+from voxt.paths import resolve_whisper_binary, resolve_model_path, DATA_DIR, resolve_llamacpp_server, LLAMACPP_MODELS_DIR  # <-- add this import
 
 DEFAULT_CONFIG = {
     "perf_collect": False,
@@ -21,7 +21,7 @@ DEFAULT_CONFIG = {
 
     # --- ✨ AIPP (AI post-processing) ------------------------------------------
     "aipp_enabled": False,
-    "aipp_provider": "ollama",           # ollama / openai / anthropic / xai
+    "aipp_provider": "ollama",           # ollama / openai / anthropic / xai / llamacpp_server / llamacpp_direct
     "aipp_active_prompt": "default",
 
     # New: List of models per provider
@@ -29,7 +29,9 @@ DEFAULT_CONFIG = {
         "ollama": ["llama3.2:latest", "mistral:latest", "gemma3:latest", "qwen2.5-coder:1.5b"],
         "openai": ["gpt-4o-mini-2024-07-18"],
         "anthropic": ["claude-3-opus-20240229", "claude-3-haiku"],
-        "xai": ["grok-3-latest"]
+        "xai": ["grok-3-latest"],
+        "llamacpp_server": ["gemma-3-270m"],
+        "llamacpp_direct": ["gemma-3-270m"]
     },
 
     # New: Selected model per provider
@@ -37,7 +39,21 @@ DEFAULT_CONFIG = {
         "ollama": "gemma3:latest",
         "openai": "gpt-4o-mini-2024-07-18",
         "anthropic": "claude-3-opus-20240229",
-        "xai": "grok-3-latest"
+        "xai": "grok-3-latest",
+        "llamacpp_server": "gemma-3-270m",
+        "llamacpp_direct": "gemma-3-270m"
+    },
+
+    # llama.cpp settings
+    "llamacpp_server_path": "llama.cpp/build/bin/llama-server",
+    "llamacpp_cli_path": "llama.cpp/build/bin/llama-cli", 
+    "llamacpp_default_model": "llamacpp_models/gemma-3-270m-it-Q4_0.gguf",
+    "llamacpp_server_url": "http://localhost:8080",
+    "llamacpp_server_timeout": 30,
+    
+    # Model registry for llama.cpp
+    "llamacpp_models": {
+        "gemma-3-270m": "gemma-3-270m-it-Q4_0.gguf",
     },
 
     "aipp_prompts": {
@@ -79,6 +95,15 @@ class AppConfig:
         if self.data.get("model_path") != abs_model:
             self.data["model_path"] = abs_model
             updated = True
+
+        # Also resolve llama.cpp paths if they exist
+        try:
+            abs_llama_server = str(resolve_llamacpp_server(self.data.get("llamacpp_server_path", "")))
+            if self.data.get("llamacpp_server_path") != abs_llama_server:
+                self.data["llamacpp_server_path"] = abs_llama_server
+                updated = True
+        except FileNotFoundError:
+            pass  # llama.cpp not installed yet
 
         # Assign config values to attributes
         for k, v in self.data.items():
@@ -134,6 +159,16 @@ class AppConfig:
             print("  ⚠️ ANTHROPIC_API_KEY not set in environment.")
         if self.aipp_provider == "xai" and not os.getenv("XAI_API_KEY"):
             print("  ⚠️ XAI_API_KEY not set in environment.")
+
+        # Validate llama.cpp setup
+        if self.aipp_provider in ("llamacpp_server", "llamacpp_direct"):
+            status = self.validate_llamacpp_setup()
+            if self.aipp_provider == "llamacpp_server" and not status["server_available"]:
+                print("  ⚠️ llama-server not found but llamacpp_server provider selected")
+            if self.aipp_provider == "llamacpp_direct" and not status["python_bindings_available"]:
+                print("  ⚠️ llama-cpp-python not installed but llamacpp_direct provider selected")
+            if not status["default_model_available"]:
+                print("  ⚠️ Default llama.cpp model not found")
 
         print("\n[config] Validation complete.")
 
@@ -216,7 +251,7 @@ class AppConfig:
             print(f"\n[config] Invalid aipp_active_prompt '{active}', resetting to 'default'")
             self.data["aipp_active_prompt"] = "default"
 
-        valid_providers = ["ollama", "openai", "anthropic", "xai"]
+        valid_providers = ["ollama", "openai", "anthropic", "xai", "llamacpp_server", "llamacpp_direct"]
         provider = self.data.get("aipp_provider", "ollama")
         if provider not in valid_providers:
             print(f"\n[config] Invalid aipp_provider '{provider}', resetting to 'ollama'")
@@ -241,6 +276,52 @@ class AppConfig:
     def aipp_model(self, value):
         prov = self.data.get("aipp_provider", "ollama")
         self.set_aipp_selected_model(value, prov)
+
+    # ---- llama.cpp helpers --------------------------------------------------
+    def get_llamacpp_model_path(self, model_name: str) -> str:
+        """Get the full path to a llama.cpp model."""
+        filename = self.data.get("llamacpp_models", {}).get(model_name, model_name)
+        if not filename.endswith('.gguf'):
+            filename += '.gguf'
+        return str(LLAMACPP_MODELS_DIR / filename)
+
+    def validate_llamacpp_setup(self) -> dict[str, bool]:
+        """Check llama.cpp installation status."""
+        status = {
+            "server_available": False,
+            "cli_available": False, 
+            "default_model_available": False,
+            "python_bindings_available": False
+        }
+        
+        try:
+            from voxt.paths import llama_server
+            llama_server()
+            status["server_available"] = True
+        except (FileNotFoundError, ImportError):
+            pass
+        
+        try:
+            from voxt.paths import llama_cli
+            llama_cli()
+            status["cli_available"] = True
+        except (FileNotFoundError, ImportError):
+            pass
+        
+        try:
+            from voxt.paths import default_llamacpp_model
+            default_llamacpp_model()
+            status["default_model_available"] = True
+        except (FileNotFoundError, ImportError):
+            pass
+        
+        try:
+            import llama_cpp
+            status["python_bindings_available"] = True
+        except ImportError:
+            pass
+        
+        return status
 
 # Global singleton holder (defined after AppConfig)
 _APP_CONFIG = None

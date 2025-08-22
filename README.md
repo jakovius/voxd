@@ -130,10 +130,106 @@ In GUI or TRAY mode, all relevant settings are in: "*AI Post-Processing*".
 
 ## Supported providers:
 
-- Ollama (local)  
-- OpenAI  
-- Anthropic  
-- xAI  
+- **Ollama** (local)  
+- **llama.cpp** (local, direct & server modes)
+- **OpenAI**  
+- **Anthropic**  
+- **xAI**  
+
+---
+
+## 🦙 llama.cpp Integration (Local AI)
+
+VOXT includes **native llama.cpp support** for ultra-fast local AI processing without requiring Ollama. This gives you two llama.cpp modes:
+
+- **`llamacpp_server`** - Uses llama.cpp's built-in HTTP server (recommended)
+- **`llamacpp_direct`** - Direct Python bindings (fastest, but requires `llama-cpp-python`)
+
+### 🚀 Quick Setup
+
+llama.cpp integration is **optional** during `setup.sh`. If you want to add it later:
+
+```bash
+# Re-run setup with llama.cpp option
+./setup.sh  # Will detect existing install and offer llama.cpp setup
+```
+
+The setup automatically:
+- ✅ Clones and builds llama.cpp with optimal settings
+- ✅ Downloads a default model (`gemma-3-270m-it-Q4_0.gguf`, ~150MB)  
+- ✅ Installs Python bindings (`llama-cpp-python`) for direct mode
+- ✅ Configures VOXT to use llama.cpp providers
+
+### 📁 Model Management
+
+#### **Model Storage**
+```
+~/.local/share/voxt/llamacpp_models/
+```
+
+#### **Adding New Models**
+
+**Step 1:** Download a `.gguf` model from [Hugging Face](https://huggingface.co/models?search=gguf)
+```bash
+# Example: Download to model directory
+cd ~/.local/share/voxt/llamacpp_models/
+wget https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf
+```
+
+**Step 2:** Register the model in your config
+```bash
+# Edit ~/.config/voxt/config.yaml
+llamacpp_models:
+  gemma-3-270m: "gemma-3-270m-it-Q4_0.gguf"
+  phi-3-mini: "Phi-3-mini-4k-instruct-q4.gguf"  # ← Add this line
+```
+
+**Step 3:** Select in VOXT GUI  
+*AI Post-Processing → Provider: `llamacpp_server` → Model: `phi-3-mini`*
+
+#### **Recommended Models for AIPP**
+
+| Model | Size | RAM | Quality | Best For |
+|-------|------|-----|---------|----------|
+| **gemma-3-270m** | 150MB | 1GB | Basic | Default, very fast |
+| **llama-3.2-1b** | 600MB | 2GB | Good | Balanced speed/quality |
+| **phi-3-mini** | 2.3GB | 4GB | Great | High quality text |
+| **qwen2.5-coder-1.5b** | 900MB | 2GB | Good | Code-focused tasks |
+
+💡 **Tip:** Always choose **instruct/chat** variants (not base models) for AIPP tasks.
+
+#### **Model Format Requirements**
+- ✅ **GGUF format only** (`.gguf` extension)
+- ✅ **Quantized models preferred** (Q4_0, Q4_1, Q5_0, etc.)
+- ❌ **Not supported:** PyTorch (`.pth`), Safetensors (`.safetensors`), ONNX
+
+### 🔧 Advanced Configuration
+
+Edit `~/.config/voxt/config.yaml`:
+
+```yaml
+# llama.cpp settings
+llamacpp_server_path: "llama.cpp/build/bin/llama-server"
+llamacpp_server_url: "http://localhost:8080"
+llamacpp_server_timeout: 30
+
+# Available models
+llamacpp_models:
+  gemma-3-270m: "gemma-3-270m-it-Q4_0.gguf"
+  your-model: "your-model-file.gguf"
+
+# Selected models per provider
+aipp_selected_models:
+  llamacpp_server: "gemma-3-270m"
+  llamacpp_direct: "gemma-3-270m"
+```
+
+### 🚀 Performance Tips
+
+- **Server mode** handles concurrent requests better
+- **Direct mode** has lower latency for single requests
+- **GPU acceleration** automatically detected during build (CUDA/Metal)
+- **Smaller models** (270M-1B) are often sufficient for text cleanup tasks
 
 ---
 
@@ -193,7 +289,10 @@ deactivate 2>/dev/null || true
 # (2) delete everything that the helper script created in-place
 rm -rf .venv              # Python virtual-env
 rm -rf whisper.cpp        # whisper.cpp sources + binaries
+rm -rf llama.cpp          # llama.cpp sources + binaries (if installed)
 rm -f  ~/.local/bin/whisper-cli   # symlink created by setup.sh
+rm -f  ~/.local/bin/llama-server  # llama.cpp server symlink
+rm -f  ~/.local/bin/llama-cli     # llama.cpp CLI symlink
 
 # (3) finally remove the repo folder itself
 cd .. && rm -rf voxt
@@ -211,8 +310,9 @@ These steps remove user-level state that VOXT (or its Wayland helper) may have c
 
 ```bash
 # Stop any live processes
-pkill -f voxt      || true
-pkill -f ydotoold   || true
+pkill -f voxt         || true
+pkill -f ydotoold     || true
+pkill -f llama-server || true  # Stop llama.cpp server if running
 
 # Systemd user service (only if you previously ran setup_ydotool.sh)
 systemctl --user stop    ydotoold.service   2>/dev/null || true
@@ -221,6 +321,8 @@ rm -f ~/.config/systemd/user/ydotoold.service
 
 # XDG config & cache
 rm -rf ~/.config/voxt      # settings file, absolute paths, etc.
+rm -rf ~/.local/share/voxt # models, logs, and all user data
+                               # (includes llamacpp_models/ directory)
 
 # Desktop launcher
 rm -f ~/.local/share/applications/voxt.desktop

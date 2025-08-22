@@ -6,8 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
-# whisper.cpp
+# whisper.cpp & llama.cpp
 whisper.cpp
+llama.cpp
 
 # text logs
 *log.txt
