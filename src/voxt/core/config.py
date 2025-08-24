@@ -47,14 +47,11 @@ DEFAULT_CONFIG = {
     # llama.cpp settings
     "llamacpp_server_path": "llama.cpp/build/bin/llama-server",
     "llamacpp_cli_path": "llama.cpp/build/bin/llama-cli", 
-    "llamacpp_default_model": "llamacpp_models/gemma-3-270m-it-Q4_0.gguf",
+    "llamacpp_default_model": "llamacpp_models/qwen2.5-3b-instruct-q4_k_m.gguf",
     "llamacpp_server_url": "http://localhost:8080",
     "llamacpp_server_timeout": 30,
     
-    # Model registry for llama.cpp
-    "llamacpp_models": {
-        "gemma-3-270m": "gemma-3-270m-it-Q4_0.gguf",
-    },
+
 
     "aipp_prompts": {
         "default": "Rewrite the following text to appear as if Yoda from Star Wars is saying it",
@@ -78,6 +75,7 @@ class AppConfig:
         self.data = DEFAULT_CONFIG.copy()
         self.load()
         self._validate_aipp_config()
+        self.update_available_llamacpp_models()
 
     def load(self):
         if CONFIG_PATH.exists():
@@ -280,10 +278,46 @@ class AppConfig:
     # ---- llama.cpp helpers --------------------------------------------------
     def get_llamacpp_model_path(self, model_name: str) -> str:
         """Get the full path to a llama.cpp model."""
-        filename = self.data.get("llamacpp_models", {}).get(model_name, model_name)
-        if not filename.endswith('.gguf'):
-            filename += '.gguf'
+        from voxt.paths import find_llamacpp_model_by_name
+        
+        model_path = find_llamacpp_model_by_name(model_name)
+        if model_path:
+            return str(model_path)
+        
+        # Fallback: assume it's in the models directory
+        filename = model_name if model_name.endswith('.gguf') else f"{model_name}.gguf"
         return str(LLAMACPP_MODELS_DIR / filename)
+
+    def update_available_llamacpp_models(self):
+        """Update the aipp_models lists with available llama.cpp models."""
+        from voxt.paths import get_available_llamacpp_model_names
+        
+        available_models = get_available_llamacpp_model_names()
+        if not available_models:
+            # If no models found, keep the default as fallback
+            available_models = ["qwen2.5-3b-instruct-q4_k_m"]
+        
+        # Update both llamacpp providers
+        if "aipp_models" not in self.data:
+            self.data["aipp_models"] = {}
+        
+        self.data["aipp_models"]["llamacpp_server"] = available_models
+        self.data["aipp_models"]["llamacpp_direct"] = available_models
+        
+        # Ensure selected models are valid
+        if "aipp_selected_models" not in self.data:
+            self.data["aipp_selected_models"] = {}
+            
+        for provider in ["llamacpp_server", "llamacpp_direct"]:
+            current_selected = self.data["aipp_selected_models"].get(provider, "")
+            if current_selected not in available_models:
+                # Set to the first available model, or default
+                if available_models:
+                    self.data["aipp_selected_models"][provider] = available_models[0]
+                else:
+                    self.data["aipp_selected_models"][provider] = "qwen2.5-3b-instruct-q4_k_m"
+        
+        self.save()
 
     def validate_llamacpp_setup(self) -> dict[str, bool]:
         """Check llama.cpp installation status."""

@@ -156,7 +156,7 @@ llama.cpp integration is **optional** during `setup.sh`. If you want to add it l
 
 The setup automatically:
 - ✅ Clones and builds llama.cpp with optimal settings
-- ✅ Downloads a default model (`gemma-3-270m-it-Q4_0.gguf`, ~150MB)  
+- ✅ Downloads a default model (`qwen2.5-3b-instruct-q4_k_m.gguf`, ~1.9GB)  
 - ✅ Installs Python bindings (`llama-cpp-python`) for direct mode
 - ✅ Configures VOXT to use llama.cpp providers
 
@@ -176,23 +176,18 @@ cd ~/.local/share/voxt/llamacpp_models/
 wget https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf
 ```
 
-**Step 2:** Register the model in your config
-```bash
-# Edit ~/.config/voxt/config.yaml
-llamacpp_models:
-  gemma-3-270m: "gemma-3-270m-it-Q4_0.gguf"
-  phi-3-mini: "Phi-3-mini-4k-instruct-q4.gguf"  # ← Add this line
-```
+**Step 2:** Restart VOXT  
+VOXT automatically discovers all `.gguf` files in the models directory on startup and makes them available for selection.
 
 **Step 3:** Select in VOXT GUI  
-*AI Post-Processing → Provider: `llamacpp_server` → Model: `phi-3-mini`*
+*AI Post-Processing → Provider: `llamacpp_server` → Model: `Phi-3-mini-4k-instruct-q4`*
 
 #### **Recommended Models for AIPP**
 
 | Model | Size | RAM | Quality | Best For |
 |-------|------|-----|---------|----------|
-| **gemma-3-270m** | 150MB | 1GB | Basic | Default, very fast |
-| **llama-3.2-1b** | 600MB | 2GB | Good | Balanced speed/quality |
+| **qwen2.5-3b-instruct** | 1.9GB | 3GB | Great | Default, high quality |
+| **llama-3.2-1b** | 600MB | 2GB | Good | Lightweight alternative |
 | **phi-3-mini** | 2.3GB | 4GB | Great | High quality text |
 | **qwen2.5-coder-1.5b** | 900MB | 2GB | Good | Code-focused tasks |
 
@@ -213,15 +208,10 @@ llamacpp_server_path: "llama.cpp/build/bin/llama-server"
 llamacpp_server_url: "http://localhost:8080"
 llamacpp_server_timeout: 30
 
-# Available models
-llamacpp_models:
-  gemma-3-270m: "gemma-3-270m-it-Q4_0.gguf"
-  your-model: "your-model-file.gguf"
-
-# Selected models per provider
+# Selected models per provider (automatically updated by VOXT)
 aipp_selected_models:
-  llamacpp_server: "gemma-3-270m"
-  llamacpp_direct: "gemma-3-270m"
+  llamacpp_server: "qwen2.5-3b-instruct-q4_k_m"
+  llamacpp_direct: "qwen2.5-3b-instruct-q4_k_m"
 ```
 
 ### 🚀 Performance Tips

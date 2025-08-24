@@ -479,35 +479,35 @@ ensure_ydotool
 # ──────────────────  8. llama.cpp setup (optional)  ─────────────────────────────
 
 # Model download helper with verification
-download_gemma_model() {
+download_qwen_model() {
     local model_dir="$1"
-    local model_file="$model_dir/gemma-3-270m-it-Q4_0.gguf"
-    local download_url="https://huggingface.co/unsloth/gemma-3-270m-it-GGUF/resolve/main/gemma-3-270m-it-Q4_0.gguf?download=true"
+    local model_file="$model_dir/qwen2.5-3b-instruct-q4_k_m.gguf"
+    local download_url="https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf?download=true"
     
     if [[ -f "$model_file" ]]; then
-        msg "gemma-3-270m model already exists at $model_file"
+        msg "qwen2.5-3b-instruct model already exists at $model_file"
         return 0
     fi
     
     mkdir -p "$model_dir"
-    msg "Downloading gemma-3-270m model (approx. 150MB)..."
+    msg "Downloading qwen2.5-3b-instruct model (approx. 1.9GB)..."
     
     if curl -L -f --progress-bar -o "$model_file.tmp" "$download_url"; then
         mv "$model_file.tmp" "$model_file"
-        msg "✅ Downloaded gemma-3-270m model successfully"
+        msg "✅ Downloaded qwen2.5-3b-instruct model successfully"
         return 0
     else
         rm -f "$model_file.tmp"
-        msg "${RED}❌ Failed to download gemma-3-270m model${NC}"
+        msg "${RED}❌ Failed to download qwen2.5-3b-instruct model${NC}"
         echo ""
         echo "Please download manually from:"
         echo "  $download_url"
         echo ""
-        echo "Or choose an alternative gemma-3 model from:"
-        echo "  https://huggingface.co/models?search=gemma-3+gguf"
+        echo "Or choose an alternative Qwen model from:"
+        echo "  https://huggingface.co/models?search=qwen+gguf"
         echo ""
         echo "Place the .gguf file in: $model_dir/"
-        echo "Supported formats: Q4_0, Q4_1, Q5_0, Q5_1, Q8_0"
+        echo "Supported formats: Q4_K_M, Q4_0, Q5_0, Q5_1, Q8_0"
         return 1
     fi
 }
@@ -521,11 +521,11 @@ setup_llamacpp() {
         
         # Still offer to download the model
         local model_dir="$HOME/.local/share/voxt/llamacpp_models"
-        if [[ ! -f "$model_dir/gemma-3-270m-it-Q4_0.gguf" ]]; then
-            read -r -p "Download default gemma-3-270m model for AIPP? [Y/n]: " download_model
+        if [[ ! -f "$model_dir/qwen2.5-3b-instruct-q4_k_m.gguf" ]]; then
+            read -r -p "Download default qwen2.5-3b-instruct model for AIPP? [Y/n]: " download_model
             download_model=${download_model:-Y}
             if [[ $download_model =~ ^[Yy]$ ]]; then
-                download_gemma_model "$model_dir"
+                download_qwen_model "$model_dir"
             fi
         fi
         return 0
@@ -640,7 +640,7 @@ setup_llamacpp() {
     
     # Download default model
     local model_dir="$HOME/.local/share/voxt/llamacpp_models"
-    download_gemma_model "$model_dir"
+    download_qwen_model "$model_dir"
     
     # Optional: Install Python bindings
     echo ""
@@ -734,7 +734,7 @@ cfg.set("model_path", str(model_path))
 # Update llama.cpp paths if available
 llama_server_path = Path(os.getcwd()) / "llama.cpp" / "build" / "bin" / "llama-server"
 llama_cli_path = Path(os.getcwd()) / "llama.cpp" / "build" / "bin" / "llama-cli"
-llamacpp_model_path = LLAMACPP_MODELS_DIR / "gemma-3-270m-it-Q4_0.gguf"
+llamacpp_model_path = LLAMACPP_MODELS_DIR / "qwen2.5-3b-instruct-q4_k_m.gguf"
 
 if llama_server_path.exists():
     cfg.set("llamacpp_server_path", str(llama_server_path))

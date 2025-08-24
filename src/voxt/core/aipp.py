@@ -153,8 +153,7 @@ def run_llamacpp_direct_aipp(prompt: str, model: str, cfg) -> str:
         from voxt.paths import LLAMACPP_MODELS_DIR
         
         # Get model path
-        model_filename = cfg.data.get("llamacpp_models", {}).get(model, f"{model}.gguf")
-        model_path = LLAMACPP_MODELS_DIR / model_filename
+        model_path = Path(cfg.get_llamacpp_model_path(model))
         
         if not model_path.exists():
             raise FileNotFoundError(f"llama.cpp model not found: {model_path}")
@@ -199,8 +198,7 @@ def run_llamacpp_direct_aipp(prompt: str, model: str, cfg) -> str:
             from voxt.paths import LLAMACPP_MODELS_DIR
             
             # Get model path
-            model_filename = cfg.data.get("llamacpp_models", {}).get(model, f"{model}.gguf")
-            model_path = LLAMACPP_MODELS_DIR / model_filename
+            model_path = Path(cfg.get_llamacpp_model_path(model))
             
             if not model_path.exists():
                 raise FileNotFoundError(f"llama.cpp model not found: {model_path}")

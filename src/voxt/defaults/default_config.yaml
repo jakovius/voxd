@@ -22,8 +22,8 @@ aipp_models:
   openai: ["gpt-4o-mini-2024-07-18"]
   anthropic: ["claude-3-opus-20240229", "claude-3-haiku"]
   xai: ["grok-3-latest"]
-  llamacpp_server: ["gemma-3-270m"]
-  llamacpp_direct: ["gemma-3-270m"]
+  llamacpp_server: ["qwen2.5-3b-instruct-q4_k_m"]
+  llamacpp_direct: ["qwen2.5-3b-instruct-q4_k_m"]
 
 # New: Selected model per provider
 aipp_selected_models:
@@ -31,19 +31,17 @@ aipp_selected_models:
   openai: "gpt-4o-mini-2024-07-18"
   anthropic: "claude-3-opus-20240229"
   xai: "grok-3-latest"
-  llamacpp_server: "gemma-3-270m"
-  llamacpp_direct: "gemma-3-270m"
+  llamacpp_server: "qwen2.5-3b-instruct-q4_k_m"
+  llamacpp_direct: "qwen2.5-3b-instruct-q4_k_m"
 
 # llama.cpp settings
 llamacpp_server_path: "llama.cpp/build/bin/llama-server"
 llamacpp_cli_path: "llama.cpp/build/bin/llama-cli"
-llamacpp_default_model: "llamacpp_models/gemma-3-270m-it-Q4_0.gguf"
+llamacpp_default_model: "llamacpp_models/qwen2.5-3b-instruct-q4_k_m.gguf"
 llamacpp_server_url: "http://localhost:8080"
 llamacpp_server_timeout: 30n
 
-# Model registry for llama.cpp
-llamacpp_models:
-  gemma-3-270m: "gemma-3-270m-it-Q4_0.gguf"
+
 
 aipp_prompts:
   default: "Rewrite the following input so that it is clean and concise. Do not add any additional text or commentary. Just the rewritten text."

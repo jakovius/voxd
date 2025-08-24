@@ -167,7 +167,7 @@ def llama_cli() -> Path:
 LLAMACPP_MODELS_DIR: Final = DATA_DIR / "llamacpp_models"
 
 def _locate_default_llamacpp_model() -> Path:
-    """Return absolute Path to the default llama.cpp model (gemma-3-270m)."""
+    """Return absolute Path to the default llama.cpp model (qwen2.5-3b-instruct)."""
     
     # 1. Environment override
     env = os.getenv("VOXT_LLAMACPP_MODEL_PATH")
@@ -177,20 +177,20 @@ def _locate_default_llamacpp_model() -> Path:
             return env_path
     
     # 2. XDG data dir – canonical location
-    data_candidate = LLAMACPP_MODELS_DIR / "gemma-3-270m-it-Q4_0.gguf"
+    data_candidate = LLAMACPP_MODELS_DIR / "qwen2.5-3b-instruct-q4_k_m.gguf"
     if data_candidate.exists():
         return data_candidate.resolve()
     
     # 3. Repo-local (editable/dev install)
     repo_candidate = (
         Path(__file__).parents[2]
-        / "llama.cpp" / "models" / "gemma-3-270m-it-Q4_0.gguf"
+        / "llama.cpp" / "models" / "qwen2.5-3b-instruct-q4_k_m.gguf"
     )
     if repo_candidate.exists():
         return repo_candidate.resolve()
     
     raise FileNotFoundError(
-        "Could not locate the default llama.cpp model (gemma-3-270m-it-Q4_0.gguf).\n"
+        "Could not locate the default llama.cpp model (qwen2.5-3b-instruct-q4_k_m.gguf).\n"
         "Checked $VOXT_LLAMACPP_MODEL_PATH, XDG data dir, and repo-local.\n"
         "Run setup.sh with llama.cpp option or download the model manually."
     )
@@ -212,6 +212,29 @@ def list_llamacpp_models() -> list[Path]:
         models.extend(repo_models.glob("*.gguf"))
     
     return sorted(set(models))
+
+def get_available_llamacpp_model_names() -> list[str]:
+    """Return model names (without .gguf extension) for config usage."""
+    models = list_llamacpp_models()
+    return [model.stem for model in models]
+
+def find_llamacpp_model_by_name(model_name: str) -> Path | None:
+    """Find a llama.cpp model file by its name (with or without .gguf extension)."""
+    # Ensure the name has .gguf extension
+    if not model_name.endswith('.gguf'):
+        model_name += '.gguf'
+    
+    # Check XDG data dir first
+    data_candidate = LLAMACPP_MODELS_DIR / model_name
+    if data_candidate.exists():
+        return data_candidate.resolve()
+    
+    # Check repo-local
+    repo_candidate = Path(__file__).parents[2] / "llama.cpp" / "models" / model_name
+    if repo_candidate.exists():
+        return repo_candidate.resolve()
+    
+    return None
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Base model discovery
