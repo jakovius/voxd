@@ -11,6 +11,21 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os, sys
+
+
+# ANSI colors
+ORANGE = "\033[38;5;208m"
+GREEN = "\033[32m"
+RED = "\033[31m"
+YELLOW = "\033[33m"
+RESET = "\033[0m"
+
+def _color_enabled():
+    try:
+        return sys.stdout.isatty() and os.getenv("NO_COLOR") is None
+    except Exception:
+        return False
 
 
 # -----------------------------------------------------------------------------
@@ -46,7 +61,23 @@ def verbo(what_string: str, *args, **kwargs):
 
     cfg = _app_cfg()
     if getattr(cfg, "verbosity", False):
-        print(what_string.format(*args, **kwargs))
+        msg = what_string.format(*args, **kwargs)
+        if _color_enabled():
+            if msg.startswith("[recorder]"):
+                msg = f"{ORANGE}{msg}{RESET}"
+            elif msg.startswith("[logger]") or msg.startswith("[aipp]"):
+                msg = f"{GREEN}{msg}{RESET}"
+        print(msg)
+
+def verr(what_string: str, *args, **kwargs):
+    """Unconditional error print, colored red when TTY.
+
+    Intended for critical errors regardless of verbosity.
+    """
+    msg = what_string.format(*args, **kwargs)
+    if _color_enabled():
+        msg = f"{RED}{msg}{RESET}"
+    print(msg)
 
 def diagn(value, *, label: str | None = None):
     """

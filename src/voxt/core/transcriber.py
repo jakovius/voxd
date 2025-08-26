@@ -2,7 +2,7 @@ import subprocess
 import os
 from pathlib import Path
 import re
-from voxt.utils.libw import verbo
+from voxt.utils.libw import verbo, verr
 from voxt.paths import find_whisper_cli, find_base_model
 
 
@@ -51,13 +51,13 @@ class WhisperTranscriber:
         verbo(f"[transcriber] Running command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            print("[transcriber] whisper.cpp failed:")
-            print(f"stderr: {result.stderr}")
-            print(f"stdout: {result.stdout}")
+            verr("[transcriber] whisper.cpp failed:")
+            verr(f"stderr: {result.stderr}")
+            verr(f"stdout: {result.stdout}")
             return None, None
 
         if not output_txt.exists():
-            print(f"[transcriber] Transcription failed: Expected output not found at {output_txt}")
+            verr(f"[transcriber] Transcription failed: Expected output not found at {output_txt}")
             return None, None
 
         verbo(f"[transcriber] Transcription complete: {output_txt}")
@@ -68,7 +68,7 @@ class WhisperTranscriber:
                 audio_file.unlink()
                 verbo(f"[transcriber] Deleted input file: {audio_file}")
             except Exception as e:
-                print(f"[transcriber] Could not delete input file: {e}")
+                verr(f"[transcriber] Could not delete input file: {e}")
 
         return self._parse_transcript(output_txt)
 

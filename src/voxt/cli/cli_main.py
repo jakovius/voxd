@@ -4,6 +4,7 @@ import argparse
 import sys
 import threading
 from typing import Any, cast
+import tempfile
 
 # Runtime auto-setup helper
 from voxt.utils.whisper_auto import ensure_whisper_cli
@@ -14,7 +15,9 @@ from voxt.core.transcriber import WhisperTranscriber  # type: ignore
 from voxt.core.aipp import get_final_text
 from voxt.utils.core_runner import AudioRecorder, ClipboardManager, SimulatedTyper
 from voxt.utils.ipc_server import start_ipc_server
-from voxt.utils.libw import verbo
+from voxt.utils.libw import verbo, verr, YELLOW, RED, RESET
+import shutil
+from pathlib import Path
         
 def print_help():
     print("""
@@ -32,6 +35,20 @@ def edit_config(config_path="config.yaml"):
     from voxt.core.config import CONFIG_PATH
     subprocess.run(["xdg-open", str(CONFIG_PATH)])
 
+def _print_disk_space_status(target_dir: Path, threshold_mb: int = 500):
+    usage = shutil.disk_usage(target_dir)
+    free_mb = usage.free // (1024 * 1024)
+    if sys.stdout.isatty():
+        if free_mb <= threshold_mb:
+            print(f"{RED}Disk storage low: <= {threshold_mb} MB remaining at {target_dir}{RESET}")
+        else:
+            print(f"{YELLOW}Disk storage availability: OK{RESET}")
+    else:
+        if free_mb <= threshold_mb:
+            print(f"Disk storage low: <= {threshold_mb} MB remaining at {target_dir}")
+        else:
+            print("Disk storage availability: OK")
+
 def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
     hotkey_event = threading.Event()
 
@@ -43,19 +60,28 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
     start_ipc_server(on_ipc_trigger)
 
     print("🌀 VOXT CLI Mode:\n--- ALWAYS picking up into clipboard\n--- Type 'h' for help")
+    # Disk space check: choose target directory
+    from voxt.paths import RECORDINGS_DIR
+    target = RECORDINGS_DIR if bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False)) else (Path(tempfile.gettempdir()) / "voxt_temp")
+    target.mkdir(parents=True, exist_ok=True)
+    _print_disk_space_status(target)
 
     while True:
         cmd = input("\VOXT> ").strip().lower()
         if cmd == "r":
             print(" Simple mode | Recording... (ENTER to stop and output into the terminal)")
-            recorder = AudioRecorder()
-            transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
+            recorder = AudioRecorder(
+                record_chunked=getattr(cfg, "record_chunked", True),
+                chunk_seconds=int(getattr(cfg, "record_chunk_seconds", 300))
+            )
+            preserve = bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False))
+            transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not preserve)
             clipboard = ClipboardManager()
             typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
 
             recorder.start_recording()
             input()
-            rec_path = recorder.stop_recording(preserve=args.save_audio)
+            rec_path = recorder.stop_recording(preserve=preserve)
             verbo("Stopping recording...")
 
             tscript, orig_tscript = transcriber.transcribe(rec_path)
@@ -76,8 +102,12 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
         elif cmd == "rh":
             print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit\n*** You can now go to ANY other app to VOICE-TYPE - leave this active in the background ***")
             # Create reusable instances outside the loop
-            recorder = AudioRecorder()
-            transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
+            recorder = AudioRecorder(
+                record_chunked=getattr(cfg, "record_chunked", True),
+                chunk_seconds=int(getattr(cfg, "record_chunk_seconds", 300))
+            )
+            preserve = bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False))
+            transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not preserve)
             clipboard = ClipboardManager()
             typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
 
@@ -93,7 +123,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
                     hotkey_event.wait()
                     verbo("[cli] Hotkey received: stopping recording.")
 
-                    rec_path = recorder.stop_recording(preserve=args.save_audio)
+                    rec_path = recorder.stop_recording(preserve=preserve)
                     verbo("[recorder] Stopping recording...")
 
                     tscript, orig_tscript = transcriber.transcribe(rec_path)
@@ -139,14 +169,14 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
         else:
             print("[cli] Unknown command. Type 'h' for help.")
 
-def main():
-    parser = argparse.ArgumentParser(description="VOXT CLI Mode")
-    parser.add_argument("--save-audio", action="store_true", help="Preserve audio recordings.")
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="voxt --cli", description="VOXT CLI Mode")
+    parser.add_argument("--save-audio", action="store_true", help="Preserve audio recordings. If used alone, sets it persistently.")
     # --- Quick action flags (non-interactive shortcuts) ---
     qa = parser.add_argument_group("Quick actions")
-    qa.add_argument("--record", action="store_true", help="One-shot microphone recording and exit")
+    qa.add_argument("--record", action="store_true", help="Record to ~/.local/share/voxt/recordings and exit (no transcription)")
     qa.add_argument("--rh", action="store_true", help="Hotkey-controlled continuous recording")
-    qa.add_argument("--transcribe", type=str, metavar="FILE", help="Transcribe an existing audio FILE and exit (file is preserved)")
+    qa.add_argument("--transcribe", type=str, metavar="FILE", help="Transcribe an existing audio FILE and exit")
     qa.add_argument("--log", action="store_true", help="Show current session log and exit")
     qa.add_argument("--cfg", action="store_true", help="Open configuration file for editing and exit")
     # --- AIPP CLI flags ---
@@ -155,6 +185,10 @@ def main():
     parser.add_argument("--aipp-prompt", type=str, help="AIPP prompt key to use (default, prompt1, prompt2, prompt3)")
     parser.add_argument("--aipp-provider", type=str, help="AIPP provider override (ollama, openai, anthropic, xai, llamacpp_server, llamacpp_direct)")
     parser.add_argument("--aipp-model", type=str, help="AIPP model override for the selected provider")
+    return parser
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
 
     cfg = cast(Any, AppConfig())
@@ -189,34 +223,26 @@ def main():
         else:
             print(f"[cli] Unknown model '{args.aipp_model}' for provider '{prov}'")
 
+    # Disk space check for quick actions as well
+    from voxt.paths import RECORDINGS_DIR
+    target = RECORDINGS_DIR if bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False)) else (Path(tempfile.gettempdir()) / "voxt_temp")
+    target.mkdir(parents=True, exist_ok=True)
+    _print_disk_space_status(target)
+
     try:
         # --- Quick actions ---
         if args.record:
             print("Recording... (press ENTER to stop)")
-            recorder = AudioRecorder()
-            transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
-            clipboard = ClipboardManager()
-            typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
-
+            recorder = AudioRecorder(
+                record_chunked=getattr(cfg, "record_chunked", True),
+                chunk_seconds=int(getattr(cfg, "record_chunk_seconds", 300))
+            )
             recorder.start_recording()
             input()
-            rec_path = recorder.stop_recording(preserve=args.save_audio)
-            tscript, _ = transcriber.transcribe(rec_path)
-            if not tscript:
-                print("[cli] No transcript returned.")
-                sys.exit(1)
-            final_text = get_final_text(tscript, cfg)  # type: ignore[arg-type]
-            clipboard.copy(final_text)
-            if cfg.simulate_typing:
-                typer.type(final_text)
-            print(f"\n📝 ---> {final_text}")
-            if cfg.aipp_enabled:
-                logger.log_entry(f"[original] {tscript}")
-                if final_text != tscript:
-                    logger.log_entry(f"[aipp] {final_text}")
-            else:
-                logger.log_entry(final_text)
-            logger.save()
+            # Always preserve for --record quick action
+            rec_path = recorder.stop_recording(preserve=True)
+            from voxt.paths import RECORDINGS_DIR
+            print(f"[cli] Saved recording: {rec_path}")
             return
 
         if args.rh:
@@ -227,7 +253,8 @@ def main():
             start_ipc_server(on_ipc_trigger)
             print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit")
             recorder = AudioRecorder()
-            transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not args.save_audio)
+            preserve = bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False))
+            transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not preserve)
             clipboard = ClipboardManager()
             typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
             try:
@@ -240,7 +267,7 @@ def main():
                     hotkey_event.clear()
                     hotkey_event.wait()
                     verbo("[cli] Hotkey received: stopping recording.")
-                    rec_path = recorder.stop_recording(preserve=args.save_audio)
+                    rec_path = recorder.stop_recording(preserve=preserve)
                     tscript, _ = transcriber.transcribe(rec_path)
                     if not tscript:
                         print("[cli] No transcript returned.")
@@ -262,7 +289,12 @@ def main():
 
         if args.transcribe:
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=False)
-            tscript, _ = transcriber.transcribe(args.transcribe)
+            tfile = args.transcribe
+            from pathlib import Path
+            if not Path(tfile).exists():
+                print(f"[cli] File not found: {tfile}")
+                return
+            tscript, _ = transcriber.transcribe(tfile)
             final_text = get_final_text(tscript, cfg)  # type: ignore[arg-type]
             print(f"\n📝 ---> {final_text}")
             if cfg.aipp_enabled:
@@ -278,6 +310,15 @@ def main():
 
         if args.cfg:
             edit_config()
+            return
+
+        # If only --save-audio was passed, persist it and exit
+        if args.save_audio and not any([args.record, args.rh, args.transcribe, args.log, args.cfg, args.aipp, args.no_aipp, args.aipp_prompt, args.aipp_provider, args.aipp_model]):
+            cfg.data["save_recordings"] = True
+            cfg.save()
+            from voxt.paths import RECORDINGS_DIR
+            RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+            print(f"[cli] Recording preservation enabled → {RECORDINGS_DIR}")
             return
 
         # --- Interactive CLI ---

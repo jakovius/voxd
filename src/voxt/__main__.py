@@ -36,13 +36,31 @@ def main():
     )
     args, unknown = parser.parse_known_args()
 
+    # Recognize CLI quick-action flags at top-level to implicitly enter CLI mode
+    cli_flags = {
+        "--save-audio", "--record", "--rh", "--transcribe", "--log", "--cfg",
+        "--aipp", "--no-aipp", "--aipp-prompt", "--aipp-provider", "--aipp-model",
+    }
+    unknown_flags = {u.split("=")[0] for u in unknown if u.startswith("-")}
+
     # ------------------------------------------------------------
     #         Top-level help handling (only when no sub-mode)
     # ------------------------------------------------------------
     if not any([args.cli, args.gui, args.tray]):
         if "-h" in unknown or "--help" in unknown or len(sys.argv) == 1:
             parser.print_help()
+            # Also show CLI quick actions help for convenience
+            try:
+                from voxt.cli.cli_main import build_parser as _build_cli_parser
+                print("\n[CLI quick actions] You can use these directly; they imply --cli:\n")
+                print(_build_cli_parser().format_help())
+            except Exception:
+                pass
             sys.exit(0)
+
+    # Implicit CLI mode if any CLI-specific flags are present without a mode
+    if not any([args.cli, args.gui, args.tray]) and (unknown_flags & cli_flags):
+        args.cli = True
 
     # If we're just the hotkey sender, dispatch and exit immediately
     if args.trigger_record:

@@ -8,6 +8,11 @@ typing_delay: 1
 typing_start_delay: 0.15
 ctrl_v_paste: false  # Use Ctrl+V instead of default Ctrl+Shift+V
 verbosity: true
+record_chunked: true
+record_chunk_seconds: 300
+audio_preproc_enabled: true
+audio_peak_dbfs: -3.0
+audio_clip_warn_threshold: 0.01
 whisper_binary: whisper.cpp/build/bin/whisper-cli
 model_path: whisper.cpp/models/ggml-base.en.bin
 
@@ -39,7 +44,7 @@ llamacpp_server_path: "llama.cpp/build/bin/llama-server"
 llamacpp_cli_path: "llama.cpp/build/bin/llama-cli"
 llamacpp_default_model: "llamacpp_models/qwen2.5-3b-instruct-q4_k_m.gguf"
 llamacpp_server_url: "http://localhost:8080"
-llamacpp_server_timeout: 30n
+llamacpp_server_timeout: 30
 
 
 

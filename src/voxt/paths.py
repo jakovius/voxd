@@ -75,6 +75,10 @@ def whisper_cli() -> Path:  # noqa: D401
 OUTPUT_DIR: Final = DATA_DIR / "output"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+# Permanent recordings directory (for preserved audio files)
+RECORDINGS_DIR: Final = DATA_DIR / "recordings"
+RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Convenience helper for packaged resources
 # ---------------------------------------------------------------------------
@@ -216,7 +220,20 @@ def list_llamacpp_models() -> list[Path]:
 def get_available_llamacpp_model_names() -> list[str]:
     """Return model names (without .gguf extension) for config usage."""
     models = list_llamacpp_models()
-    return [model.stem for model in models]
+    
+    # Filter out vocabulary files and other non-model files
+    model_names = []
+    for model in models:
+        stem = model.stem
+        # Skip vocabulary files and other internal files
+        if (stem.startswith('ggml-vocab-') or 
+            stem.startswith('ggml-model-') or
+            stem.startswith('tokenizer') or
+            stem in ['vocab', 'merges']):
+            continue
+        model_names.append(stem)
+    
+    return sorted(model_names)
 
 def find_llamacpp_model_by_name(model_name: str) -> Path | None:
     """Find a llama.cpp model file by its name (with or without .gguf extension)."""

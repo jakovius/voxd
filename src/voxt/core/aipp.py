@@ -2,6 +2,8 @@ import requests
 import json
 import os
 import time
+from voxt.utils.libw import verbo, verr
+from pathlib import Path
 
 
 def run_aipp(text: str, cfg, prompt_key: str = None) -> str:
@@ -38,13 +40,13 @@ def run_aipp(text: str, cfg, prompt_key: str = None) -> str:
             elif provider == "xai":
                 return run_xai_aipp(full_prompt, model)
             else:
-                print(f"[aipp] Unsupported provider: {provider}")
+                verr(f"[aipp] Unsupported provider: {provider}")
                 return text
         except (requests.RequestException, ConnectionError) as e:
             if attempt == 2:
-                print(f"[aipp] Network error after retry: {e}")
+                verr(f"[aipp] Network error after retry: {e}")
                 return text
-            print("[aipp] Network error, retrying once...")
+            verr("[aipp] Network error, retrying once...")
             time.sleep(0.5)
 
 
@@ -229,10 +231,10 @@ def run_llamacpp_direct_aipp(prompt: str, model: str, cfg) -> str:
             
         except ImportError:
             # Fallback to llamacpp_server if llama-cpp-python not available
-            print("[aipp] llama-cpp-python not available, falling back to llamacpp_server")
+            verr("[aipp] llama-cpp-python not available, falling back to llamacpp_server")
             return run_llamacpp_server_aipp(prompt, model)
     except Exception as e:
-        print(f"[aipp] llamacpp_direct failed: {e}, falling back to llamacpp_server")
+        verr(f"[aipp] llamacpp_direct failed: {e}, falling back to llamacpp_server")
         return run_llamacpp_server_aipp(prompt, model)
 
 
@@ -247,5 +249,5 @@ def get_final_text(transcript: str, cfg) -> str:
     try:
         return run_aipp(transcript, cfg, prompt_key=prompt_key)
     except Exception as e:
-        print(f"[aipp] Error: {e}")
+        verr(f"[aipp] Error: {e}")
         return transcript

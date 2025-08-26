@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from voxt.utils.libw import verbo
+from voxt.utils.libw import verbo, verr
 
 
 class SessionLogger:
@@ -90,7 +90,7 @@ class SessionLogger:
                 f.write("\n".join(self.entries) + "\n")
             print(f"[logger] Saved log to {out_path}")
         except Exception as e:
-            print(f"[logger] Failed to write log: {e}")
+            verr(f"[logger] Failed to write log: {e}")
 
     def show(self):
         if not self.entries:

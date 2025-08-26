@@ -2,6 +2,7 @@ import yaml
 import shutil
 import os
 from pathlib import Path
+import re
 from platformdirs import user_config_dir
 from importlib.resources import files
 from voxt.paths import resolve_whisper_binary, resolve_model_path, DATA_DIR, resolve_llamacpp_server, LLAMACPP_MODELS_DIR  # <-- add this import
@@ -16,6 +17,14 @@ DEFAULT_CONFIG = {
     "typing_start_delay": 0.15,
     "ctrl_v_paste": False,  # Use Ctrl+V instead of default Ctrl+Shift+V
     "verbosity": True,
+    "save_recordings": False,
+    # Recording behavior
+    "record_chunked": True,
+    "record_chunk_seconds": 300,
+    # Audio preprocessing
+    "audio_preproc_enabled": True,
+    "audio_peak_dbfs": -3.0,
+    "audio_clip_warn_threshold": 0.01,
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
     "model_path": "whisper.cpp/models/ggml-base.en.bin",
 
@@ -102,6 +111,24 @@ class AppConfig:
                 updated = True
         except FileNotFoundError:
             pass  # llama.cpp not installed yet
+
+        # Sanitize types: fix malformed llamacpp_server_timeout (e.g., "30n")
+        try:
+            tval = self.data.get("llamacpp_server_timeout", 30)
+            if isinstance(tval, str):
+                m = re.match(r"^\s*(\d+(?:\.\d+)?)", tval)
+                if m:
+                    num = m.group(1)
+                    self.data["llamacpp_server_timeout"] = float(num) if "." in num else int(num)
+                else:
+                    self.data["llamacpp_server_timeout"] = 30
+                updated = True
+            elif not isinstance(tval, (int, float)):
+                self.data["llamacpp_server_timeout"] = 30
+                updated = True
+        except Exception:
+            self.data["llamacpp_server_timeout"] = 30
+            updated = True
 
         # Assign config values to attributes
         for k, v in self.data.items():
