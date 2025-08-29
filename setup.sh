@@ -750,7 +750,23 @@ else
   msg "Warning: No whisper-cli binary found – skipping config update."
 fi
 
+# ──────────────────  9a. Optional: Flux (VAD) setup – Silero ONNX (no PyTorch) ─
+setup_flux_optional_vad() {
+  echo ""
+  msg "Flux mode uses Energy VAD by default. (Silero ONNX option removed)"
+  msg "No additional runtime needed for Energy VAD."
+}
+
 # ──────────────────  10. done  ───────────────────────────────────────────────––
+setup_flux_optional_vad
+
+# Ensure pyqtgraph is available for Flux Tuner in both venv and pipx
+PIP_DISABLE_PIP_VERSION_CHECK=1 pip install -q pyqtgraph || true
+if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "voxt "; then
+  msg "Injecting pyqtgraph into pipx voxt environment…"
+  pipx inject voxt pyqtgraph || true
+fi
+
 msg "${GRN}Setup complete!${NC}"
 # Wayland reminder for ydotool permissions
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && command -v ydotool >/dev/null; then

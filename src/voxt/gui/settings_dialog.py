@@ -77,6 +77,7 @@ class SettingsDialog(QDialog):
         self._add_spin(form, "typing_delay", "Typing delay (ms)", 0, 1000)
         self._add_doublespin(form, "typing_start_delay", "Start delay (s)", 0, 5, step=0.05)
         self._add_checkbox(form, "ctrl_v_paste", "Use Ctrl+V paste")
+        self._add_checkbox(form, "append_trailing_space", "Add trailing space when typing")
 
         # ------------------------------------------------------------------
         #  Logging & Performance

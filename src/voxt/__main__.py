@@ -24,6 +24,8 @@ def main():
     mode_group.add_argument("--gui", action="store_true", help="Launch VOXT in GUI mode")
     mode_group.add_argument("--cli", action="store_true", help="Launch VOXT in CLI mode")
     mode_group.add_argument("--tray", action="store_true", help="Launch VOXT tray-only mode (background)")
+    mode_group.add_argument("--flux", action="store_true", help="Launch VOXT VAD-triggered dictation mode")
+    mode_group.add_argument("--flux-tuner", action="store_true", help="Launch Flux Tuner (GUI)")
     parser.add_argument(
         "--trigger-record",
         action="store_true",
@@ -75,6 +77,10 @@ def main():
         mode = "gui"
     elif args.tray:
         mode = "tray"  # internal identifier for tray mode
+    elif args.flux:
+        mode = "flux"
+    elif args.flux_tuner:
+        mode = "flux_tuner"
     else:
         mode = "tray"
 
@@ -128,6 +134,13 @@ def main():
     elif mode == "tray":
         from voxt.tray.tray_main import main as tray_main
         tray_main()
+    elif mode == "flux":
+        from voxt.flux.flux_main import main as flux_main
+        sys.argv = [sys.argv[0]] + unknown
+        flux_main()
+    elif mode == "flux_tuner":
+        from voxt.flux.flux_tuner import main as flux_tuner_main
+        flux_tuner_main()
     else:
         print(f"[__main__] ❌ Unknown app_mode: {mode}")
         sys.exit(1)

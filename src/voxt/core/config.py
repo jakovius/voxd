@@ -16,6 +16,7 @@ DEFAULT_CONFIG = {
     "typing_delay": 1,
     "typing_start_delay": 0.15,
     "ctrl_v_paste": False,  # Use Ctrl+V instead of default Ctrl+Shift+V
+    "append_trailing_space": True,
     "verbosity": True,
     "save_recordings": False,
     # Recording behavior
@@ -27,6 +28,30 @@ DEFAULT_CONFIG = {
     "audio_clip_warn_threshold": 0.01,
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
     "model_path": "whisper.cpp/models/ggml-base.en.bin",
+
+    # --- Flux (VAD-driven continuous dictation) ------------------------------
+    # Defaults are conservative and CPU-light; Energy VAD is built-in
+    # and requires no extra dependencies.
+    "flux_min_silence_ms": 500,   # pause to finalize an utterance
+    "flux_min_speech_ms": 200,    # minimum speech before opening a segment
+    "flux_pre_roll_ms": 150,      # prepend audio before detection to avoid clipping leading phonemes
+    "flux_vad_backend": "energy", # energy | silero (silero requires onnxruntime and a small .onnx model)
+    "silero_onnx_model": "",     # path to silero VAD .onnx (optional)
+    # Energy VAD dynamic thresholds (margins above noise floor)
+    "flux_energy_start_margin_db": 6.0,
+    "flux_energy_keep_margin_db": 3.0,
+    # Silero hysteresis thresholds (probability)
+    "flux_start_threshold": 0.6,
+    "flux_end_threshold": 0.4,
+    # Energy absolute thresholds (optional, normalized 0..1)
+    "flux_energy_use_absolute": False,
+    "flux_energy_start_p": 0.55,
+    "flux_energy_keep_p": 0.50,
+    # Segment smoothing
+    "flux_post_roll_ms": 150,     # keep this much trailing silence
+    "flux_min_segment_ms": 600,   # drop segments shorter than this
+    "flux_cooldown_ms": 250,      # wait this long after closing before reopening
+    "flux_min_rms_dbfs": -45.0,   # skip segment if overall RMS below this
 
     # --- ✨ AIPP (AI post-processing) ------------------------------------------
     "aipp_enabled": False,

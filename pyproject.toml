@@ -23,6 +23,8 @@ dependencies = [
   "llama-cpp-python>=0.3.0"
 ]
 
+"optional-dependencies" = {}
+
 [project.scripts]
 voxt = "voxt.__main__:main"
 voxt-model = "voxt.models:_cli"

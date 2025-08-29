@@ -7,6 +7,7 @@ simulate_typing: true
 typing_delay: 1
 typing_start_delay: 0.15
 ctrl_v_paste: false  # Use Ctrl+V instead of default Ctrl+Shift+V
+append_trailing_space: true
 verbosity: true
 record_chunked: true
 record_chunk_seconds: 300
@@ -15,6 +16,26 @@ audio_peak_dbfs: -3.0
 audio_clip_warn_threshold: 0.01
 whisper_binary: whisper.cpp/build/bin/whisper-cli
 model_path: whisper.cpp/models/ggml-base.en.bin
+
+# --- Flux (VAD-driven continuous dictation) ---------------------------------
+flux_min_silence_ms: 500     # pause to finalize an utterance
+flux_min_speech_ms: 200      # minimum speech before opening a segment
+flux_pre_roll_ms: 150        # prepend audio before detection
+flux_vad_backend: energy     # energy | silero
+silero_onnx_model: ""
+flux_energy_start_margin_db: 6.0
+flux_energy_keep_margin_db: 3.0
+flux_energy_abs_start_db: -33.0
+flux_energy_abs_keep_db: -37.0
+flux_energy_use_absolute: false
+flux_energy_start_p: 0.55
+flux_energy_keep_p: 0.50
+flux_start_threshold: 0.6
+flux_end_threshold: 0.4
+flux_post_roll_ms: 150
+flux_min_segment_ms: 600
+flux_cooldown_ms: 250
+flux_min_rms_dbfs: -45.0
 
 # --- ✨ AIPP (AI post-processing) ------------------------------------------
 aipp_enabled: false

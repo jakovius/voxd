@@ -252,14 +252,20 @@ class SimulatedTyper:
             # Release common modifiers; ignore errors if any key is already up
             subprocess.run(["xdotool", "keyup", "ctrl", "alt", "shift", "super"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        text = text.rstrip() # to eliminate any unwanted trailing characters added by the typer
+        # Normalize trailing whitespace and optionally append a single space
+        t = text.rstrip()
+        try:
+            if self.cfg and bool(self.cfg.data.get("append_trailing_space", True)):
+                t = t + " "
+        except Exception:
+            t = t
 
         verbo(f"[typer] Typing transcript using {self.tool}...")
         tool_name = os.path.basename(self.tool) if self.tool else ""
         if tool_name == "ydotool" and self.tool:
-            self._run_tool([self.tool, "type", "-d", self.delay_str, text])
+            self._run_tool([self.tool, "type", "-d", self.delay_str, t])
         elif tool_name == "xdotool" and self.tool:
-            self._run_tool([self.tool, "type", "--delay", self.delay_str, text])
+            self._run_tool([self.tool, "type", "--delay", self.delay_str, t])
         else:
             print("[typer] ⚠️ No valid typing tool found.")
             return
@@ -272,7 +278,13 @@ class SimulatedTyper:
         """Copy *text* to clipboard and use Ctrl+Shift+V (default) or Ctrl+V (when enabled)"""
         # Copy to clipboard first
         try:
-            pyperclip.copy(text.rstrip())
+            t = text.rstrip()
+            try:
+                if self.cfg and bool(self.cfg.data.get("append_trailing_space", True)):
+                    t = t + " "
+            except Exception:
+                pass
+            pyperclip.copy(t)
         except Exception as e:
             verbo(f"[typer] Clipboard copy failed: {e} – falling back to typing mode.")
             self._type_char_by_char(text)
@@ -337,14 +349,19 @@ class SimulatedTyper:
             subprocess.run(["xdotool", "keyup", "ctrl", "alt", "shift", "super"], 
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        text = text.rstrip()  # eliminate any unwanted trailing characters
+        t = text.rstrip()
+        try:
+            if self.cfg and bool(self.cfg.data.get("append_trailing_space", True)):
+                t = t + " "
+        except Exception:
+            pass
 
         verbo(f"[typer] Typing transcript character-by-character using {self.tool}...")
         tool_name = os.path.basename(self.tool) if self.tool else ""
         if tool_name == "ydotool" and self.tool:
-            self._run_tool([self.tool, "type", "-d", "10", text])  # Use 10ms delay for fallback
+            self._run_tool([self.tool, "type", "-d", "10", t])  # Use 10ms delay for fallback
         elif tool_name == "xdotool" and self.tool:
-            self._run_tool([self.tool, "type", "--delay", "10", text])  # Use 10ms delay for fallback
+            self._run_tool([self.tool, "type", "--delay", "10", t])  # Use 10ms delay for fallback
         else:
             print("[typer] ⚠️ No valid typing tool found for fallback.")
             return
