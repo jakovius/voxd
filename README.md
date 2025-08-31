@@ -127,7 +127,7 @@ Unknown keys are ignored.
 Your spoken words can be magically cleaned and rendered into e.g. neatly formated email, or straight away into a programing code!  
 
 VOXT can optionally post-process your transcripts using LOCAL (on-machine, **llama.cpp**, **Ollama**) or cloud LLMs (like **OpenAI, Anthropic, or xAI**).  
-For the local AIPP, just accept llama.cpp during the setup or/and **[install Ollama](https://ollama.ai)** and download a model that can be run on your machine, e.g. `ollama pull gemma3:latest`.   
+For the local AIPP, just accept **llama.cpp** during the setup or/and **[install Ollama](https://ollama.ai)** and download a model that can be run on your machine, e.g. `ollama pull gemma3:latest`.   
 You can enable, configure, and manage prompts directly from the GUI.
 
 ### Enable AIPP:
