@@ -117,6 +117,11 @@ class VoxtApp(QWidget):
         self.transcript_group.setFixedSize(252, 54)
         self.transcript_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
+        self.hotkey_notice = QLabel("Hit your hotkey to record / stop\n(leave this in background to type)")
+        self.hotkey_notice.setStyleSheet("color: gray; font-size: 8pt;")
+        self.hotkey_notice.setWordWrap(True)
+        self.hotkey_notice.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
         self.clipboard_notice = QLabel("")
         self.clipboard_notice.setStyleSheet("color: gray; font-size: 8pt;")
         self.clipboard_notice.setWordWrap(True)
@@ -158,7 +163,7 @@ class VoxtApp(QWidget):
         # self.main_layout.setContentsMargins(6, 6, 6, 6)
         # self.main_layout.setSpacing(12)
 
-        for widget in [self.status_button, self.toggle_container, self.transcript_group,
+        for widget in [self.status_button, self.hotkey_notice, self.toggle_container, self.transcript_group,
                         self.clipboard_notice, self.options_button]:
             self.main_layout.addWidget(widget, 0, Qt.AlignmentFlag.AlignHCenter)
 
