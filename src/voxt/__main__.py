@@ -6,6 +6,7 @@ from voxt.core.config import AppConfig
 
 from voxt.paths import CONFIG_FILE, resource_path
 import shutil, yaml
+import importlib.metadata
 
 def ensure_user_config() -> dict:
     if not CONFIG_FILE.exists():
@@ -27,6 +28,11 @@ def main():
     mode_group.add_argument("--flux", action="store_true", help="Launch VOXT VAD-triggered dictation mode")
     mode_group.add_argument("--flux-tuner", action="store_true", help="Launch Flux Tuner (GUI)")
     parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Print version and exit"
+    )
+    parser.add_argument(
         "--trigger-record",
         action="store_true",
         help="(Internal) signal the running VOXT App to start recording"
@@ -37,6 +43,10 @@ def main():
         help="Print configuration and hotkey status"
     )
     args, unknown = parser.parse_known_args()
+
+    if args.version:
+        print(importlib.metadata.version("voxt"))
+        sys.exit(0)
 
     # Recognize CLI quick-action flags at top-level to implicitly enter CLI mode
     cli_flags = {
@@ -51,6 +61,11 @@ def main():
     if not any([args.cli, args.gui, args.tray]):
         if "-h" in unknown or "--help" in unknown or len(sys.argv) == 1:
             parser.print_help()
+            # Show installed version
+            try:
+                print(f"\nVOXT version: {importlib.metadata.version('voxt')}")
+            except Exception:
+                pass
             # Also show CLI quick actions help for convenience
             try:
                 from voxt.cli.cli_main import build_parser as _build_cli_parser

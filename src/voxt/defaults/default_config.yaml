@@ -22,7 +22,6 @@ flux_min_silence_ms: 500     # pause to finalize an utterance
 flux_min_speech_ms: 200      # minimum speech before opening a segment
 flux_pre_roll_ms: 150        # prepend audio before detection
 flux_vad_backend: energy     # energy | silero
-silero_onnx_model: ""
 flux_energy_start_margin_db: 6.0
 flux_energy_keep_margin_db: 3.0
 flux_energy_abs_start_db: -33.0
@@ -36,6 +35,15 @@ flux_post_roll_ms: 150
 flux_min_segment_ms: 600
 flux_cooldown_ms: 250
 flux_min_rms_dbfs: -45.0
+
+# Monitor and calibration
+flux_monitor_enabled: true
+flux_monitor_energy_window_s: 10
+flux_monitor_spectrum_floor_db: -85.0
+flux_calibration_sec: 20
+flux_noise_ema: 0.05
+flux_noise_spec_ema: 0.02
+flux_noise_subtract_enabled: true
 
 # --- ✨ AIPP (AI post-processing) ------------------------------------------
 aipp_enabled: false
@@ -71,6 +79,6 @@ llamacpp_server_timeout: 30
 
 aipp_prompts:
   default: "Rewrite the following input so that it is clean and concise. Do not add any additional text or commentary. Just the rewritten text."
-  prompt1: ""
-  prompt2: ""
-  prompt3: ""
+  prompt1: "Interpret the following text to the best of your ability as a C programming language code and output it as such. Do not add any additional text or commentary. Just the corresponding C code."
+  prompt2: "Interpret the following text to the best of your ability as a Python programming language code and output it as such. Do not add any additional text or commentary. Just the corresponding Python code."
+  prompt3: "Rewrite the following text to appear as if Master Yoda from Star Wars is saying it."

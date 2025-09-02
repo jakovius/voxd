@@ -12,6 +12,11 @@
 # =============================================================================
 set -euo pipefail
 
+# ────────────────── Setup logging ─────────────────────────────────────────────
+LOG_FILE="$(date +%F)-setup-log.txt"
+# Append all stdout/stderr to log while keeping it on console
+exec > >(tee -a "$LOG_FILE") 2>&1
+
 # ───────────────────────────── helpers ────────────────────────────────────────
 YEL=$'\033[1;33m'; GRN=$'\033[1;32m'; RED=$'\033[0;31m'; NC=$'\033[0m'
 msg() { printf "${YEL}==>${NC} %s\n" "$*"; }
@@ -393,6 +398,8 @@ fi
 if [[ ! -d .venv ]]; then
   msg "Creating virtualenv (.venv)…"
   python3 -m venv .venv
+else
+  msg "Using existing virtualenv (.venv)"
 fi
 source .venv/bin/activate
 # src/setup.sh  (just after source .venv/bin/activate)
@@ -750,11 +757,10 @@ else
   msg "Warning: No whisper-cli binary found – skipping config update."
 fi
 
-# ──────────────────  9a. Optional: Flux (VAD) setup – Silero ONNX (no PyTorch) ─
+# ──────────────────  9a. Optional: Flux (VAD) setup ─
 setup_flux_optional_vad() {
   echo ""
-  msg "Flux mode uses Energy VAD by default. (Silero ONNX option removed)"
-  msg "No additional runtime needed for Energy VAD."
+  msg "Flux mode uses simple Energy VAD - No additional runtime needed"
 }
 
 # ──────────────────  10. done  ───────────────────────────────────────────────––
@@ -767,7 +773,26 @@ if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "voxt "; t
   pipx inject voxt pyqtgraph || true
 fi
 
+# ──────────────────  Report: what is already available  ─────────────────────
+echo ""
+msg "Idempotency report:"
+if [[ -d .venv ]]; then echo "  • venv: present (.venv)"; else echo "  • venv: will be created"; fi
+if command -v whisper-cli >/dev/null 2>&1; then echo "  • whisper-cli: present ($(command -v whisper-cli))"; else echo "  • whisper-cli: not found"; fi
+if [[ -f whisper.cpp/models/ggml-base.en.bin ]]; then echo "  • whisper model: present (whisper.cpp/models/ggml-base.en.bin)"; else echo "  • whisper model: missing"; fi
+if [[ ${XDG_SESSION_TYPE:-} == wayland* ]]; then
+  if command -v ydotool >/dev/null 2>&1 && command -v ydotoold >/dev/null 2>&1; then
+    echo "  • ydotool: present (Wayland typing enabled)"
+  else
+    echo "  • ydotool: not fully configured (Wayland)"
+  fi
+else
+  echo "  • ydotool: not required (X11)"
+fi
+if command -v llama-server >/dev/null 2>&1 && command -v llama-cli >/dev/null 2>&1; then echo "  • llama.cpp: present"; else echo "  • llama.cpp: not installed"; fi
+if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "voxt "; then echo "  • pipx 'voxt': installed"; else echo "  • pipx 'voxt': not installed"; fi
+
 msg "${GRN}Setup complete!${NC}"
+echo "Setup log (appended per run): $(pwd)/$LOG_FILE"
 # Wayland reminder for ydotool permissions
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && command -v ydotool >/dev/null; then
   echo -e "${GRN}➡  IMPORTANT:${NC} Log out or reboot once so 'ydotool' gains access to /dev/uinput."; read -n1 -r -p "Press any key to acknowledge…"
@@ -829,63 +854,58 @@ if ! command -v pipx >/dev/null; then
 fi
 
 if command -v pipx >/dev/null; then
-  read -r -p "Install voxt into pipx (global command) now? [Y/n]: " ans
-  ans=${ans:-Y}
-  if [[ $ans =~ ^[Yy]$ ]]; then
-    # Use --force to handle PATH warnings and existing installations
-    if pipx install --force "$PWD" 2>/dev/null; then
-      echo "✔  'voxt' command installed globally via pipx. Open a new shell if not yet on PATH."
+  if pipx list 2>/dev/null | grep -q "voxt "; then
+    echo "✔  'voxt' is already installed via pipx."
+    read -r -p "Reinstall/update 'voxt' in pipx? [y/N]: " ans
+    ans=${ans:-N}
+    if [[ $ans =~ ^[Yy]$ ]]; then
+      if pipx install --force "$PWD" 2>/dev/null; then
+        echo "✔  'voxt' command (re)installed globally via pipx. Open a new shell if not yet on PATH."
+      else
+        msg "Attempting pipx (re)install with error handling..."
+        pipx install --force "$PWD" || {
+          msg "${YEL}pipx install had warnings but may have succeeded. Testing...${NC}"
+          if command -v voxt >/dev/null 2>&1; then
+            echo "✔  'voxt' command is available globally."
+          else
+            msg "${RED}pipx install failed. You can try manually: pipx install --force $PWD${NC}"
+          fi
+        }
+      fi
     else
-      msg "Attempting pipx install with error handling..."
-      pipx install --force "$PWD" || {
-        msg "${YEL}pipx install had warnings but may have succeeded. Testing...${NC}"
-        if command -v voxt >/dev/null 2>&1; then
-          echo "✔  'voxt' command is available globally."
-        else
-          msg "${RED}pipx install failed. You can try manually: pipx install --force $PWD${NC}"
-        fi
-      }
+      echo "Skipping pipx reinstall."
     fi
   else
-    echo "You can later run: pipx install --force $PWD"
+    read -r -p "Install voxt into pipx (global command) now? [Y/n]: " ans
+    ans=${ans:-Y}
+    if [[ $ans =~ ^[Yy]$ ]]; then
+      # Use --force to handle PATH warnings and existing installations
+      if pipx install --force "$PWD" 2>/dev/null; then
+        echo "✔  'voxt' command installed globally via pipx. Open a new shell if not yet on PATH."
+      else
+        msg "Attempting pipx install with error handling..."
+        pipx install --force "$PWD" || {
+          msg "${YEL}pipx install had warnings but may have succeeded. Testing...${NC}"
+          if command -v voxt >/dev/null 2>&1; then
+            echo "✔  'voxt' command is available globally."
+          else
+            msg "${RED}pipx install failed. You can try manually: pipx install --force $PWD${NC}"
+          fi
+        }
+      fi
+    else
+      echo "You can later run: pipx install --force $PWD"
+    fi
   fi
 else
   echo "pipx not available – skip global command install. You can install pipx later and run: pipx install --force $PWD"
 fi
 
-# ────────────────── 11. Hotkey Setup Assistant  ─────────────────────────────
-# Delegate hotkey setup to the specialized hotkey_setup.sh tool
-
-setup_voxt_hotkey() {
-  if [[ -x "./hotkey_setup.sh" ]]; then
-    echo ""
-    msg "Setting up VOXT hotkey..."
-    echo "Using specialized hotkey setup tool for better reliability and safety."
-    echo ""
-    
-    read -r -p "Open the Hotkey Guide & diagnostics? (instructions only – nothing will be changed) [Y/n]: " setup_hotkey
-    setup_hotkey=${setup_hotkey:-Y}
-    
-    if [[ $setup_hotkey =~ ^[Yy]$ ]]; then
-      ./hotkey_setup.sh guide
-    else
-      echo ""
-      echo "🔧 Hotkey setup skipped. You can set it up later with:"
-      echo "  ./hotkey_setup.sh guide    - GUI setup instructions"
-      echo "  ./hotkey_setup.sh diagnose - Troubleshoot issues"
-      echo "  ./hotkey_setup.sh list     - Check current status"
-    fi
-  else
-    echo ""
-    msg "⚠️  hotkey_setup.sh not found or not executable"
-    echo "Manual hotkey setup required:"
-    echo "  Command: bash -c 'voxt --trigger-record'"
-    echo "  Key: your choice (e.g., Super+R)"
-    echo "  Path: System Settings → Keyboard → Custom Shortcuts"
-  fi
-}
-
-# Main hotkey setup prompt
-if command -v voxt >/dev/null 2>&1; then
-  setup_voxt_hotkey
-fi
+# ────────────────── 11. Hotkey Guidance (manual)  ───────────────────────────
+echo ""
+msg "Hotkey setup (manual):"
+echo "  Configure a custom keyboard shortcut in your system to run:"
+echo "    bash -c 'voxt --trigger-record'"
+echo "  Example binding: Super+R (or any key you prefer)."
+echo "  Location: System Settings → Keyboard → Custom Shortcuts."
+echo "  Test the command directly with: voxt --trigger-record"

@@ -24,6 +24,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--save-audio", action="store_true", help="Preserve per-utterance WAVs")
     p.add_argument("--debug-vad", action="store_true", help="Print VAD debug info (probs/RMS, transitions)")
     p.add_argument("--no-resample", action="store_true", help="Do not resample to 16 kHz before transcription")
+    # New monitor + calibration + noise suppression
+    p.add_argument("--no-monitor", action="store_true", help="Disable live monitor window")
+    p.add_argument("--monitor", action="store_true", help="Force-enable live monitor window")
+    p.add_argument("--calib-sec", type=float, help="Calibration duration in seconds (baseline noise)")
+    p.add_argument("--no-noise-suppress", action="store_true", help="Disable spectral noise subtraction on segments")
     return p
 
 
@@ -38,12 +43,75 @@ def _write_wav_mono16(path: Path, samples: np.ndarray, fs: int = 16000):
         wf.writeframes(pcm16.tobytes())
 
 
+class NoiseSuppressor:
+    """
+    Lightweight magnitude spectral subtraction using numpy only.
+    Calibrates a noise magnitude spectrum and subtracts it from voiced segments.
+    """
+    def __init__(self, fs: int, frame_len: int, *, hop_ratio: float = 0.5, floor_db: float = -80.0, oversub: float = 1.0, ema: float = 0.02):
+        self.fs = int(fs)
+        self.N = int(frame_len)
+        self.hop = max(1, int(self.N * hop_ratio))
+        self.win = np.hanning(self.N).astype(np.float32)
+        self.floor = float(10 ** (floor_db / 20.0))
+        self.oversub = float(oversub)
+        self.ema = float(ema)
+        self.noise_mag = None
+
+    def calibrate_with(self, frame: np.ndarray):
+        try:
+            mag = np.abs(np.fft.rfft(frame.astype(np.float32) * self.win))
+            if self.noise_mag is None:
+                self.noise_mag = mag
+            else:
+                self.noise_mag = (1.0 - self.ema) * self.noise_mag + self.ema * mag
+        except Exception:
+            pass
+
+    def update_noise(self, frame: np.ndarray):
+        self.calibrate_with(frame)
+
+    def enhance(self, audio: np.ndarray) -> np.ndarray:
+        if self.noise_mag is None:
+            return audio
+        x = audio.astype(np.float32)
+        if x.size < self.N:
+            return x
+        # STFT
+        frames = []
+        for start in range(0, x.size - self.N + 1, self.hop):
+            seg = x[start:start + self.N] * self.win
+            X = np.fft.rfft(seg)
+            mag = np.abs(X)
+            phase = np.angle(X)
+            # spectral subtraction
+            clean_mag = np.maximum(mag - self.oversub * self.noise_mag, self.floor)
+            Y = clean_mag * np.exp(1j * phase)
+            frames.append(np.fft.irfft(Y, n=self.N))
+        # Overlap-add
+        y = np.zeros((self.hop * (len(frames) - 1) + self.N,), dtype=np.float32)
+        wsum = np.zeros_like(y)
+        for i, f in enumerate(frames):
+            start = i * self.hop
+            y[start:start + self.N] += f
+            wsum[start:start + self.N] += (self.win ** 2)
+        wsum[wsum == 0] = 1.0
+        y /= wsum
+        # Pad tail if needed
+        if y.size < x.size:
+            out = np.zeros_like(x)
+            out[:y.size] = y
+            return out
+        return y[:x.size]
+
+
 class EnergyVAD:
     def __init__(self, fs=16000, frame_ms=30, *,
                  start_margin_db=6.0, keep_margin_db=3.0,
                  abs_start_db=-33.0, abs_keep_db=-37.0,
                  init_noise_db=-60.0, noise_ema=0.05):
         self.fs = fs
+        self.frame_ms = frame_ms
         self.N = int(fs * frame_ms / 1000)
         self.start_margin_db = float(start_margin_db)
         self.keep_margin_db = float(keep_margin_db)
@@ -52,33 +120,98 @@ class EnergyVAD:
         self.noise_db = float(init_noise_db)
         self.noise_ema = float(noise_ema)
         self._speaking = False
+        # Calibration state
+        self.calibrating = False
+        self._calib_frames_target = 0
+        self._calib_frames_done = 0
+        # Simple spectral baseline (magnitude)
+        self._noise_spec = None  # type: ignore[var-annotated]
+        self._noise_spec_ema = 0.02
 
     @staticmethod
     def _dbfs_of(frame: np.ndarray) -> float:
         rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)) + 1e-12)
         return 20.0 * np.log10(rms)
 
+    def begin_calibration(self, duration_sec: float, *, noise_spec_ema: float | None = None):
+        self.calibrating = True
+        self._calib_frames_done = 0
+        self._calib_frames_target = max(1, int((duration_sec * 1000) // self.frame_ms))
+        if noise_spec_ema is not None:
+            self._noise_spec_ema = float(noise_spec_ema)
+
+    def feed_calibration(self, frame: np.ndarray):
+        # Update scalar noise floor
+        lvl = self._dbfs_of(frame)
+        if self._calib_frames_done == 0:
+            self.noise_db = lvl
+        else:
+            self.noise_db = (1.0 - self.noise_ema) * self.noise_db + self.noise_ema * lvl
+        # Update spectral baseline
+        try:
+            spec = np.abs(np.fft.rfft(frame.astype(np.float32)))
+            if self._noise_spec is None:
+                self._noise_spec = spec
+            else:
+                self._noise_spec = (1.0 - self._noise_spec_ema) * self._noise_spec + self._noise_spec_ema * spec
+        except Exception:
+            pass
+        self._calib_frames_done += 1
+        if self._calib_frames_done >= self._calib_frames_target:
+            self.calibrating = False
+
+    def get_thresholds_db(self) -> tuple[float, float]:
+        start_thr = max(self.noise_db + self.start_margin_db, self.abs_start_db)
+        keep_thr  = max(self.noise_db + self.keep_margin_db,  self.abs_keep_db)
+        return float(start_thr), float(keep_thr)
+
     def is_speech(self, frame: np.ndarray) -> bool:
         lvl = self._dbfs_of(frame)
+        # During calibration, do not trigger speech; just update baselines
+        if self.calibrating:
+            self.feed_calibration(frame)
+            self._speaking = False
+            return False
+
         # Update noise floor only when not speaking (to avoid tracking speech as noise)
         if not self._speaking:
             self.noise_db = (1.0 - self.noise_ema) * self.noise_db + self.noise_ema * lvl
+            # Update spectral baseline slowly while idle
+            try:
+                spec = np.abs(np.fft.rfft(frame.astype(np.float32)))
+                if self._noise_spec is None:
+                    self._noise_spec = spec
+                else:
+                    self._noise_spec = (1.0 - self._noise_spec_ema) * self._noise_spec + self._noise_spec_ema * spec
+            except Exception:
+                pass
 
         # Dynamic thresholds relative to noise floor, clamped by absolute bounds
-        start_thr = max(self.noise_db + self.start_margin_db, self.abs_start_db)
-        keep_thr  = max(self.noise_db + self.keep_margin_db,  self.abs_keep_db)
+        start_thr, keep_thr = self.get_thresholds_db()
         if self._speaking:
             self._speaking = lvl >= keep_thr
         else:
             self._speaking = lvl >= start_thr
         return self._speaking
 
+    def metrics(self, frame: np.ndarray) -> dict:
+        """Return current metrics for monitoring: dbfs, noise_db, start/keep thresholds, speaking flag."""
+        lvl = self._dbfs_of(frame)
+        start_thr, keep_thr = self.get_thresholds_db()
+        return {
+            "db": float(lvl),
+            "noise_db": float(self.noise_db),
+            "start_thr_db": float(start_thr),
+            "keep_thr_db": float(keep_thr),
+            "speaking": bool(self._speaking),
+        }
+
 
 ## Silero backend removed
 
 
 class FluxRunner:
-    def __init__(self, cfg: AppConfig, *, min_silence_ms: int | None, min_speech_ms: int | None, pre_roll_ms: int | None, save_audio: bool, debug_vad: bool = False, no_resample: bool = False):
+    def __init__(self, cfg: AppConfig, *, min_silence_ms: int | None, min_speech_ms: int | None, pre_roll_ms: int | None, save_audio: bool, debug_vad: bool = False, no_resample: bool = False, monitor: bool | None = None, calib_sec: float | None = None, noise_suppress: bool | None = None):
         self.cfg = cfg
         # Configure sample rate and frame size (energy only)
         try:
@@ -113,8 +246,13 @@ class FluxRunner:
                              start_margin_db=start_margin,
                              keep_margin_db=keep_margin,
                              abs_start_db=abs_start,
-                             abs_keep_db=abs_keep)
+                             abs_keep_db=abs_keep,
+                             noise_ema=float(cfg.data.get("flux_noise_ema", 0.05)))
         verbo("[flux] Using Energy VAD backend.")
+
+        # Noise suppressor
+        self.noise_suppress_enabled = bool(cfg.data.get("flux_noise_subtract_enabled", True)) if noise_suppress is None else bool(noise_suppress)
+        self.ns = NoiseSuppressor(self.fs, self.N, floor_db=float(cfg.data.get("flux_monitor_spectrum_floor_db", -85.0)), ema=float(cfg.data.get("flux_noise_spec_ema", 0.02)))
 
         # Transcription + output
         self.transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not self.save_audio)
@@ -134,6 +272,14 @@ class FluxRunner:
         self.q: queue.Queue[np.ndarray] = queue.Queue(maxsize=256)
         self.stop = threading.Event()
         self.worker = threading.Thread(target=self._consume_loop, daemon=True)
+        # Monitoring shared state
+        self.monitor_enabled = bool(self.cfg.data.get("flux_monitor_enabled", True)) if monitor is None else bool(monitor)
+        self._mon_frames = []  # recent frames for GUI
+        self._mon_frames_max = max(1, int((self.cfg.data.get("flux_monitor_energy_window_s", 10)) * 1000 // self.frame_ms))
+        self._mon_lock = threading.Lock()
+        # Calibration
+        self.calib_sec = float(self.cfg.data.get("flux_calibration_sec", 20.0)) if calib_sec is None else float(calib_sec)
+        self._calibrating = True if self.calib_sec > 0 else False
 
     def _callback(self, indata, frames, t, status):
         if status:
@@ -151,7 +297,18 @@ class FluxRunner:
             except queue.Empty:
                 continue
 
-            speaking = bool(self.vad.is_speech(frame))
+            # Calibration: feed baselines and disable speech
+            if self._calibrating:
+                self.vad.feed_calibration(frame)
+                try:
+                    self.ns.calibrate_with(frame)
+                except Exception:
+                    pass
+                speaking = False
+                if not self.vad.calibrating:
+                    self._calibrating = False
+            else:
+                speaking = bool(self.vad.is_speech(frame))
             if self.debug_vad:
                 if not hasattr(self, "_dbg_cnt"):
                     self._dbg_cnt = 0
@@ -209,6 +366,14 @@ class FluxRunner:
                     # idle -> keep pre-roll fresh
                     self.pre_roll.append(frame)
 
+            # For monitor: keep rolling buffer and last metrics
+            if self.monitor_enabled:
+                with self._mon_lock:
+                    self._mon_frames.append(frame)
+                    if len(self._mon_frames) > self._mon_frames_max:
+                        self._mon_frames = self._mon_frames[-self._mon_frames_max:]
+                self._last_metrics = self.vad.metrics(frame)
+
     def _transcribe_async(self, audio: np.ndarray):
         if audio.size < self.N * 3:  # skip too-short segments (< ~90ms)
             return
@@ -234,6 +399,13 @@ class FluxRunner:
                 if self.debug_vad:
                     print(f"[seg] drop low-level {seg_db:.1f} dBFS < {self.min_rms_dbfs:.1f} dBFS")
                 return
+
+            # Optional spectral noise suppression (post-seg, off detection path)
+            if self.noise_suppress_enabled:
+                try:
+                    audio = self.ns.enhance(audio)
+                except Exception:
+                    pass
 
             # Resample to 16k for whisper.cpp stability, unless disabled
             if not self.no_resample and self.fs != 16000:
@@ -273,14 +445,32 @@ class FluxRunner:
             print(f"[audio] Input device: {dev_info.get('name','unknown')} | channels={dev_info.get('max_input_channels')} | default_sr={dev_info.get('default_samplerate')}")
         except Exception:
             print(f"Flux mode: continuous VAD dictation @ {self.fs} Hz. Ctrl+C to stop.")
+        # Begin calibration window if configured
+        if self._calibrating:
+            self.vad.begin_calibration(self.calib_sec, noise_spec_ema=float(self.cfg.data.get("flux_noise_spec_ema", 0.02)))
         self.worker.start()
         try:
             with sd.InputStream(samplerate=self.fs, channels=1, dtype="float32", blocksize=self.N, callback=self._callback):
-                try:
-                    while True:
-                        time.sleep(0.2)
-                except KeyboardInterrupt:
-                    print("\n[flux] Stopping…")
+                # Optionally show monitor window
+                if self.monitor_enabled:
+                    try:
+                        from voxt.flux.flux_monitor import show_monitor
+                        app, _ = show_monitor(self)
+                        app.exec()
+                    except Exception as e:
+                        print(f"[flux] Monitor unavailable: {e}")
+                        # fallback to headless loop
+                        try:
+                            while True:
+                                time.sleep(0.2)
+                        except KeyboardInterrupt:
+                            print("\n[flux] Stopping…")
+                else:
+                    try:
+                        while True:
+                            time.sleep(0.2)
+                    except KeyboardInterrupt:
+                        print("\n[flux] Stopping…")
         except Exception as e:
             verr(f"[flux] Failed to open audio input stream: {e}")
         self.stop.set()
@@ -298,6 +488,10 @@ def main():
         pre_roll_ms=args.pre_roll_ms,
         save_audio=bool(args.save_audio),
         debug_vad=bool(args.debug_vad),
+        no_resample=bool(args.no_resample),
+        monitor=(False if args.no_monitor else (True if args.monitor else None)),
+        calib_sec=args.calib_sec,
+        noise_suppress=(False if args.no_noise_suppress else None),
     )
     runner.run()
 

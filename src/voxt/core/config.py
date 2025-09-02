@@ -40,6 +40,9 @@ DEFAULT_CONFIG = {
     # Energy VAD dynamic thresholds (margins above noise floor)
     "flux_energy_start_margin_db": 6.0,
     "flux_energy_keep_margin_db": 3.0,
+    # Energy VAD absolute bounds (dBFS)
+    "flux_energy_abs_start_db": -33.0,
+    "flux_energy_abs_keep_db": -37.0,
     # Silero hysteresis thresholds (probability)
     "flux_start_threshold": 0.6,
     "flux_end_threshold": 0.4,
@@ -52,6 +55,16 @@ DEFAULT_CONFIG = {
     "flux_min_segment_ms": 600,   # drop segments shorter than this
     "flux_cooldown_ms": 250,      # wait this long after closing before reopening
     "flux_min_rms_dbfs": -45.0,   # skip segment if overall RMS below this
+
+    # Flux monitor and calibration
+    "flux_monitor_enabled": True,
+    "flux_monitor_energy_window_s": 10,
+    "flux_monitor_spectrum_floor_db": -85,
+    "flux_calibration_sec": 20,
+    # Noise tracking and suppression
+    "flux_noise_ema": 0.05,           # EMA for noise floor (energy)
+    "flux_noise_spec_ema": 0.02,      # EMA for spectral noise baseline
+    "flux_noise_subtract_enabled": True,
 
     # --- ✨ AIPP (AI post-processing) ------------------------------------------
     "aipp_enabled": False,

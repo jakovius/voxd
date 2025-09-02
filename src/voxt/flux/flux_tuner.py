@@ -69,6 +69,14 @@ class FluxTunerWindow(QtWidgets.QWidget):
         self.plot.setLabel('left', 'Normalized energy', '')
         self.curve = self.plot.plot([], [], pen=pg.mkPen(color=(0, 200, 0), width=2))
 
+        # Spectrum plot (new)
+        self.spec_plot = pg.PlotWidget()
+        self.spec_plot.showGrid(x=True, y=True, alpha=0.3)
+        self.spec_plot.setLabel('bottom', 'Frequency', 'Hz')
+        self.spec_plot.setLabel('left', 'Magnitude', 'dB')
+        self.spec_curve = self.spec_plot.plot([], [], pen=pg.mkPen(color=(230, 160, 60), width=2))
+        self.spec_noise_curve = self.spec_plot.plot([], [], pen=pg.mkPen(color=(160, 160, 160), style=QtCore.Qt.PenStyle.DashLine))
+
         # Energy guides
         self.en_line_start = pg.InfiniteLine(angle=0,
                                              pos=0.7,
@@ -97,6 +105,7 @@ class FluxTunerWindow(QtWidgets.QWidget):
         self.btn_stop = QtWidgets.QPushButton("Stop")
         self.btn_stop.setEnabled(False)
         self.btn_save = QtWidgets.QPushButton("Save to config")
+        self.btn_calib = QtWidgets.QPushButton("Calibrate 5 s")
 
         self.spin_min_sil = QtWidgets.QSpinBox()
         self.spin_min_sil.setRange(50, 3000)
@@ -134,6 +143,7 @@ class FluxTunerWindow(QtWidgets.QWidget):
         grid.addWidget(self.btn_start, 0, 2)
         grid.addWidget(self.btn_stop, 0, 3)
         grid.addWidget(self.btn_save, 0, 4)
+        grid.addWidget(self.btn_calib, 0, 5)
 
         grid.addWidget(QtWidgets.QLabel("min_silence_ms"), 1, 0)
         grid.addWidget(self.spin_min_sil, 1, 1)
@@ -152,6 +162,7 @@ class FluxTunerWindow(QtWidgets.QWidget):
 
         v = QtWidgets.QVBoxLayout(self)
         v.addWidget(self.plot, 1)
+        v.addWidget(self.spec_plot, 1)
         v.addLayout(grid)
 
         # --- runtime ---
@@ -166,11 +177,13 @@ class FluxTunerWindow(QtWidgets.QWidget):
         self.vad = None
         self.sample_index = 0
         self.frame_sec = self.state.frame_ms / 1000.0
+        self._calibrating = False
 
         # slots
         self.btn_start.clicked.connect(self.start)
         self.btn_stop.clicked.connect(self.stop)
         self.btn_save.clicked.connect(self.save_to_config)
+        self.btn_calib.clicked.connect(self.calibrate)
         self.backend_cb.currentTextChanged.connect(self._on_backend_change)
         self._on_backend_change(self.backend_cb.currentText())
 
@@ -195,7 +208,10 @@ class FluxTunerWindow(QtWidgets.QWidget):
         self.state.block = int(self.state.sr * self.state.frame_ms / 1000)
         self.vad = EnergyVAD(fs=self.state.sr, frame_ms=self.state.frame_ms,
                              start_margin_db=float(self.spin_en_start.value()),
-                             keep_margin_db=float(self.spin_en_keep.value()))
+                             keep_margin_db=float(self.spin_en_keep.value()),
+                             abs_start_db=float(self.cfg.data.get("flux_energy_abs_start_db", -33.0)),
+                             abs_keep_db=float(self.cfg.data.get("flux_energy_abs_keep_db", -37.0)),
+                             noise_ema=float(self.cfg.data.get("flux_noise_ema", 0.05)))
         self.y.clear()
         self.sample_index = 0
         self.frame_sec = self.state.frame_ms / 1000.0
@@ -216,6 +232,15 @@ class FluxTunerWindow(QtWidgets.QWidget):
         self.stream = sd.InputStream(samplerate=self.state.sr, channels=1, dtype="float32",
                                      blocksize=self.state.block, callback=callback)
         self.stream.start()
+    def calibrate(self):
+        if not self.running or not isinstance(self.vad, EnergyVAD):
+            return
+        self._calibrating = True
+        try:
+            self.vad.begin_calibration(5.0)
+        except Exception:
+            self._calibrating = False
+
 
     def stop(self):
         if not self.running:
@@ -236,9 +261,31 @@ class FluxTunerWindow(QtWidgets.QWidget):
                 frame = self.q.get_nowait()
             except queue.Empty:
                 break
+            if self._calibrating and isinstance(self.vad, EnergyVAD):
+                try:
+                    self.vad.feed_calibration(frame)
+                    if not self.vad.calibrating:
+                        self._calibrating = False
+                except Exception:
+                    self._calibrating = False
             p = self._prob(frame)
             self.y.append(p)
             self.sample_index += 1
+            # spectrum update (show last frame)
+            mag = np.abs(np.fft.rfft(frame.astype(np.float32))) + 1e-12
+            db = 20.0 * np.log10(mag)
+            freqs = np.fft.rfftfreq(frame.size, 1.0 / max(1, self.state.sr))
+            lo = 40.0
+            hi = min(20000.0, self.state.sr / 2.0)
+            m = (freqs >= lo) & (freqs <= hi)
+            self.spec_curve.setData(freqs[m], db[m])
+            try:
+                noise_mag = getattr(self.vad, "_noise_spec", None)
+                if noise_mag is not None:
+                    noise_db = 20.0 * np.log10(np.maximum(noise_mag, 1e-12))
+                    self.spec_noise_curve.setData(freqs[m], noise_db[m])
+            except Exception:
+                pass
         # update plot
         if len(self.y) > 0:
             y = np.array(self.y)
@@ -255,9 +302,9 @@ class FluxTunerWindow(QtWidgets.QWidget):
                     p_start = float(self.spin_en_start_p.value())
                     p_keep = float(self.spin_en_keep_p.value())
                 else:
-                    noise_db = float(getattr(self.vad, 'noise_db', -60.0))
-                    p_start = (max(noise_db + float(self.spin_en_start.value()), -60.0) + 60.0) / 60.0
-                    p_keep = (max(noise_db + float(self.spin_en_keep.value()), -60.0) + 60.0) / 60.0
+                    start_thr_db, keep_thr_db = self.vad.get_thresholds_db()
+                    p_start = (start_thr_db + 60.0) / 60.0
+                    p_keep = (keep_thr_db + 60.0) / 60.0
                 p_start = float(min(1.0, max(0.0, p_start)))
                 p_keep = float(min(1.0, max(0.0, p_keep)))
                 self.en_line_start.setPos(p_start)
@@ -268,8 +315,10 @@ class FluxTunerWindow(QtWidgets.QWidget):
                     self.en_text_start.setText(f"Start p={p_start:.2f}")
                     self.en_text_keep.setText(f"Keep p={p_keep:.2f}")
                 else:
-                    self.en_text_start.setText(f"Start ≈ {float(self.spin_en_start.value()):.1f} dB above noise")
-                    self.en_text_keep.setText(f"Keep ≈ {float(self.spin_en_keep.value()):.1f} dB above noise")
+                    noise_db = float(getattr(self.vad, 'noise_db', -60.0))
+                    start_thr_db, keep_thr_db = self.vad.get_thresholds_db()
+                    self.en_text_start.setText(f"Start ≈ +{(start_thr_db - noise_db):.1f} dB over noise")
+                    self.en_text_keep.setText(f"Keep ≈ +{(keep_thr_db - noise_db):.1f} dB over noise")
                 self.en_text_start.setPos(max(t_start, x_text), min(1.0, p_start + y_off))
                 self.en_text_keep.setPos(max(t_start, x_text), min(1.0, p_keep + y_off))
 
