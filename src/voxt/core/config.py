@@ -30,20 +30,18 @@ DEFAULT_CONFIG = {
     "model_path": "whisper.cpp/models/ggml-base.en.bin",
 
     # --- Flux (VAD-driven continuous dictation) ------------------------------
-    # Defaults are conservative and CPU-light; Energy VAD is built-in
+    # Defaults are conservative and CPU-light; Flux VAD is built-in
     # and requires no extra dependencies.
     "flux_min_silence_ms": 500,   # pause to finalize an utterance
     "flux_min_speech_ms": 200,    # minimum speech before opening a segment
-    "flux_pre_roll_ms": 150,      # prepend audio before detection to avoid clipping leading phonemes
-    "flux_vad_backend": "energy", # energy | silero (silero requires onnxruntime and a small .onnx model)
-    "silero_onnx_model": "",     # path to silero VAD .onnx (optional)
-    # Energy VAD dynamic thresholds (margins above noise floor)
+    "flux_pre_roll_ms": 180,      # prepend audio before detection to avoid clipping leading phonemes
+    # Flux VAD thresholds (margins above noise floor)
     "flux_energy_start_margin_db": 6.0,
     "flux_energy_keep_margin_db": 3.0,
-    # Energy VAD absolute bounds (dBFS)
+    # Flux VAD absolute bounds (dBFS)
     "flux_energy_abs_start_db": -33.0,
     "flux_energy_abs_keep_db": -37.0,
-    # Silero hysteresis thresholds (probability)
+    # Legacy hysteresis thresholds (unused but kept for config compatibility)
     "flux_start_threshold": 0.6,
     "flux_end_threshold": 0.4,
     # Energy absolute thresholds (optional, normalized 0..1)
@@ -60,7 +58,7 @@ DEFAULT_CONFIG = {
     "flux_monitor_enabled": True,
     "flux_monitor_energy_window_s": 10,
     "flux_monitor_spectrum_floor_db": -85,
-    "flux_calibration_sec": 20,
+    "flux_calibration_sec": 5,
     # Noise tracking and suppression
     "flux_noise_ema": 0.05,           # EMA for noise floor (energy)
     "flux_noise_spec_ema": 0.02,      # EMA for spectral noise baseline
@@ -101,10 +99,10 @@ DEFAULT_CONFIG = {
 
 
     "aipp_prompts": {
-        "default": "Rewrite the following text to appear as if Yoda from Star Wars is saying it",
-        "prompt1": "",
-        "prompt2": "",
-        "prompt3": "",
+        "default": "Rewrite the following input so that it is clean and concise. Do not add any additional text or commentary. Just the rewritten text.",
+        "prompt1": "Interpret the following text to the best of your ability as a C programming language code and output it as such. Do not add any additional text or commentary. Just the corresponding C code.",
+        "prompt2": "Interpret the following text to the best of your ability as a Python programming language code and output it as such. Do not add any additional text or commentary. Just the corresponding Python code.",
+        "prompt3": "Rewrite the following text to appear as if Master Yoda from Star Wars is saying it.",
     }
 }
 

@@ -66,11 +66,15 @@ voxt --gui  # friendly pill-button window
 voxt --tray # sits in the tray; perfect for continuous dictation
 voxt --cli  # terminal; 'h' shows commands
 voxt --rh   # Go directly to --cli 'rh' and leave in the background
-voxt --flux # VAD (Voice Activity Detection), voice-triggered recording, experimental
+voxt --flux # VAD (Voice Activity Detection), voice-triggered continuous dictation
 voxt        # displays detailed list of options & flags
 ```
 
 Now leave it running in the background, then go to any app where you want to voice-type and:
+
+If in --flux, **just speak**.  
+
+Otherwise:
 
 | Press hotkey …   | VOXT does …                                                |
 | ---------------- | ----------------------------------------------------------- |
@@ -103,7 +107,7 @@ Common commands:
 ```bash
 voxt-model list	# show models already on disk
 voxt-model install tiny.en  #	download another model ("fetch" can be also used as alias for "install")
-voxt-model --no-check install base.en # download a model and skip SHA-1 verification (rarely needed)
+voxt-model --no-check install base.en # download a model and skip SHA-1 verification
 voxt-model remove tiny.en	# delete a model
 voxt-model use tiny.en	# make that model the default (edits config.yaml)
 ```
@@ -260,6 +264,7 @@ If an API key is missing, cloud-based AIPP providers will not work and you will 
 * VOXT – © 2025 Jakov Ivkovic – **MIT** license (see [`LICENSE`](LICENSE)).
 * Speech engine powered by [**ggml-org/whisper.cpp**](https://github.com/ggml-org/whisper.cpp) (MIT) and OpenAI Whisper models (MIT).
 * Auto-typing/pasting powered by [**ReimuNotMoe/ydotool**](https://github.com/ReimuNotMoe/ydotool) (AGPLv3).
+* Text post-processing powered by [**ggml-org/llama.cpp**](https://github.com/ggml-org/llama.cpp) (MIT)
 
 ---
 

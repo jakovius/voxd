@@ -13,7 +13,7 @@ from PyQt6 import QtWidgets, QtCore
 
 from voxt.core.config import AppConfig
 from voxt.utils.libw import verr, verbo
-from voxt.flux.flux_main import EnergyVAD  # reuse implementation
+from voxt.flux.flux_main import FluxVAD  # reuse implementation
 
 
 try:
@@ -206,7 +206,7 @@ class FluxTunerWindow(QtWidgets.QWidget):
             self.state.sr = 16000
         self.state.frame_ms = 30
         self.state.block = int(self.state.sr * self.state.frame_ms / 1000)
-        self.vad = EnergyVAD(fs=self.state.sr, frame_ms=self.state.frame_ms,
+        self.vad = FluxVAD(fs=self.state.sr, frame_ms=self.state.frame_ms,
                              start_margin_db=float(self.spin_en_start.value()),
                              keep_margin_db=float(self.spin_en_keep.value()),
                              abs_start_db=float(self.cfg.data.get("flux_energy_abs_start_db", -33.0)),
@@ -233,7 +233,7 @@ class FluxTunerWindow(QtWidgets.QWidget):
                                      blocksize=self.state.block, callback=callback)
         self.stream.start()
     def calibrate(self):
-        if not self.running or not isinstance(self.vad, EnergyVAD):
+        if not self.running or not isinstance(self.vad, FluxVAD):
             return
         self._calibrating = True
         try:
@@ -261,7 +261,7 @@ class FluxTunerWindow(QtWidgets.QWidget):
                 frame = self.q.get_nowait()
             except queue.Empty:
                 break
-            if self._calibrating and isinstance(self.vad, EnergyVAD):
+            if self._calibrating and isinstance(self.vad, FluxVAD):
                 try:
                     self.vad.feed_calibration(frame)
                     if not self.vad.calibrating:
@@ -297,7 +297,7 @@ class FluxTunerWindow(QtWidgets.QWidget):
             t_start = max(0.0, t_end - 10.0)
             self.plot.setXRange(t_start, t_end, padding=0.0)
             # Energy guides
-            if isinstance(self.vad, EnergyVAD):
+            if isinstance(self.vad, FluxVAD):
                 if self.chk_en_abs.isChecked():
                     p_start = float(self.spin_en_start_p.value())
                     p_keep = float(self.spin_en_keep_p.value())

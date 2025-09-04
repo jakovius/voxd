@@ -147,7 +147,7 @@ class CoreProcessThread(QThread):
 
         self.finished.emit(final_text)
 
-def show_options_dialog(parent, logger, cfg=None, modal=True):
+def show_options_dialog(parent, logger, cfg=None, modal=True, hide_aipp=False):
     if cfg is None:
         from voxt.core.config import get_config
         cfg = get_config()
@@ -221,14 +221,17 @@ def show_options_dialog(parent, logger, cfg=None, modal=True):
         dialog.close()
         parent.close() if hasattr(parent, "close") else None
 
-    for label, action in [
+    entries = [
         ("Whisper Models", _show_whisper_models),
         ("AI Post-Processing", _show_aipp_dialog),
         ("Session Log", session_log),
         ("Settings", edit_config),
         ("Performance", show_performance),
         ("Quit", quit_app),
-    ]:
+    ]
+    if hide_aipp:
+        entries = [e for e in entries if e[0] != "AI Post-Processing"]
+    for label, action in entries:
         btn = QPushButton(label)
         # Slightly wider buttons so long labels are not truncated
         btn.setFixedSize(140, 28)

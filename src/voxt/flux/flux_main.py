@@ -10,14 +10,16 @@ from voxt.core.config import AppConfig
 from voxt.core.transcriber import WhisperTranscriber
 from voxt.core.typer import SimulatedTyper
 from voxt.core.clipboard import ClipboardManager
+from voxt.core.logger import SessionLogger
 from voxt.core.aipp import get_final_text
+from voxt.utils.ipc_server import start_ipc_server
 from voxt.utils.whisper_auto import ensure_whisper_cli
 from voxt.utils.libw import verbo, verr
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="voxt --flux", description="VOXT Flux: VAD-triggered continuous dictation")
-    # Energy-only backend
+    # Flux VAD options
     p.add_argument("--min-silence-ms", type=int, help="Pause length to cut segment")
     p.add_argument("--min-speech-ms", type=int, help="Minimum speech length to start a segment")
     p.add_argument("--pre-roll-ms", type=int, help="Audio to prepend before detected speech")
@@ -105,7 +107,7 @@ class NoiseSuppressor:
         return y[:x.size]
 
 
-class EnergyVAD:
+class FluxVAD:
     def __init__(self, fs=16000, frame_ms=30, *,
                  start_margin_db=6.0, keep_margin_db=3.0,
                  abs_start_db=-33.0, abs_keep_db=-37.0,
@@ -237,27 +239,29 @@ class FluxRunner:
         self.min_rms_dbfs = float(cfg.data.get("flux_min_rms_dbfs", -45.0))
         self.no_resample = bool(no_resample)
 
-        # Energy VAD
+        # Flux VAD
         start_margin = float(cfg.data.get("flux_energy_start_margin_db", 6.0))
         keep_margin  = float(cfg.data.get("flux_energy_keep_margin_db", 3.0))
         abs_start    = float(cfg.data.get("flux_energy_abs_start_db", -33.0))
         abs_keep     = float(cfg.data.get("flux_energy_abs_keep_db",  -37.0))
-        self.vad = EnergyVAD(fs=self.fs, frame_ms=self.frame_ms,
+        self.vad = FluxVAD(fs=self.fs, frame_ms=self.frame_ms,
                              start_margin_db=start_margin,
                              keep_margin_db=keep_margin,
                              abs_start_db=abs_start,
                              abs_keep_db=abs_keep,
                              noise_ema=float(cfg.data.get("flux_noise_ema", 0.05)))
-        verbo("[flux] Using Energy VAD backend.")
+        verbo("[flux] Using Flux VAD backend.")
 
         # Noise suppressor
         self.noise_suppress_enabled = bool(cfg.data.get("flux_noise_subtract_enabled", True)) if noise_suppress is None else bool(noise_suppress)
+        # Noise suppressor retained for post-segment enhancement; spectrum monitor removed from GUI
         self.ns = NoiseSuppressor(self.fs, self.N, floor_db=float(cfg.data.get("flux_monitor_spectrum_floor_db", -85.0)), ema=float(cfg.data.get("flux_noise_spec_ema", 0.02)))
 
         # Transcription + output
         self.transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not self.save_audio)
         self.clipboard = ClipboardManager()
         self.typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay, cfg=cfg)
+        self.logger = SessionLogger(cfg.log_enabled, cfg.log_location)
 
         # Buffers/state
         from collections import deque
@@ -274,12 +278,15 @@ class FluxRunner:
         self.worker = threading.Thread(target=self._consume_loop, daemon=True)
         # Monitoring shared state
         self.monitor_enabled = bool(self.cfg.data.get("flux_monitor_enabled", True)) if monitor is None else bool(monitor)
-        self._mon_frames = []  # recent frames for GUI
+        self._mon_frames = []  # recent frames for GUI (legacy)
+        self.mon_q: queue.Queue[np.ndarray] = queue.Queue(maxsize=1024)  # preferred for GUI drain
         self._mon_frames_max = max(1, int((self.cfg.data.get("flux_monitor_energy_window_s", 10)) * 1000 // self.frame_ms))
         self._mon_lock = threading.Lock()
         # Calibration
-        self.calib_sec = float(self.cfg.data.get("flux_calibration_sec", 20.0)) if calib_sec is None else float(calib_sec)
+        self.calib_sec = float(self.cfg.data.get("flux_calibration_sec", 5.0)) if calib_sec is None else float(calib_sec)
         self._calibrating = True if self.calib_sec > 0 else False
+        # Paused state
+        self._paused = False
 
     def _callback(self, indata, frames, t, status):
         if status:
@@ -308,6 +315,22 @@ class FluxRunner:
                 if not self.vad.calibrating:
                     self._calibrating = False
             else:
+                if self._paused:
+                    # Keep pre-roll and monitor, but do not detect speech
+                    self.pre_roll.append(frame)
+                    # monitor
+                    if self.monitor_enabled:
+                        with self._mon_lock:
+                            self._mon_frames.append(frame)
+                            if len(self._mon_frames) > self._mon_frames_max:
+                                self._mon_frames = self._mon_frames[-self._mon_frames_max:]
+                        self._last_metrics = self.vad.metrics(frame)
+                    continue
+                # Keep spectral noise baseline slowly updated while idle
+                try:
+                    self.ns.update_noise(frame)
+                except Exception:
+                    pass
                 speaking = bool(self.vad.is_speech(frame))
             if self.debug_vad:
                 if not hasattr(self, "_dbg_cnt"):
@@ -315,16 +338,8 @@ class FluxRunner:
                 self._dbg_cnt += 1
                 if self._dbg_cnt % 10 == 0:
                     rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)) + 1e-9)
-                    # Try to show probability if Silero backend
-                    prob = None
-                    try:
-                        prob = self.vad.speech_prob(frame)
-                    except Exception:
-                        pass
-                    if prob is not None:
-                        print(f"[vad] {'S' if speaking else 's'} p={prob:.2f} rms={20*np.log10(max(rms,1e-12)):.1f} dBFS")
-                    else:
-                        print(f"[vad] {'S' if speaking else 's'} rms={20*np.log10(max(rms,1e-12)):.1f} dBFS")
+                    # Probability output not used for Flux VAD
+                    print(f"[vad] {'S' if speaking else 's'} rms={20*np.log10(max(rms,1e-12)):.1f} dBFS")
             if speaking:
                 self.speech_run += 1
                 self.silence_run = 0
@@ -366,8 +381,12 @@ class FluxRunner:
                     # idle -> keep pre-roll fresh
                     self.pre_roll.append(frame)
 
-            # For monitor: keep rolling buffer and last metrics
+            # For monitor: push to queue (preferred) and keep last metrics
             if self.monitor_enabled:
+                try:
+                    self.mon_q.put_nowait(frame)
+                except queue.Full:
+                    pass
                 with self._mon_lock:
                     self._mon_frames.append(frame)
                     if len(self._mon_frames) > self._mon_frames_max:
@@ -429,6 +448,10 @@ class FluxRunner:
             if self.cfg.simulate_typing:
                 self.typer.type(final_text)
             print(f"📝 ---> {final_text}")
+            try:
+                self.logger.log_entry(final_text)
+            except Exception:
+                pass
         except Exception as e:
             verr(f"[flux] Transcription failed: {e}")
 
@@ -454,11 +477,18 @@ class FluxRunner:
                 # Optionally show monitor window
                 if self.monitor_enabled:
                     try:
-                        from voxt.flux.flux_monitor import show_monitor
-                        app, _ = show_monitor(self)
+                        from voxt.flux.flux_gui import show_gui
+                        # Start IPC hotkey server: toggle listening/pause in Flux mode
+                        def on_ipc_trigger():
+                            try:
+                                self.set_paused(not self._paused)
+                            except Exception:
+                                pass
+                        start_ipc_server(on_ipc_trigger)
+                        app, _ = show_gui(self)
                         app.exec()
                     except Exception as e:
-                        print(f"[flux] Monitor unavailable: {e}")
+                        print(f"[flux] Flux GUI unavailable: {e}")
                         # fallback to headless loop
                         try:
                             while True:
@@ -475,6 +505,24 @@ class FluxRunner:
             verr(f"[flux] Failed to open audio input stream: {e}")
         self.stop.set()
         self.worker.join(timeout=1.0)
+
+    # ---- Control API for Flux GUI -------------------------------------
+    def set_paused(self, paused: bool):
+        self._paused = bool(paused)
+
+    def request_recalibration(self, duration: float = 5.0):
+        try:
+            self.vad.begin_calibration(duration, noise_spec_ema=float(self.cfg.data.get("flux_noise_spec_ema", 0.02)))
+            self._calibrating = True
+        except Exception:
+            self._calibrating = False
+
+    def set_noise_drift_enabled(self, enabled: bool):
+        try:
+            self.vad.noise_ema = float(self.cfg.data.get("flux_noise_ema", 0.05)) if enabled else 0.0
+            self.vad._noise_spec_ema = float(self.cfg.data.get("flux_noise_spec_ema", 0.02)) if enabled else 0.0
+        except Exception:
+            pass
 
 
 def main():

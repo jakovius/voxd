@@ -2,7 +2,7 @@
 # =============================================================================
 #  VOXT – Desktop-launcher helper
 #
-#  Creates, edits, or removes .desktop entries for launching VOXT in GUI or Tray mode.
+#  Creates, edits, or removes .desktop entries for launching VOXT in GUI, Tray, or Flux mode.
 #  • No sudo: everything lives in ~/.local/share
 #  • Prompts the user which launcher(s) to install
 #  • Use --edit to fix existing launchers with environment variables
@@ -25,6 +25,7 @@ ICON_SRC="$SCRIPT_DIR/src/voxt/assets/voxt-0.png"
 
 DESKTOP_GUI="$APP_DIR/voxt-gui.desktop"
 DESKTOP_TRAY="$APP_DIR/voxt-tray.desktop"
+DESKTOP_FLUX="$APP_DIR/voxt-flux.desktop"
 
 create_icon() {
   [[ -f "$ICON_SRC" ]] || { msg "Icon not found at $ICON_SRC – skipping icon copy."; return; }
@@ -82,7 +83,7 @@ update_caches() {
 }
 
 remove_files() {
-  rm -f "$DESKTOP_GUI" "$DESKTOP_TRAY" "$ICON_DEST"
+  rm -f "$DESKTOP_GUI" "$DESKTOP_TRAY" "$DESKTOP_FLUX" "$ICON_DEST"
   update_caches
   msg "Launchers removed."
 }
@@ -90,7 +91,7 @@ remove_files() {
 edit_existing_launchers() {
   local found_any=false
   
-  for file in "$DESKTOP_GUI" "$DESKTOP_TRAY"; do
+  for file in "$DESKTOP_GUI" "$DESKTOP_TRAY" "$DESKTOP_FLUX"; do
     [[ -f "$file" ]] || continue
     found_any=true
     
@@ -106,6 +107,7 @@ edit_existing_launchers() {
     case "$basename_file" in
       *gui*) mode="gui" ;;
       *tray*) mode="tray" ;;
+      *flux*) mode="flux" ;;
       *) mode="unknown" ;;
     esac
     
@@ -144,14 +146,15 @@ if [[ ${1:-} == "--edit" ]]; then
   exit 0
 fi
 
-printf "${YEL}Create desktop launchers?${NC}\n 1) GUI window\n 2) Tray icon\n 3) Both (default)\n 0) None / quit\nChoose [3]: "
+printf "${YEL}Create desktop launchers?${NC}\n 1) GUI window\n 2) Tray icon\n 3) Flux mode (VAD)\n 4) All (default)\n 0) None / quit\nChoose [4]: "
 read -r choice || true
-choice=${choice:-3}
+choice=${choice:-4}
 
 case "$choice" in
   1) modes=(gui) ;;
   2) modes=(tray) ;;
-  3|"") modes=(gui tray) ;;
+  3) modes=(flux) ;;
+  4|"") modes=(gui tray flux) ;;
   0) msg "Nothing to do. Bye."; exit 0 ;;
   *) die "Invalid choice." ;;
 esac
@@ -163,6 +166,7 @@ for m in "${modes[@]}"; do
   case "$m" in
     gui)  create_desktop gui  "$DESKTOP_GUI" ;;
     tray) create_desktop tray "$DESKTOP_TRAY" ;;
+    flux) create_desktop flux "$DESKTOP_FLUX" ;;
   esac
   msg "Installed launcher for $m mode → $APP_DIR"
 done

@@ -760,7 +760,7 @@ fi
 # ──────────────────  9a. Optional: Flux (VAD) setup ─
 setup_flux_optional_vad() {
   echo ""
-  msg "Flux mode uses simple Energy VAD - No additional runtime needed"
+  msg "Flux mode uses built-in Flux VAD - No additional runtime needed"
 }
 
 # ──────────────────  10. done  ───────────────────────────────────────────────––
