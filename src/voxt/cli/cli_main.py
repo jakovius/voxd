@@ -67,7 +67,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
     _print_disk_space_status(target)
 
     while True:
-        cmd = input("\VOXT> ").strip().lower()
+        cmd = input("voxt-prompt> ").strip().lower()
         if cmd == "r":
             print(" Simple mode | Recording... (ENTER to stop and output into the terminal)")
             recorder = AudioRecorder(
@@ -290,7 +290,6 @@ def main():
         if args.transcribe:
             transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=False)
             tfile = args.transcribe
-            from pathlib import Path
             if not Path(tfile).exists():
                 print(f"[cli] File not found: {tfile}")
                 return

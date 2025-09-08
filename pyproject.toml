@@ -23,6 +23,19 @@ dependencies = [
 [project.optional-dependencies]
 llamacpp = ["llama-cpp-python>=0.3.0"]
 
+[tool.pytest.ini_options]
+testpaths = [
+  "tests",
+]
+norecursedirs = [
+  "llama.cpp",
+  "whisper.cpp",
+  "venv",
+  ".venv",
+  "build",
+  "dist",
+]
+
 [project.scripts]
 voxt = "voxt.__main__:main"
 voxt-model = "voxt.models:_cli"
