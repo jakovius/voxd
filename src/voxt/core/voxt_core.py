@@ -39,7 +39,7 @@ class CoreProcessThread(QThread):
 
         try:
             transcriber = WhisperTranscriber(
-                model_path=self.cfg.model_path,
+                model_path=self.cfg.whisper_model_path,
                 binary_path=self.cfg.whisper_binary,
             )
         except FileNotFoundError:
@@ -50,7 +50,7 @@ class CoreProcessThread(QThread):
                 self.finished.emit("")
                 return
             transcriber = WhisperTranscriber(
-                model_path=self.cfg.model_path,
+                model_path=self.cfg.whisper_model_path,
                 binary_path=self.cfg.whisper_binary,
             )
         typer = SimulatedTyper(delay=self.cfg.typing_delay, start_delay=self.cfg.typing_start_delay, cfg=self.cfg)
@@ -130,7 +130,7 @@ class CoreProcessThread(QThread):
                 "trans_eff": (trans_end_ts - trans_start_ts) / max(len(tscript), 1),
                 "transcript": tscript,
                 "usr_trans_acc": usr_trans_acc,
-                "trans_model": _P(self.cfg.model_path).name,
+                "trans_model": _P(self.cfg.whisper_model_path).name,
                 "aipp_start_time": datetime.fromtimestamp(aipp_start_ts).strftime("%H:%M:%S") if aipp_start_ts else None,
                 "aipp_end_time": datetime.fromtimestamp(aipp_end_ts).strftime("%H:%M:%S") if aipp_end_ts else None,
                 "aipp_dur": (aipp_end_ts - aipp_start_ts) if aipp_start_ts and aipp_end_ts else None,
@@ -508,7 +508,7 @@ def show_performance_dialog(parent, cfg):
         from pathlib import Path as _P
 
         # Fallback: if the CSV row missed the value use current cfg
-        trans_model_val = last_entry.get("trans_model") or _P(cfg.model_path).name
+        trans_model_val = last_entry.get("trans_model") or _P(cfg.whisper_model_path).name
 
         _add("date", last_entry.get("date"))
         _add("rec_start_time", last_entry.get("rec_start_time"))

@@ -136,7 +136,7 @@ class SettingsDialog(QDialog):
         form.addRow(self._section_label("Whisper‬ paths"), QLabel(""))
 
         self._add_filepicker(form, "whisper_binary", "Browse", filter="Executable (*)")
-        self._add_filepicker(form, "model_path", "Browse", filter="*.bin")
+        self._add_filepicker(form, "whisper_model_path", "Browse", filter="*.bin")
 
         # ------------------------------------------------------------------
         #  Fin

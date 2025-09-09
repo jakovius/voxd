@@ -74,7 +74,7 @@ class ModelManager(QDialog):
     # ------------------------------------------------------------------
     def _populate(self):
         self.table.setRowCount(0)
-        active_path = Path(_CFG.data.get("model_path", "")).name
+        active_path = Path(_CFG.data.get("whisper_model_path", "")).name
         local_set = set(mdl.list_local())
 
         for key, (size_mb, *_rest) in mdl.CATALOGUE.items():
@@ -156,8 +156,8 @@ class ModelManager(QDialog):
 
     def _on_remove(self, key: str):
         mdl.remove(key)
-        if Path(_CFG.data.get("model_path", "")).name == f"ggml-{key}.bin":
-            _CFG.set("model_path", "")
+        if Path(_CFG.data.get("whisper_model_path", "")).name == f"ggml-{key}.bin":
+            _CFG.set("whisper_model_path", "")
             _CFG.save()
         self._populate()
 

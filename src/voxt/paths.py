@@ -196,7 +196,7 @@ def _locate_default_llamacpp_model() -> Path:
     raise FileNotFoundError(
         "Could not locate the default llama.cpp model (qwen2.5-3b-instruct-q4_k_m.gguf).\n"
         "Checked $VOXT_LLAMACPP_MODEL_PATH, XDG data dir, and repo-local.\n"
-        "Run setup.sh with llama.cpp option or download the model manually."
+        "Run setup.sh with llama.cpp option or download the model manually into your ~/.local/share/voxt/llamacpp_models directory."
     )
 
 @lru_cache(maxsize=1)
@@ -254,7 +254,7 @@ def find_llamacpp_model_by_name(model_name: str) -> Path | None:
     return None
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Base model discovery
+#  Whisper base model discovery
 # ---------------------------------------------------------------------------
 
 def _locate_base_model() -> Path:
@@ -283,7 +283,7 @@ def _locate_base_model() -> Path:
     raise FileNotFoundError(
         "Could not locate the default Whisper model (ggml-base.en.bin).\n"
         "Checked $VOXT_MODEL_PATH, XDG data dir, and repo-local.\n"
-        "Run setup.sh or download the model manually."
+        "Run setup.sh or download the model manually into your ~/.local/share/voxt/models directory."
     )
 
 @lru_cache(maxsize=1)

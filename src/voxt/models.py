@@ -175,10 +175,10 @@ def set_active(key: str | None):
     cfg = AppConfig()
     if key is None:
         # Using cfg.data avoids static analysis complaining about dynamic attrs
-        print(f"Current model: {cfg.data.get('model_path')}")
+        print(f"Current model: {cfg.data.get('whisper_model_path')}")
         return
     path = ensure(key, quiet=True)
-    cfg.set("model_path", str(path))
+    cfg.set("whisper_model_path", str(path))
     cfg.save()
     print(f"✅ Now using: {path}")
 

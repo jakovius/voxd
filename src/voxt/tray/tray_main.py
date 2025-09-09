@@ -279,7 +279,7 @@ class VoxtTrayApp(QObject):
         """Return a lightweight menu with current model and a Manage… action."""
         menu = QMenu("Whisper Models", self.menu)
 
-        cur_name = Path(self.cfg.data.get("model_path", "")).name or "(none)"
+        cur_name = Path(self.cfg.data.get("whisper_model_path", self.cfg.data.get("model_path", ""))).name or "(none)"
         cur_act = QAction(f"Current: {cur_name}", menu)
         cur_act.setEnabled(False)
         menu.addAction(cur_act)

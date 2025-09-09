@@ -258,7 +258,7 @@ class FluxRunner:
         self.ns = NoiseSuppressor(self.fs, self.N, floor_db=float(cfg.data.get("flux_monitor_spectrum_floor_db", -85.0)), ema=float(cfg.data.get("flux_noise_spec_ema", 0.02)))
 
         # Transcription + output
-        self.transcriber = WhisperTranscriber(cfg.model_path, cfg.whisper_binary, delete_input=not self.save_audio)
+        self.transcriber = WhisperTranscriber(cfg.whisper_model_path, cfg.whisper_binary, delete_input=not self.save_audio)
         self.clipboard = ClipboardManager()
         self.typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay, cfg=cfg)
         self.logger = SessionLogger(cfg.log_enabled, cfg.log_location)

@@ -468,15 +468,51 @@ if [[ -z "$WHISPER_BIN" ]]; then
 fi
 
 # ──────────────────  6. default model  ───────────────────────────────────────–
-MODEL_DIR=whisper.cpp/models ; MODEL_FILE=$MODEL_DIR/ggml-base.en.bin
-if [[ ! -f $MODEL_FILE ]]; then
+# Store in XDG data dir and symlink into repo (consistent with runtime downloader)
+MODEL_BASE="${XDG_DATA_HOME:-$HOME/.local/share}"
+XDG_MODEL_DIR="$MODEL_BASE/voxt/models"
+XDG_MODEL_FILE="$XDG_MODEL_DIR/ggml-base.en.bin"
+REPO_MODEL_DIR="whisper.cpp/models"
+REPO_MODEL_FILE="$REPO_MODEL_DIR/ggml-base.en.bin"
+
+# Ensure target directories exist
+mkdir -p "$XDG_MODEL_DIR"
+mkdir -p "$REPO_MODEL_DIR"
+
+# Migrate: if an old repo-local regular file exists and XDG missing, move it
+if [[ -f "$REPO_MODEL_FILE" && ! -L "$REPO_MODEL_FILE" && ! -f "$XDG_MODEL_FILE" ]]; then
+  msg "Migrating base model to XDG data dir ($XDG_MODEL_FILE)"
+  mv "$REPO_MODEL_FILE" "$XDG_MODEL_FILE"
+fi
+
+# Download to XDG location if missing
+if [[ ! -f "$XDG_MODEL_FILE" ]]; then
   if [[ $OFFLINE ]]; then
-    msg "Offline mode – model file not found. Please place ggml-base.en.bin into $MODEL_DIR manually."
+    msg "Offline mode – model file not found. Please place ggml-base.en.bin into $XDG_MODEL_DIR manually."
   else
-    msg "Downloading default Whisper model (base.en)…"
-    mkdir -p "$MODEL_DIR"
-    curl -L -o "$MODEL_FILE" \
+    msg "Downloading default Whisper model (base.en) to XDG data dir…"
+    curl -L -o "$XDG_MODEL_FILE" \
          https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+  fi
+fi
+
+# Ensure repo symlink points to XDG file
+if [[ -f "$XDG_MODEL_FILE" ]]; then
+  XDG_MODEL_REAL=$(readlink -f "$XDG_MODEL_FILE" 2>/dev/null || echo "$XDG_MODEL_FILE")
+  if [[ -L "$REPO_MODEL_FILE" ]]; then
+    CUR_TARGET=$(readlink -f "$REPO_MODEL_FILE" 2>/dev/null || readlink "$REPO_MODEL_FILE")
+    if [[ "$CUR_TARGET" != "$XDG_MODEL_REAL" ]]; then
+      rm -f "$REPO_MODEL_FILE"
+      ln -s "$XDG_MODEL_REAL" "$REPO_MODEL_FILE"
+      msg "Updated repo symlink: $REPO_MODEL_FILE → $XDG_MODEL_REAL"
+    else
+      msg "Repo symlink already up to date"
+    fi
+  elif [[ -e "$REPO_MODEL_FILE" ]]; then
+    msg "Repo model path exists as a regular file; leaving it (no symlink created)."
+  else
+    ln -s "$XDG_MODEL_REAL" "$REPO_MODEL_FILE"
+    msg "Symlinked repo model: $REPO_MODEL_FILE → $XDG_MODEL_REAL"
   fi
 fi
 
@@ -722,7 +758,7 @@ if repo_src.exists():
 
 try:
     from voxt.core.config import AppConfig  # type: ignore
-    from voxt.paths import LLAMACPP_MODELS_DIR  # type: ignore
+    from voxt.paths import LLAMACPP_MODELS_DIR, DATA_DIR  # type: ignore
 except ModuleNotFoundError as e:
     print("[setup] Warning: could not import voxt (", e, ") – skipping config update.")
     sys.exit(0)
@@ -732,11 +768,11 @@ try:
     whisper_bin = _p.resolve()
 except RuntimeError:
     whisper_bin = _p.absolute()
-model_path = Path(os.getcwd()) / "whisper.cpp" / "models" / "ggml-base.en.bin"
+model_path = DATA_DIR / "models" / "ggml-base.en.bin"
 
 cfg = AppConfig()
 cfg.set("whisper_binary", str(whisper_bin))
-cfg.set("model_path", str(model_path))
+cfg.set("whisper_model_path", str(model_path))
 
 # Update llama.cpp paths if available
 llama_server_path = Path(os.getcwd()) / "llama.cpp" / "build" / "bin" / "llama-server"
@@ -778,7 +814,9 @@ echo ""
 msg "Idempotency report:"
 if [[ -d .venv ]]; then echo "  • venv: present (.venv)"; else echo "  • venv: will be created"; fi
 if command -v whisper-cli >/dev/null 2>&1; then echo "  • whisper-cli: present ($(command -v whisper-cli))"; else echo "  • whisper-cli: not found"; fi
-if [[ -f whisper.cpp/models/ggml-base.en.bin ]]; then echo "  • whisper model: present (whisper.cpp/models/ggml-base.en.bin)"; else echo "  • whisper model: missing"; fi
+MODEL_BASE_REPORT="${XDG_DATA_HOME:-$HOME/.local/share}"
+MODEL_FILE_REPORT="$MODEL_BASE_REPORT/voxt/models/ggml-base.en.bin"
+if [[ -f "$MODEL_FILE_REPORT" ]]; then echo "  • whisper model: present ($MODEL_FILE_REPORT)"; else echo "  • whisper model: missing"; fi
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]]; then
   if command -v ydotool >/dev/null 2>&1 && command -v ydotoold >/dev/null 2>&1; then
     echo "  • ydotool: present (Wayland typing enabled)"

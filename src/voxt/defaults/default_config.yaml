@@ -15,7 +15,7 @@ audio_preproc_enabled: true
 audio_peak_dbfs: -3.0
 audio_clip_warn_threshold: 0.01
 whisper_binary: whisper.cpp/build/bin/whisper-cli
-model_path: whisper.cpp/models/ggml-base.en.bin
+whisper_model_path: whisper.cpp/models/ggml-base.en.bin
 
 # --- Flux (VAD-driven continuous dictation) ---------------------------------
 flux_min_silence_ms: 500     # pause to finalize an utterance

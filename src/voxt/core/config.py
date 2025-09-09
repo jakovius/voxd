@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
     "audio_peak_dbfs": -3.0,
     "audio_clip_warn_threshold": 0.01,
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
-    "model_path": "whisper.cpp/models/ggml-base.en.bin",
+    "whisper_model_path": "whisper.cpp/models/ggml-base.en.bin",
 
     # --- Flux (VAD-driven continuous dictation) ------------------------------
     # Defaults are conservative and CPU-light; Flux VAD is built-in
@@ -128,15 +128,21 @@ class AppConfig:
                 user_config = yaml.safe_load(f) or {}
                 self.data.update(user_config)
 
-        # Always resolve absolute paths for whisper_binary and model_path
+        # Backward-compat: migrate legacy 'model_path' → 'whisper_model_path'
+        updated = False
+        if "whisper_model_path" not in self.data and "model_path" in self.data:
+            self.data["whisper_model_path"] = self.data.get("model_path", "")
+            updated = True
+
+        # Always resolve absolute paths for whisper_binary and whisper_model_path
         abs_whisper = str(resolve_whisper_binary(self.data.get("whisper_binary", "")))
-        abs_model = str(resolve_model_path(self.data.get("model_path", "")))
+        abs_model = str(resolve_model_path(self.data.get("whisper_model_path", self.data.get("model_path", ""))))
         updated = False
         if self.data.get("whisper_binary") != abs_whisper:
             self.data["whisper_binary"] = abs_whisper
             updated = True
-        if self.data.get("model_path") != abs_model:
-            self.data["model_path"] = abs_model
+        if self.data.get("whisper_model_path") != abs_model:
+            self.data["whisper_model_path"] = abs_model
             updated = True
 
         # Also resolve llama.cpp paths if they exist
@@ -198,7 +204,7 @@ class AppConfig:
             else:
                 print(f"  ✅ {label} found: {path}")
 
-        check_file(self.model_path, "Model file")
+        check_file(self.whisper_model_path, "Model file")
         check_file(self.whisper_binary, "Whisper binary")
 
         if self.aipp_provider not in ("ollama", "openai", "anthropic", "xai"):
@@ -258,7 +264,7 @@ class AppConfig:
             print(f"\n[config] Model not found: {model_path}")
             return
         abs_model_path = str(model_path.resolve())
-        self.set("model_path", abs_model_path)
+        self.set("whisper_model_path", abs_model_path)
         self.save()
         print(f"\n[config] Model switched to {model_name}")
     
