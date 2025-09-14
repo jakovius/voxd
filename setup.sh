@@ -425,28 +425,148 @@ if [[ -f "$PTH_FILE" && ! -s "$PTH_FILE" ]]; then
   msg "Fixed editable install .pth file"
 fi
 
-# ──────────────────  5. whisper.cpp (once)  ─────────────────────────────────––
-WHISPER_BIN=""  # Initialize to prevent unbound variable errors
+# ──────────────────  Prebuilt binaries config  ─────────────────────────────
+# Where prebuilts live (owner/repo with Releases containing tar.gz assets)
+# You can change these without editing code via env vars.
+VOXT_BIN_REPO="${VOXT_BIN_REPO:-<org>/<repo>}"   # e.g. voxt-app/voxt-prebuilts
+VOXT_BIN_TAG="${VOXT_BIN_TAG:-}"                 # optional; if empty → latest
+VOXT_BIN_DIR="$HOME/.local/share/voxt/bin"
+mkdir -p "$VOXT_BIN_DIR"
 
+detect_cpu_variant() {
+  # Echoes two values: arch variant
+  # arch: amd64|arm64 ; variant (x86_64 only): avx2|sse42
+  local m v flags
+  m="$(uname -m | tr '[:upper:]' '[:lower:]')"
+  if [[ "$m" == "x86_64" || "$m" == "amd64" ]]; then
+    # Try lscpu first
+    if command -v lscpu >/dev/null; then
+      if lscpu | grep -q '\bavx2\b'; then v="avx2"
+      elif lscpu | grep -q 'sse4_2'; then v="sse42"
+      else v="none"; fi
+    else
+      flags="$(grep -m1 -i 'flags' /proc/cpuinfo 2>/dev/null || true)"
+      if grep -qi '\bavx2\b' <<<"$flags"; then v="avx2"
+      elif grep -qi 'sse4_2' <<<"$flags"; then v="sse42"
+      else v="none"; fi
+    fi
+    echo "amd64" "$v"
+    return
+  fi
+  if [[ "$m" == "aarch64" || "$m" == "arm64" ]]; then
+    echo "arm64" "neon"
+    return
+  fi
+  echo "$m" "none"
+}
+
+# Return a single asset download URL if it exists; empty if not.
+# Arguments: <owner/repo> <asset_name>
+gh_release_asset_url() {
+  local repo="$1" asset="$2" api url
+  if [[ -n "$VOXT_BIN_TAG" ]]; then
+    api="https://api.github.com/repos/$repo/releases/tags/$VOXT_BIN_TAG"
+  else
+    api="https://api.github.com/repos/$repo/releases/latest"
+  fi
+  url="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$api" \
+        | grep -oE "https://[^\"]+/${asset//./\\.}" | head -n1 || true)"
+  printf "%s" "$url"
+}
+
+# Download tar.gz + verify via SHA256SUMS file if present, then extract to VOXT_BIN_DIR.
+# Echoes extracted binary full path on success; returns non-zero on failure.
+fetch_prebuilt_binary() {
+  # Arguments: kind (whisper-cli|llama-server)
+  local kind="$1"
+  local arch variant base asset url sums_url tarball sumfile binpath
+  read -r arch variant < <(detect_cpu_variant)
+  if [[ "$arch" == "amd64" ]]; then
+    if [[ "$variant" == "avx2" || "$variant" == "sse42" ]]; then
+      base="${kind}_linux_${arch}_${variant}"
+    else
+      # No compatible x86 feature → skip prebuilts
+      return 1
+    fi
+  elif [[ "$arch" == "arm64" ]]; then
+    # our release naming omits variant for arm64
+    base="${kind}_linux_${arch}"
+  else
+    return 1
+  fi
+
+  asset="${base}.tar.gz"
+  url="$(gh_release_asset_url "$VOXT_BIN_REPO" "$asset")"
+  if [[ -z "$url" ]]; then
+    return 1
+  fi
+
+  # Try to locate a matching checksum list in the same release
+  if [[ "$arch" == "amd64" ]]; then
+    sums_url="$(gh_release_asset_url "$VOXT_BIN_REPO" "SHA256SUMS_${arch}_${variant}.txt")"
+  else
+    sums_url="$(gh_release_asset_url "$VOXT_BIN_REPO" "SHA256SUMS_${arch}.txt")"
+  fi
+
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  tarball="$tmpdir/$asset"
+  curl -fsSL -o "$tarball" "$url"
+
+  if command -v sha256sum >/dev/null && [[ -n "$sums_url" ]]; then
+    sumfile="$tmpdir/SHA256SUMS.txt"
+    curl -fsSL -o "$sumfile" "$sums_url" || true
+    if [[ -s "$sumfile" ]]; then
+      # Verify: extract expected hash for our asset and compare
+      local expected actual
+      expected="$(grep " $asset\$" "$sumfile" | awk '{print $1}' || true)"
+      if [[ -n "$expected" ]]; then
+        actual="$(sha256sum "$tarball" | awk '{print $1}')"
+        if [[ "$expected" != "$actual" ]]; then
+          echo "checksum-mismatch" >&2
+          rm -rf "$tmpdir"
+          return 2
+        fi
+      fi
+    fi
+  fi
+
+  # Extract to VOXT_BIN_DIR (contains only the binary + LICENSE + BUILDINFO)
+  tar -C "$VOXT_BIN_DIR" -xzf "$tarball"
+  binpath="$VOXT_BIN_DIR/$kind"
+  chmod +x "$binpath" 2>/dev/null || true
+  echo "$binpath"
+  rm -rf "$tmpdir"
+  return 0
+}
+
+# ──────────────────  5. whisper.cpp (prefer prebuilt)  ─────────────────────
+WHISPER_BIN=""
+
+# a) If whisper-cli already on PATH and valid, reuse (keeps your current behavior)
 if command -v whisper-cli >/dev/null; then
-  # A binary is already available system-wide – reuse it.
   WHISPER_BIN="$(command -v whisper-cli)"
-  # Resolve to real location to avoid symlink loops later
   RESOLVED_BIN="$(readlink -f "$WHISPER_BIN" 2>/dev/null || true)"
-  
-  # Ensure we don't use the symlink itself as target
   if [[ -n "$RESOLVED_BIN" && "$RESOLVED_BIN" != "$HOME/.local/bin/whisper-cli" ]]; then
     WHISPER_BIN="$RESOLVED_BIN"
-    msg "Found existing whisper-cli at $WHISPER_BIN – skipping source build."
+    msg "Found existing whisper-cli at $WHISPER_BIN – skipping download/build."
   else
-    # Symlink is broken or points to itself - rebuild from source
-    msg "Found broken whisper-cli symlink – rebuilding from source."
-    rm -f "$HOME/.local/bin/whisper-cli"  # Remove broken symlink
-    WHISPER_BIN=""  # Force rebuild
+    msg "Found broken whisper-cli symlink – will try prebuilt or rebuild."
+    rm -f "$HOME/.local/bin/whisper-cli"
+    WHISPER_BIN=""
   fi
 fi
 
-# Build from source if no valid binary found
+# b) Try downloading a prebuilt from GitHub Releases
+if [[ -z "$WHISPER_BIN" ]]; then
+  msg "Attempting to fetch prebuilt whisper-cli from $VOXT_BIN_REPO ${VOXT_BIN_TAG:+(tag $VOXT_BIN_TAG)} …"
+  if prebuilt="$(fetch_prebuilt_binary "whisper-cli")"; then
+    WHISPER_BIN="$prebuilt"
+    msg "Using prebuilt whisper-cli: $WHISPER_BIN"
+  fi
+fi
+
+# c) Fall back to source build if still missing
 if [[ -z "$WHISPER_BIN" ]]; then
   # Build from source inside repo_root/whisper.cpp  (old behaviour)
   if [[ $OFFLINE ]]; then
