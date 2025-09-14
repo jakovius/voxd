@@ -61,113 +61,81 @@ jobs:
     name: Build amd64 (${{ matrix.variant }})
     needs: prepare
     runs-on: ubuntu-22.04
-    container: quay.io/pypa/manylinux2014_x86_64
     strategy:
       fail-fast: false
       matrix:
         variant: [avx2, sse42]
     steps:
-      - name: Checkout (for workspace only)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Toolchain
-        run: yum -y install gcc gcc-c++ make cmake tar which git binutils
-
-      - name: Fetch sources (pinned refs)
-        env:
-          WHISPER_REPO: ${{ inputs.whisper_repo }}
-          WHISPER_REF:  ${{ inputs.whisper_ref }}
-          LLAMA_REPO:   ${{ inputs.llama_repo }}
-          LLAMA_REF:    ${{ inputs.llama_ref }}
+      - name: Build in manylinux2014_x86_64
         run: |
-          set -e
-          # Clone whisper.cpp at ref (supports tag/branch/commit)
-          git clone "https://github.com/$WHISPER_REPO.git" _src/whisper.cpp
-          ( cd _src/whisper.cpp && git fetch --all --tags --depth=1 || true
-            git checkout "$WHISPER_REF" )
-          # Clone llama.cpp at ref
-          git clone "https://github.com/$LLAMA_REPO.git" _src/llama.cpp
-          ( cd _src/llama.cpp && git fetch --all --tags --depth=1 || true
-            git checkout "$LLAMA_REF" )
+          docker run --rm \
+            -v "${{ github.workspace }}:/w" -w /w \
+            quay.io/pypa/manylinux2014_x86_64 /bin/bash -lc '
+            set -e
+            yum -y install gcc gcc-c++ make cmake tar which git binutils
 
-      - name: Build whisper.cpp (${{ matrix.variant }})
-        env:
-          VARIANT: ${{ matrix.variant }}
-        run: |
-          set -e
-          mkdir -p _build/whisper && cd _build/whisper
-          if [ "$VARIANT" = "avx2" ]; then
-            CFLAGS="-O3 -mavx2 -mfma -mf16c"
-          else
-            CFLAGS="-O3 -msse4.2"
-          fi
-          cmake -S ../../_src/whisper.cpp -B . \
-            -DGGML_NATIVE=OFF -DBUILD_SHARED_LIBS=OFF \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CFLAGS"
-          cmake --build . -j"$(nproc)" --target whisper-cli
-          strip --strip-unneeded bin/whisper-cli || true
-          mkdir -p dist/whisper
-          cp bin/whisper-cli dist/whisper/
-          cp ../../_src/whisper.cpp/LICENSE dist/whisper/LICENSE
-          cat > dist/whisper/BUILDINFO.txt <<EOF
-          project=whisper.cpp
-          repo=${{ inputs.whisper_repo }}
-          ref=${{ inputs.whisper_ref }}
-          variant=${VARIANT}
-          flags=${CFLAGS}
-          built_at=$(date -u +%F)
-          env=manylinux2014_x86_64
-          EOF
-          cd -
+            git clone "https://github.com/${{ inputs.whisper_repo }}.git" _src/whisper.cpp
+            ( cd _src/whisper.cpp && git fetch --all --tags --depth=1 || true; git checkout "${{ inputs.whisper_ref }}" )
+            git clone "https://github.com/${{ inputs.llama_repo }}.git" _src/llama.cpp
+            ( cd _src/llama.cpp && git fetch --all --tags --depth=1 || true; git checkout "${{ inputs.llama_ref }}" )
 
-      - name: Build llama.cpp (${{ matrix.variant }})
-        env:
-          VARIANT: ${{ matrix.variant }}
-        run: |
-          set -e
-          mkdir -p _build/llama && cd _build/llama
-          if [ "$VARIANT" = "avx2" ]; then
-            CFLAGS="-O3 -mavx2 -mfma -mf16c"
-          else
-            CFLAGS="-O3 -msse4.2"
-          fi
-          cmake -S ../../_src/llama.cpp -B . \
-            -DGGML_NATIVE=OFF -DBUILD_SHARED_LIBS=OFF \
-            -DLLAMA_SERVER=ON -DLLAMA_CURL=ON \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CFLAGS"
-          cmake --build . -j"$(nproc)" --target llama-server
-          strip --strip-unneeded bin/llama-server || true
-          mkdir -p dist/llama
-          cp bin/llama-server dist/llama/
-          cp ../../_src/llama.cpp/LICENSE dist/llama/LICENSE
-          cat > dist/llama/BUILDINFO.txt <<EOF
-          project=llama.cpp
-          repo=${{ inputs.llama_repo }}
-          ref=${{ inputs.llama_ref }}
-          variant=${VARIANT}
-          flags=${CFLAGS}
-          built_at=$(date -u +%F)
-          env=manylinux2014_x86_64
-          EOF
-          cd -
+            if [ "${{ matrix.variant }}" = "avx2" ]; then CFLAGS="-O3 -mavx2 -mfma -mf16c"; else CFLAGS="-O3 -msse4.2"; fi
 
-      - name: Package
-        env:
-          VARIANT: ${{ matrix.variant }}
-        run: |
-          set -e
-          mkdir -p release
-          tar -C _build/whisper/dist/whisper -czf release/whisper-cli_linux_amd64_${VARIANT}.tar.gz .
-          tar -C _build/llama/dist/llama   -czf release/llama-server_linux_amd64_${VARIANT}.tar.gz .
-          (cd release && sha256sum *.tar.gz > SHA256SUMS_amd64_${VARIANT}.txt)
+            mkdir -p /w/_build/whisper && cd /w/_build/whisper
+            cmake -S /w/_src/whisper.cpp -B . \
+              -DGGML_NATIVE=OFF -DBUILD_SHARED_LIBS=OFF \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CFLAGS"
+            cmake --build . -j"$(nproc)" --target whisper-cli
+            strip --strip-unneeded bin/whisper-cli || true
+            mkdir -p dist/whisper
+            cp bin/whisper-cli dist/whisper/
+            cp /w/_src/whisper.cpp/LICENSE dist/whisper/LICENSE
+            cat > dist/whisper/BUILDINFO.txt <<EOF
+            project=whisper.cpp
+            repo=${{ inputs.whisper_repo }}
+            ref=${{ inputs.whisper_ref }}
+            variant=${{ matrix.variant }}
+            flags=$CFLAGS
+            built_at=$(date -u +%F)
+            env=manylinux2014_x86_64
+            EOF
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+            mkdir -p /w/_build/llama && cd /w/_build/llama
+            cmake -S /w/_src/llama.cpp -B . \
+              -DGGML_NATIVE=OFF -DBUILD_SHARED_LIBS=OFF \
+              -DLLAMA_SERVER=ON -DLLAMA_CURL=ON \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CFLAGS"
+            cmake --build . -j"$(nproc)" --target llama-server
+            strip --strip-unneeded bin/llama-server || true
+            mkdir -p dist/llama
+            cp bin/llama-server dist/llama/
+            cp /w/_src/llama.cpp/LICENSE dist/llama/LICENSE
+            cat > dist/llama/BUILDINFO.txt <<EOF
+            project=llama.cpp
+            repo=${{ inputs.llama_repo }}
+            ref=${{ inputs.llama_ref }}
+            variant=${{ matrix.variant }}
+            flags=$CFLAGS
+            built_at=$(date -u +%F)
+            env=manylinux2014_x86_64
+            EOF
+
+            mkdir -p /w/release
+            tar -C /w/_build/whisper/dist/whisper -czf /w/release/whisper-cli_linux_amd64_${{ matrix.variant }}.tar.gz .
+            tar -C /w/_build/llama/dist/llama   -czf /w/release/llama-server_linux_amd64_${{ matrix.variant }}.tar.gz .
+            (cd /w/release && sha256sum *.tar.gz > SHA256SUMS_amd64_${{ matrix.variant }}.txt)
+          '
+      - name: List release
+        run: ls -al release || true
+
+      - uses: actions/upload-artifact@v4
         with:
           name: amd64-${{ matrix.variant }}
-          path: release/*
+          path: ${{ github.workspace }}/release/*
 
   build-arm64:
     name: Build arm64
@@ -182,20 +150,19 @@ jobs:
 
       - name: Build in manylinux2014_aarch64 container
         run: |
-          docker run --rm --platform=linux/arm64 -v "$PWD":/w -w /w quay.io/pypa/manylinux2014_aarch64 /bin/bash -lc '
+          docker run --rm --platform=linux/arm64 \
+            -v "${{ github.workspace }}:/w" -w /w quay.io/pypa/manylinux2014_aarch64 /bin/bash -lc '
             set -e
             yum -y install gcc gcc-c++ make cmake tar which git binutils
-            # Fetch sources
             git clone "https://github.com/${{ inputs.whisper_repo }}.git" _src/whisper.cpp
-            ( cd _src/whisper.cpp && git fetch --all --tags --depth=1 || true
-              git checkout "${{ inputs.whisper_ref }}" )
+            ( cd _src/whisper.cpp && git fetch --all --tags --depth=1 || true; git checkout "${{ inputs.whisper_ref }}" )
             git clone "https://github.com/${{ inputs.llama_repo }}.git" _src/llama.cpp
-            ( cd _src/llama.cpp && git fetch --all --tags --depth=1 || true
-              git checkout "${{ inputs.llama_ref }}" )
-            # Build whisper.cpp
-            mkdir -p _build/whisper && cd _build/whisper
+            ( cd _src/llama.cpp && git fetch --all --tags --depth=1 || true; git checkout "${{ inputs.llama_ref }}" )
+
             CFLAGS="-O3"
-            cmake -S ../../_src/whisper.cpp -B . \
+
+            mkdir -p /w/_build/whisper && cd /w/_build/whisper
+            cmake -S /w/_src/whisper.cpp -B . \
               -DGGML_NATIVE=OFF -DBUILD_SHARED_LIBS=OFF \
               -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CFLAGS"
@@ -203,7 +170,7 @@ jobs:
             strip --strip-unneeded bin/whisper-cli || true
             mkdir -p dist/whisper
             cp bin/whisper-cli dist/whisper/
-            cp ../../_src/whisper.cpp/LICENSE dist/whisper/LICENSE
+            cp /w/_src/whisper.cpp/LICENSE dist/whisper/LICENSE
             cat > dist/whisper/BUILDINFO.txt <<EOF
             project=whisper.cpp
             repo=${{ inputs.whisper_repo }}
@@ -213,11 +180,9 @@ jobs:
             built_at=$(date -u +%F)
             env=manylinux2014_aarch64
             EOF
-            cd /w
-            # Build llama.cpp
-            mkdir -p _build/llama && cd _build/llama
-            CFLAGS="-O3"
-            cmake -S ../../_src/llama.cpp -B . \
+
+            mkdir -p /w/_build/llama && cd /w/_build/llama
+            cmake -S /w/_src/llama.cpp -B . \
               -DGGML_NATIVE=OFF -DBUILD_SHARED_LIBS=OFF \
               -DLLAMA_SERVER=ON -DLLAMA_CURL=ON \
               -DCMAKE_BUILD_TYPE=Release \
@@ -226,7 +191,7 @@ jobs:
             strip --strip-unneeded bin/llama-server || true
             mkdir -p dist/llama
             cp bin/llama-server dist/llama/
-            cp ../../_src/llama.cpp/LICENSE dist/llama/LICENSE
+            cp /w/_src/llama.cpp/LICENSE dist/llama/LICENSE
             cat > dist/llama/BUILDINFO.txt <<EOF
             project=llama.cpp
             repo=${{ inputs.llama_repo }}
@@ -236,19 +201,20 @@ jobs:
             built_at=$(date -u +%F)
             env=manylinux2014_aarch64
             EOF
-            cd /w
-            # Package
-            mkdir -p release
-            tar -C _build/whisper/dist/whisper -czf release/whisper-cli_linux_arm64.tar.gz .
-            tar -C _build/llama/dist/llama   -czf release/llama-server_linux_arm64.tar.gz .
-            (cd release && sha256sum *.tar.gz > SHA256SUMS_arm64.txt)
+
+            mkdir -p /w/release
+            tar -C /w/_build/whisper/dist/whisper -czf /w/release/whisper-cli_linux_arm64.tar.gz .
+            tar -C /w/_build/llama/dist/llama   -czf /w/release/llama-server_linux_arm64.tar.gz .
+            (cd /w/release && sha256sum *.tar.gz > SHA256SUMS_arm64.txt)
           '
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: List release
+        run: ls -al release || true
+
+      - uses: actions/upload-artifact@v4
         with:
           name: arm64
-          path: release/*
+          path: ${{ github.workspace }}/release/*
 
   publish:
     name: Publish GitHub Release
