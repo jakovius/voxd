@@ -74,7 +74,7 @@ jobs:
             -v "${{ github.workspace }}:/w" -w /w \
             quay.io/pypa/manylinux2014_x86_64 /bin/bash -lc '
             set -e
-            yum -y install gcc gcc-c++ make cmake tar which git binutils
+            yum -y install gcc gcc-c++ make cmake tar which git binutils libcurl-devel openssl-devel zlib-devel
 
             git clone "https://github.com/${{ inputs.whisper_repo }}.git" _src/whisper.cpp
             ( cd _src/whisper.cpp && git fetch --all --tags --depth=1 || true; git checkout "${{ inputs.whisper_ref }}" )
@@ -154,7 +154,7 @@ jobs:
           docker run --rm --platform=linux/arm64 \
             -v "${{ github.workspace }}:/w" -w /w quay.io/pypa/manylinux2014_aarch64 /bin/bash -lc '
             set -e
-            yum -y install gcc gcc-c++ make cmake tar which git binutils
+            yum -y install gcc gcc-c++ make cmake tar which git binutils libcurl-devel openssl-devel zlib-devel
             git clone "https://github.com/${{ inputs.whisper_repo }}.git" _src/whisper.cpp
             ( cd _src/whisper.cpp && git fetch --all --tags --depth=1 || true; git checkout "${{ inputs.whisper_ref }}" )
             git clone "https://github.com/${{ inputs.llama_repo }}.git" _src/llama.cpp
