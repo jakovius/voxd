@@ -93,15 +93,15 @@ jobs:
             mkdir -p dist/whisper
             cp bin/whisper-cli dist/whisper/
             cp /w/_src/whisper.cpp/LICENSE dist/whisper/LICENSE
-            cat > dist/whisper/BUILDINFO.txt <<EOF
-            project=whisper.cpp
-            repo=${{ inputs.whisper_repo }}
-            ref=${{ inputs.whisper_ref }}
-            variant=${{ matrix.variant }}
-            flags=$CFLAGS
-            built_at=$(date -u +%F)
-            env=manylinux2014_x86_64
-            EOF
+            printf "%s\n" \
+              "project=whisper.cpp" \
+              "repo=${{ inputs.whisper_repo }}" \
+              "ref=${{ inputs.whisper_ref }}" \
+              "variant=${{ matrix.variant }}" \
+              "flags=$CFLAGS" \
+              "built_at=$(date -u +%F)" \
+              "env=manylinux2014_x86_64" \
+              > dist/whisper/BUILDINFO.txt
 
             mkdir -p /w/_build/llama && cd /w/_build/llama
             cmake -S /w/_src/llama.cpp -B . \
@@ -114,23 +114,24 @@ jobs:
             mkdir -p dist/llama
             cp bin/llama-server dist/llama/
             cp /w/_src/llama.cpp/LICENSE dist/llama/LICENSE
-            cat > dist/llama/BUILDINFO.txt <<EOF
-            project=llama.cpp
-            repo=${{ inputs.llama_repo }}
-            ref=${{ inputs.llama_ref }}
-            variant=${{ matrix.variant }}
-            flags=$CFLAGS
-            built_at=$(date -u +%F)
-            env=manylinux2014_x86_64
-            EOF
+            printf "%s\n" \
+              "project=llama.cpp" \
+              "repo=${{ inputs.llama_repo }}" \
+              "ref=${{ inputs.llama_ref }}" \
+              "variant=${{ matrix.variant }}" \
+              "flags=$CFLAGS" \
+              "built_at=$(date -u +%F)" \
+              "env=manylinux2014_x86_64" \
+              > dist/llama/BUILDINFO.txt
 
             mkdir -p /w/release
             tar -C /w/_build/whisper/dist/whisper -czf /w/release/whisper-cli_linux_amd64_${{ matrix.variant }}.tar.gz .
             tar -C /w/_build/llama/dist/llama   -czf /w/release/llama-server_linux_amd64_${{ matrix.variant }}.tar.gz .
             (cd /w/release && sha256sum *.tar.gz > SHA256SUMS_amd64_${{ matrix.variant }}.txt)
+            ls -al /w/release
           '
       - name: List release
-        run: ls -al release || true
+        run: ls -al "${{ github.workspace }}/release" || true
 
       - uses: actions/upload-artifact@v4
         with:
@@ -171,15 +172,15 @@ jobs:
             mkdir -p dist/whisper
             cp bin/whisper-cli dist/whisper/
             cp /w/_src/whisper.cpp/LICENSE dist/whisper/LICENSE
-            cat > dist/whisper/BUILDINFO.txt <<EOF
-            project=whisper.cpp
-            repo=${{ inputs.whisper_repo }}
-            ref=${{ inputs.whisper_ref }}
-            variant=neon
-            flags=$CFLAGS
-            built_at=$(date -u +%F)
-            env=manylinux2014_aarch64
-            EOF
+            printf "%s\n" \
+              "project=whisper.cpp" \
+              "repo=${{ inputs.whisper_repo }}" \
+              "ref=${{ inputs.whisper_ref }}" \
+              "variant=neon" \
+              "flags=$CFLAGS" \
+              "built_at=$(date -u +%F)" \
+              "env=manylinux2014_aarch64" \
+              > dist/whisper/BUILDINFO.txt
 
             mkdir -p /w/_build/llama && cd /w/_build/llama
             cmake -S /w/_src/llama.cpp -B . \
@@ -192,24 +193,25 @@ jobs:
             mkdir -p dist/llama
             cp bin/llama-server dist/llama/
             cp /w/_src/llama.cpp/LICENSE dist/llama/LICENSE
-            cat > dist/llama/BUILDINFO.txt <<EOF
-            project=llama.cpp
-            repo=${{ inputs.llama_repo }}
-            ref=${{ inputs.llama_ref }}
-            variant=neon
-            flags=$CFLAGS
-            built_at=$(date -u +%F)
-            env=manylinux2014_aarch64
-            EOF
+            printf "%s\n" \
+              "project=llama.cpp" \
+              "repo=${{ inputs.llama_repo }}" \
+              "ref=${{ inputs.llama_ref }}" \
+              "variant=neon" \
+              "flags=$CFLAGS" \
+              "built_at=$(date -u +%F)" \
+              "env=manylinux2014_aarch64" \
+              > dist/llama/BUILDINFO.txt
 
             mkdir -p /w/release
             tar -C /w/_build/whisper/dist/whisper -czf /w/release/whisper-cli_linux_arm64.tar.gz .
             tar -C /w/_build/llama/dist/llama   -czf /w/release/llama-server_linux_arm64.tar.gz .
             (cd /w/release && sha256sum *.tar.gz > SHA256SUMS_arm64.txt)
+            ls -al /w/release
           '
 
       - name: List release
-        run: ls -al release || true
+        run: ls -al "${{ github.workspace }}/release" || true
 
       - uses: actions/upload-artifact@v4
         with:
