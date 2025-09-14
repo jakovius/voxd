@@ -245,7 +245,9 @@ jobs:
           prerelease: ${{ inputs.prerelease }}
           files: |
             release/*.tar.gz
-            release/SHA256SUMS_*.txt
+            release/SHA256SUMS_amd64_*.txt
+            release/SHA256SUMS_arm64.txt
             release/SHA256SUMS_ALL.txt
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
