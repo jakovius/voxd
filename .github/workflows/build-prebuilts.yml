@@ -14,7 +14,7 @@ on:
       llama_repo:
         description: "Upstream repo for llama.cpp"
         required: true
-        default: "ggerganov/llama.cpp"
+        default: "ggml-org/llama.cpp"
       llama_ref:
         description: "Tag/branch/commit for llama.cpp"
         required: true
