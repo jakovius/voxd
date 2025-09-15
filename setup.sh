@@ -413,7 +413,7 @@ msg "Installing Python dependencies…"
 PIP_DISABLE_PIP_VERSION_CHECK=1 \
 pip install --prefer-binary -q -r requirements.txt
 # Ensure recent hatch for editable install
-$PY -m pip install -q --upgrade "hatchling>=1.24" hatch-vcs
+$PY -m pip install -q --upgrade "hatchling>=1.24"
 msg "(If you noticed a lengthy C compile: that's 'sounddevice' building against PortAudio headers.)"
 msg "Installing VOXT into venv (editable)…"
 # Ensure tags exist locally; ignore failures (offline etc.)
@@ -650,7 +650,7 @@ fi
 # ──────────────────  7. ydotool (Wayland helper)  ─────────────────────────────
 ensure_ydotool
 
-# ──────────────────  8. llama.cpp setup (optional)  ─────────────────────────────
+# ──────────────────  8. llama.cpp (prefer prebuilt; non-optional)  ─────────────
 
 # Model download helper with verification
 download_qwen_model() {
@@ -686,162 +686,88 @@ download_qwen_model() {
     fi
 }
 
-setup_llamacpp() {
-    local skip_prompt="${1:-}"
-    
-    # Check if already available
-    if command -v llama-server >/dev/null && command -v llama-cli >/dev/null; then
-        msg "llama.cpp already available system-wide"
-        
-        # Still offer to download the model
-        local model_dir="$HOME/.local/share/voxt/llamacpp_models"
-        if [[ ! -f "$model_dir/qwen2.5-3b-instruct-q4_k_m.gguf" ]]; then
-            read -r -p "Download default qwen2.5-3b-instruct model for AIPP? [Y/n]: " download_model
-            download_model=${download_model:-Y}
-            if [[ $download_model =~ ^[Yy]$ ]]; then
-                download_qwen_model "$model_dir"
-            fi
-        fi
-        return 0
-    fi
-    
-    if [[ -x "llama.cpp/build/bin/llama-server" ]] && [[ -x "llama.cpp/build/bin/llama-cli" ]]; then
-        msg "llama.cpp already built locally"
-        return 0
-    fi
-    
-    # User prompt (unless auto-mode)
-    if [[ -z "$skip_prompt" ]]; then
-        echo ""
-        msg "llama.cpp provides fast local LLM inference for AIPP (AI post-processing)."
-        echo ""
-        echo "Benefits:"
-        echo "  🔒 Complete privacy (no data leaves your machine)"
-        echo "  ⚡ Low latency (no network requests)"
-        echo "  📱 Lightweight model (gemma-3-270m ~150MB)"
-        echo "  💰 No API costs"
-        echo ""
-        echo "Requirements:"
-        echo "  📁 ~1GB disk space (build + model)"
-        echo "  ⏱️  5-10 minutes build time"
-        echo "  🧠 2GB+ RAM recommended"
-        echo ""
-        read -r -p "Build llama.cpp for local LLM support? [y/N]: " build_llama
-        build_llama=${build_llama:-N}
-        [[ ! $build_llama =~ ^[Yy]$ ]] && return 0
-    fi
-    
-    # Hardware detection for optimizations
-    CUDA_AVAILABLE=""
-    METAL_AVAILABLE=""
-    if command -v nvidia-smi >/dev/null 2>&1; then
-        CUDA_AVAILABLE=1
-        msg "🎮 NVIDIA GPU detected – will enable CUDA acceleration"
-    fi
-    if [[ $(uname) == "Darwin" ]]; then
-        METAL_AVAILABLE=1
-        msg "🍎 macOS detected – will enable Metal acceleration"
-    fi
-    
-    # Install build dependencies
-    msg "Installing llama.cpp build dependencies..."
-    case "$PM" in
-        apt)   build_deps=(cmake build-essential) ;;
-        dnf|dnf5) build_deps=(cmake gcc gcc-c++ make) ;;
-        pacman) build_deps=(cmake base-devel) ;;
-    esac
-    $INSTALL "${build_deps[@]}" 2>/dev/null || true
-    
-    # Clone if needed
-    if [[ $OFFLINE ]]; then
-        msg "Offline mode – assuming llama.cpp sources are present"
-        [[ ! -d llama.cpp ]] && {
-            msg "${RED}llama.cpp directory not found in offline mode${NC}"
-            return 1
-        }
-    else
-        if [[ ! -d llama.cpp ]]; then
-            msg "Cloning llama.cpp repository..."
-            git clone --depth 1 https://github.com/ggerganov/llama.cpp.git
-        else
-            msg "llama.cpp repository already exists"
-        fi
-    fi
-    
-    # Build with optimizations
-    if [[ ! -x "llama.cpp/build/bin/llama-server" ]]; then
-        msg "Building llama.cpp with optimizations (5-10 minutes)..."
-        
-        # Configure build with hardware-specific optimizations
-        local cmake_args=(
-            -S llama.cpp
-            -B llama.cpp/build
-            -DBUILD_SHARED_LIBS=OFF
-            -DLLAMA_SERVER=ON
-            -DLLAMA_CURL=ON
-        )
-        
-        # Add GPU acceleration if available
-        [[ $CUDA_AVAILABLE ]] && cmake_args+=(-DLLAMA_CUDA=ON)
-        [[ $METAL_AVAILABLE ]] && cmake_args+=(-DLLAMA_METAL=ON)
-        
-        # Build
-        cmake "${cmake_args[@]}"
-        cmake --build llama.cpp/build -j"$(nproc)" --target llama-server llama-cli
-        
-        # Verify build success
-        if [[ -x "llama.cpp/build/bin/llama-server" ]] && [[ -x "llama.cpp/build/bin/llama-cli" ]]; then
-            msg "✅ llama.cpp built successfully"
-        else
-            msg "${RED}❌ llama.cpp build failed${NC}"
-            return 1
-        fi
-    fi
-    
-    # Create symlinks in ~/.local/bin
-    LOCAL_BIN="$HOME/.local/bin"
-    mkdir -p "$LOCAL_BIN"
-    
-    for binary in llama-server llama-cli; do
-        local src="$PWD/llama.cpp/build/bin/$binary"
-        local dst="$LOCAL_BIN/$binary"
-        
-        if [[ -x "$src" ]] && [[ ! -e "$dst" ]]; then
-            ln -s "$src" "$dst"
-            msg "Symlinked $binary to $LOCAL_BIN"
-        fi
-    done
-    
-    # Download default model
-    local model_dir="$HOME/.local/share/voxt/llamacpp_models"
-    download_qwen_model "$model_dir"
-    
-    # Optional: Install Python bindings
-    echo ""
-    read -r -p "Install llama-cpp-python for direct integration? (more memory but potentially faster) [y/N]: " install_python
-    install_python=${install_python:-N}
-    if [[ $install_python =~ ^[Yy]$ ]]; then
-        msg "Installing llama-cpp-python with optimizations..."
-        
-        # Set build flags for hardware acceleration
-        local cmake_flags="-DLLAMA_CURL=on"
-        [[ $CUDA_AVAILABLE ]] && cmake_flags+=" -DLLAMA_CUDA=on"
-        [[ $METAL_AVAILABLE ]] && cmake_flags+=" -DLLAMA_METAL=on"
-        
-        CMAKE_ARGS="$cmake_flags" pip install llama-cpp-python --verbose --no-cache-dir
-        
-        if python -c "import llama_cpp" 2>/dev/null; then
-            msg "✅ llama-cpp-python installed successfully"
-        else
-            msg "${YEL}⚠️ llama-cpp-python installation may have issues${NC}"
-        fi
-    fi
-    
-    msg "✅ llama.cpp setup complete"
-}
+LLAMA_SERVER_BIN=""
 
-# Call llama.cpp setup
-setup_llamacpp
+# a) Reuse existing llama-server if present
+if command -v llama-server >/dev/null; then
+  LLAMA_SERVER_BIN="$(command -v llama-server)"
+  RESOLVED_LLAMA_BIN="$(readlink -f "$LLAMA_SERVER_BIN" 2>/dev/null || true)"
+  if [[ -n "$RESOLVED_LLAMA_BIN" && "$RESOLVED_LLAMA_BIN" != "$HOME/.local/bin/llama-server" ]]; then
+    LLAMA_SERVER_BIN="$RESOLVED_LLAMA_BIN"
+    msg "Found existing llama-server at $LLAMA_SERVER_BIN – skipping download/build."
+  else
+    msg "Found broken llama-server symlink – will try prebuilt or rebuild."
+    rm -f "$HOME/.local/bin/llama-server"
+    LLAMA_SERVER_BIN=""
+  fi
+fi
+
+# b) Try downloading a prebuilt from GitHub Releases
+if [[ -z "$LLAMA_SERVER_BIN" ]]; then
+  msg "Attempting to fetch prebuilt llama-server from $VOXT_BIN_REPO ${VOXT_BIN_TAG:+(tag $VOXT_BIN_TAG)} …"
+  if prebuilt_llama="$(fetch_prebuilt_binary "llama-server")"; then
+    LLAMA_SERVER_BIN="$prebuilt_llama"
+    msg "Using prebuilt llama-server: $LLAMA_SERVER_BIN"
+  fi
+fi
+
+# c) Fallback: build from source (CPU-only)
+if [[ -z "$LLAMA_SERVER_BIN" ]]; then
+  if [[ $OFFLINE ]]; then
+    msg "Offline mode – skipping llama.cpp clone. Assuming sources are present."
+  else
+    if [[ ! -d llama.cpp ]]; then
+      msg "Cloning llama.cpp…"
+      git clone --depth 1 https://github.com/ggerganov/llama.cpp.git
+    fi
+  fi
+  if [[ ! -x llama.cpp/build/bin/llama-server ]]; then
+    msg "Building llama.cpp (CPU-only)…"
+    cmake -S llama.cpp -B llama.cpp/build -DBUILD_SHARED_LIBS=OFF -DLLAMA_SERVER=ON -DLLAMA_CURL=ON
+    cmake --build llama.cpp/build -j"$(nproc)" --target llama-server
+  else
+    msg "llama.cpp already built."
+  fi
+  LLAMA_SERVER_BIN="$PWD/llama.cpp/build/bin/llama-server"
+fi
+
+# d) Symlink llama-server to ~/.local/bin
+LOCAL_BIN="$HOME/.local/bin"
+mkdir -p "$LOCAL_BIN"
+LLAMA_SYMLINK_PATH="$LOCAL_BIN/llama-server"
+
+if [[ -L "$LLAMA_SERVER_BIN" ]]; then
+  REAL_LLAMA_BIN=$(readlink -f "$LLAMA_SERVER_BIN" 2>/dev/null || echo "$LLAMA_SERVER_BIN")
+else
+  REAL_LLAMA_BIN="$LLAMA_SERVER_BIN"
+fi
+
+if [[ "$REAL_LLAMA_BIN" == "$LLAMA_SYMLINK_PATH" ]]; then
+  msg "llama-server symlink would point to itself – skipping."
+elif [[ ! -f "$REAL_LLAMA_BIN" ]]; then
+  msg "Warning: llama-server binary not found at $REAL_LLAMA_BIN – skipping symlink creation."
+else
+  if [[ -L "$LLAMA_SYMLINK_PATH" ]]; then
+    rm -f "$LLAMA_SYMLINK_PATH"
+  elif [[ -e "$LLAMA_SYMLINK_PATH" ]]; then
+    msg "File named llama-server already exists at $LLAMA_SYMLINK_PATH – leaving untouched."
+    REAL_LLAMA_BIN=""
+  fi
+  if [[ -n "$REAL_LLAMA_BIN" ]]; then
+    ln -s "$REAL_LLAMA_BIN" "$LLAMA_SYMLINK_PATH"
+    msg "Symlinked llama-server to $LLAMA_SYMLINK_PATH"
+  fi
+fi
+
+# e) Offer model download
+LLAMACPP_MODELS_DIR="$HOME/.local/share/voxt/llamacpp_models"
+if [[ ! -f "$LLAMACPP_MODELS_DIR/qwen2.5-3b-instruct-q4_k_m.gguf" ]]; then
+  read -r -p "Download default qwen2.5-3b-instruct model for AIPP? [Y/n]: " download_model
+  download_model=${download_model:-Y}
+  if [[ $download_model =~ ^[Yy]$ ]]; then
+    download_qwen_model "$LLAMACPP_MODELS_DIR" || true
+  fi
+fi
 
 # ──────────────────  9. symlink whisper-cli to ~/.local/bin  ─────────────────
 LOCAL_BIN="$HOME/.local/bin"
@@ -877,6 +803,7 @@ else
 fi
 
 # ──────────────────  9b. persist absolute paths in config.yaml  ──────────────
+export LLAMA_SERVER_BIN
 if [[ -n "$WHISPER_BIN" ]]; then
   $PY - <<PY
 import sys, os
@@ -905,15 +832,16 @@ cfg = AppConfig()
 cfg.set("whisper_binary", str(whisper_bin))
 cfg.set("whisper_model_path", str(model_path))
 
-# Update llama.cpp paths if available
-llama_server_path = Path(os.getcwd()) / "llama.cpp" / "build" / "bin" / "llama-server"
-llama_cli_path = Path(os.getcwd()) / "llama.cpp" / "build" / "bin" / "llama-cli"
-llamacpp_model_path = LLAMACPP_MODELS_DIR / "qwen2.5-3b-instruct-q4_k_m.gguf"
+# Update llama.cpp server path: prefer prebuilt path from env, fallback to repo build
+env_llama = os.environ.get("LLAMA_SERVER_BIN")
+if env_llama and Path(env_llama).exists():
+    cfg.set("llamacpp_server_path", str(Path(env_llama).resolve()))
+else:
+    llama_server_path = Path(os.getcwd()) / "llama.cpp" / "build" / "bin" / "llama-server"
+    if llama_server_path.exists():
+        cfg.set("llamacpp_server_path", str(llama_server_path))
 
-if llama_server_path.exists():
-    cfg.set("llamacpp_server_path", str(llama_server_path))
-if llama_cli_path.exists():
-    cfg.set("llamacpp_cli_path", str(llama_cli_path))
+llamacpp_model_path = LLAMACPP_MODELS_DIR / "qwen2.5-3b-instruct-q4_k_m.gguf"
 if llamacpp_model_path.exists():
     cfg.set("llamacpp_default_model", str(llamacpp_model_path))
 
@@ -957,7 +885,7 @@ if [[ ${XDG_SESSION_TYPE:-} == wayland* ]]; then
 else
   echo "  • ydotool: not required (X11)"
 fi
-if command -v llama-server >/dev/null 2>&1 && command -v llama-cli >/dev/null 2>&1; then echo "  • llama.cpp: present"; else echo "  • llama.cpp: not installed"; fi
+if command -v llama-server >/dev/null 2>&1; then echo "  • llama.cpp: present (llama-server)"; else echo "  • llama.cpp: not installed"; fi
 if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "voxt "; then echo "  • pipx 'voxt': installed"; else echo "  • pipx 'voxt': not installed"; fi
 
 msg "${GRN}Setup complete!${NC}"
