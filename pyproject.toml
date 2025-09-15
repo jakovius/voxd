@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [project]
 name = "voxt"
-dynamic = ["version"]
+version = "0.0.0"  # bump manually on releases
 description = "Voice-typing helper powered by whisper.cpp"
 authors = [{ name = "Jakov", email = "jakov.iv@proton.me" }]
 requires-python = ">=3.9"
@@ -24,17 +24,8 @@ dependencies = [
 llamacpp = ["llama-cpp-python>=0.3.0"]
 
 [tool.pytest.ini_options]
-testpaths = [
-  "tests",
-]
-norecursedirs = [
-  "llama.cpp",
-  "whisper.cpp",
-  "venv",
-  ".venv",
-  "build",
-  "dist",
-]
+testpaths = ["tests"]
+norecursedirs = ["llama.cpp","whisper.cpp","venv",".venv","build","dist"]
 
 [project.scripts]
 voxt = "voxt.__main__:main"
@@ -42,12 +33,7 @@ voxt-model = "voxt.models:_cli"
 
 [tool.hatch.build]
 package-dir = "src"
-include = [
-  "setup.sh",
-  "src/voxt/assets/*.png",
-  "src/voxt/defaults/*.yaml",
-  "launcher_setup.sh"
-]
+include = ["setup.sh","src/voxt/assets/*.png","src/voxt/defaults/*.yaml","launcher_setup.sh"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/voxt"]
