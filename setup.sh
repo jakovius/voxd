@@ -416,7 +416,18 @@ pip install --prefer-binary -q -r requirements.txt
 $PY -m pip install -q --upgrade "hatchling>=1.24" hatch-vcs
 msg "(If you noticed a lengthy C compile: that's 'sounddevice' building against PortAudio headers.)"
 msg "Installing VOXT into venv (editable)…"
-pip install -e .    > /dev/null
+# Ensure tags exist locally; ignore failures (offline etc.)
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  git fetch --tags --force --prune 2>/dev/null || true
+  # If no SemVer tag is found, force a pretend version so hatch-vcs doesn't error
+  if ! git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' >/dev/null 2>&1; then
+    export SETUPTOOLS_SCM_PRETEND_VERSION="${VOXT_PRETEND_VERSION:-0.0.0}"
+  fi
+else
+  export SETUPTOOLS_SCM_PRETEND_VERSION="${VOXT_PRETEND_VERSION:-0.0.0}"
+fi
+
+pip install -e .
 
 # Fix editable install .pth file if it's empty (hatchling bug workaround)
 PTH_FILE=".venv/lib/python3.12/site-packages/_voxt.pth"
