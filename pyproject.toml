@@ -52,6 +52,10 @@ include = [
 [tool.hatch.version]
 source = "vcs"
 
+[tool.hatch.version.raw-options]
+tag_regex = "^(?:v)?(?P<version>\\d+\\.\\d+\\.\\d+(?:[a-zA-Z0-9.-]+)?)$"
+fallback_version = "0.0.0"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/voxt"]
 
