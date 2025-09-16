@@ -15,7 +15,7 @@ from voxd.core.transcriber import WhisperTranscriber  # type: ignore
 from voxd.core.aipp import get_final_text
 from voxd.utils.core_runner import AudioRecorder, ClipboardManager, SimulatedTyper
 from voxd.utils.ipc_server import start_ipc_server
-from voxd.utils.libw import verbo, verr, YELLOW, RED, RESET
+from voxd.utils.libw import verbo, verr, YELLOW, RED, RESET, ORANGE
 import shutil
 from pathlib import Path
         
@@ -100,7 +100,10 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
             print(f"📝 ---> {final_text}")
 
         elif cmd == "rh":
-            print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit\n*** You can now go to ANY other app to VOICE-TYPE - leave this active in the background ***")
+            if sys.stdout.isatty():
+                print(f"{ORANGE}Continuous mode | hotkey to rec/stop | Ctrl+C to exit\n*** You can now go to ANY other app to VOICE-TYPE - leave this active in the background ***{RESET}")
+            else:
+                print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit\n*** You can now go to ANY other app to VOICE-TYPE - leave this active in the background ***")
             # Create reusable instances outside the loop
             recorder = AudioRecorder(
                 record_chunked=getattr(cfg, "record_chunked", True),
@@ -251,7 +254,10 @@ def main():
                 verbo("\n[IPC] Hotkey trigger received.")
                 hotkey_event.set()
             start_ipc_server(on_ipc_trigger)
-            print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit")
+            if sys.stdout.isatty():
+                print(f"{ORANGE}Continuous mode | hotkey to rec/stop | Ctrl+C to exit{RESET}")
+            else:
+                print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit")
             recorder = AudioRecorder()
             preserve = bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False))
             transcriber = WhisperTranscriber(cfg.whisper_model_path, cfg.whisper_binary, delete_input=not preserve)
