@@ -109,7 +109,7 @@ class SettingsDialog(QDialog):
         aipp_enabled = self._add_checkbox(form, "aipp_enabled", "Enable AIPP")
 
         provider_combo = QComboBox()
-        providers = ["ollama", "openai", "anthropic", "xai", "llamacpp_server", "llamacpp_direct"]
+        providers = ["ollama", "openai", "anthropic", "xai", "llamacpp_server"]
         provider_combo.addItems(providers)
         provider_combo.setCurrentText(self.cfg.data.get("aipp_provider", "ollama"))
         form.addRow("Provider", provider_combo)

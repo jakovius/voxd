@@ -21,8 +21,6 @@ dependencies = [
   "pyqtgraph>=0.13"
 ]
 
-[project.optional-dependencies]
-llamacpp = ["llama-cpp-python>=0.3.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

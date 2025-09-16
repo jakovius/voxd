@@ -31,8 +31,6 @@ def run_aipp(text: str, cfg, prompt_key: str = None) -> str:
                 return run_ollama_aipp(full_prompt, model)
             elif provider == "llamacpp_server":
                 return run_llamacpp_server_aipp(full_prompt, model)
-            elif provider == "llamacpp_direct":
-                return run_llamacpp_direct_aipp(full_prompt, model, cfg)
             elif provider == "openai":
                 return run_openai_aipp(full_prompt, model)
             elif provider == "anthropic":
@@ -148,94 +146,7 @@ def run_llamacpp_server_aipp(prompt: str, model: str = "gemma-3-270m") -> str:
         raise requests.RequestException(f"llama.cpp server error {response.status_code}: {response.text}")
 
 
-def run_llamacpp_direct_aipp(prompt: str, model: str, cfg) -> str:
-    """Use llama.cpp Python bindings directly."""
-    try:
-        from llama_cpp import Llama
-        from voxt.paths import LLAMACPP_MODELS_DIR
-        
-        # Get model path
-        model_path = Path(cfg.get_llamacpp_model_path(model))
-        
-        if not model_path.exists():
-            raise FileNotFoundError(f"llama.cpp model not found: {model_path}")
-        
-        # Initialize or reuse cached model (memory optimization)
-        cache_key = f"llamacpp_direct_{model}"
-        if not hasattr(cfg, '_llamacpp_cache'):
-            cfg._llamacpp_cache = {}
-        
-        if cache_key not in cfg._llamacpp_cache:
-            cfg._llamacpp_cache[cache_key] = Llama(
-                model_path=str(model_path),
-                n_ctx=2048,       # Context window
-                n_batch=512,      # Batch size
-                n_threads=4,      # CPU threads
-                verbose=False,
-                chat_format="gemma"  # Use Gemma chat format
-            )
-        
-        llm = cfg._llamacpp_cache[cache_key]
-        output = llm.create_chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=512,
-            temperature=0.7,
-            top_p=0.9
-        )
-        return output['choices'][0]['message']['content'].strip()
-        
-    except ImportError:
-        # In pipx environment, try to import from user/system locations
-        import sys
-        import site
-        
-        # Add user site-packages to path
-        user_site = site.getusersitepackages()
-        if user_site not in sys.path:
-            sys.path.append(user_site)
-            
-        # Try importing again
-        try:
-            from llama_cpp import Llama
-            from voxt.paths import LLAMACPP_MODELS_DIR
-            
-            # Get model path
-            model_path = Path(cfg.get_llamacpp_model_path(model))
-            
-            if not model_path.exists():
-                raise FileNotFoundError(f"llama.cpp model not found: {model_path}")
-            
-            # Initialize or reuse cached model (memory optimization)
-            cache_key = f"llamacpp_direct_{model}"
-            if not hasattr(cfg, '_llamacpp_cache'):
-                cfg._llamacpp_cache = {}
-            
-            if cache_key not in cfg._llamacpp_cache:
-                cfg._llamacpp_cache[cache_key] = Llama(
-                    model_path=str(model_path),
-                    n_ctx=2048,       # Context window
-                    n_batch=512,      # Batch size
-                    n_threads=4,      # CPU threads
-                    verbose=False,
-                    chat_format="gemma"  # Use Gemma chat format
-                )
-            
-            llm = cfg._llamacpp_cache[cache_key]
-            output = llm.create_chat_completion(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=512,
-                temperature=0.7,
-                top_p=0.9
-            )
-            return output['choices'][0]['message']['content'].strip()
-            
-        except ImportError:
-            # Fallback to llamacpp_server if llama-cpp-python not available
-            verr("[aipp] llama-cpp-python not available, falling back to llamacpp_server")
-            return run_llamacpp_server_aipp(prompt, model)
-    except Exception as e:
-        verr(f"[aipp] llamacpp_direct failed: {e}, falling back to llamacpp_server")
-        return run_llamacpp_server_aipp(prompt, model)
+## llamacpp_direct support removed
 
 
 def get_final_text(transcript: str, cfg) -> str:

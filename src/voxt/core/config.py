@@ -66,7 +66,7 @@ DEFAULT_CONFIG = {
 
     # --- ✨ AIPP (AI post-processing) ------------------------------------------
     "aipp_enabled": False,
-    "aipp_provider": "ollama",           # ollama / openai / anthropic / xai / llamacpp_server / llamacpp_direct
+    "aipp_provider": "ollama",           # ollama / openai / anthropic / xai / llamacpp_server
     "aipp_active_prompt": "default",
 
     # New: List of models per provider
@@ -75,8 +75,7 @@ DEFAULT_CONFIG = {
         "openai": ["gpt-4o-mini-2024-07-18"],
         "anthropic": ["claude-3-opus-20240229", "claude-3-haiku"],
         "xai": ["grok-3-latest"],
-        "llamacpp_server": ["gemma-3-270m"],
-        "llamacpp_direct": ["gemma-3-270m"]
+        "llamacpp_server": ["gemma-3-270m"]
     },
 
     # New: Selected model per provider
@@ -85,8 +84,7 @@ DEFAULT_CONFIG = {
         "openai": "gpt-4o-mini-2024-07-18",
         "anthropic": "claude-3-opus-20240229",
         "xai": "grok-3-latest",
-        "llamacpp_server": "gemma-3-270m",
-        "llamacpp_direct": "gemma-3-270m"
+        "llamacpp_server": "gemma-3-270m"
     },
 
     # llama.cpp settings
@@ -228,12 +226,10 @@ class AppConfig:
             print("  ⚠️ XAI_API_KEY not set in environment.")
 
         # Validate llama.cpp setup
-        if self.aipp_provider in ("llamacpp_server", "llamacpp_direct"):
+        if self.aipp_provider in ("llamacpp_server",):
             status = self.validate_llamacpp_setup()
             if self.aipp_provider == "llamacpp_server" and not status["server_available"]:
                 print("  ⚠️ llama-server not found but llamacpp_server provider selected")
-            if self.aipp_provider == "llamacpp_direct" and not status["python_bindings_available"]:
-                print("  ⚠️ llama-cpp-python not installed but llamacpp_direct provider selected")
             if not status["default_model_available"]:
                 print("  ⚠️ Default llama.cpp model not found")
 
@@ -318,7 +314,7 @@ class AppConfig:
             print(f"\n[config] Invalid aipp_active_prompt '{active}', resetting to 'default'")
             self.data["aipp_active_prompt"] = "default"
 
-        valid_providers = ["ollama", "openai", "anthropic", "xai", "llamacpp_server", "llamacpp_direct"]
+        valid_providers = ["ollama", "openai", "anthropic", "xai", "llamacpp_server"]
         provider = self.data.get("aipp_provider", "ollama")
         if provider not in valid_providers:
             print(f"\n[config] Invalid aipp_provider '{provider}', resetting to 'ollama'")
@@ -366,18 +362,17 @@ class AppConfig:
             # If no models found, keep the default as fallback
             available_models = ["qwen2.5-3b-instruct-q4_k_m"]
         
-        # Update both llamacpp providers
+        # Update llamacpp server provider
         if "aipp_models" not in self.data:
             self.data["aipp_models"] = {}
         
         self.data["aipp_models"]["llamacpp_server"] = available_models
-        self.data["aipp_models"]["llamacpp_direct"] = available_models
         
         # Ensure selected models are valid
         if "aipp_selected_models" not in self.data:
             self.data["aipp_selected_models"] = {}
             
-        for provider in ["llamacpp_server", "llamacpp_direct"]:
+        for provider in ["llamacpp_server"]:
             current_selected = self.data["aipp_selected_models"].get(provider, "")
             if current_selected not in available_models:
                 # Set to the first available model, or default
@@ -393,8 +388,7 @@ class AppConfig:
         status = {
             "server_available": False,
             "cli_available": False, 
-            "default_model_available": False,
-            "python_bindings_available": False
+            "default_model_available": False
         }
         
         try:
@@ -418,11 +412,7 @@ class AppConfig:
         except (FileNotFoundError, ImportError):
             pass
         
-        try:
-            import llama_cpp
-            status["python_bindings_available"] = True
-        except ImportError:
-            pass
+        # python bindings check removed
         
         return status
 
