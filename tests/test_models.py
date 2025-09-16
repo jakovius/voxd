@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 def test_models_ensure_downloads(monkeypatch, tmp_path):
-    import voxt.models as M
+    import voxd.models as M
 
     def _fake_download(url, dest, progress_cb=None):
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -17,7 +17,7 @@ def test_models_ensure_downloads(monkeypatch, tmp_path):
 
 
 def test_models_list_remove_set_active(monkeypatch, tmp_path):
-    import voxt.models as M
+    import voxd.models as M
 
     # Prepare a fake cached model file
     cache = (tmp_path / "data" / "models")

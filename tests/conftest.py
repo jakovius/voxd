@@ -20,15 +20,15 @@ def isolate_xdg_dirs(monkeypatch, tmp_path):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
     # Reload modules that compute paths at import-time so they pick up XDG_* envs
-    if "voxt.paths" in sys.modules:
-        importlib.reload(sys.modules["voxt.paths"])  # type: ignore[arg-type]
+    if "voxd.paths" in sys.modules:
+        importlib.reload(sys.modules["voxd.paths"])  # type: ignore[arg-type]
     else:
-        import voxt.paths  # noqa: F401
+        import voxd.paths  # noqa: F401
 
-    if "voxt.core.config" in sys.modules:
-        importlib.reload(sys.modules["voxt.core.config"])  # type: ignore[arg-type]
+    if "voxd.core.config" in sys.modules:
+        importlib.reload(sys.modules["voxd.core.config"])  # type: ignore[arg-type]
     else:
-        import voxt.core.config  # noqa: F401
+        import voxd.core.config  # noqa: F401
 
     yield
 
@@ -136,7 +136,7 @@ def fake_whisper_run(monkeypatch, tmp_path):
             stderr = ""
         return CP()
 
-    monkeypatch.setattr("voxt.core.transcriber.subprocess.run", _run)
+    monkeypatch.setattr("voxd.core.transcriber.subprocess.run", _run)
     return _run
 
 

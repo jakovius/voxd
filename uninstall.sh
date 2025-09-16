@@ -1,6 +1,6 @@
 #!/bin/bash
 # ──────────────────────────────────────────────────────────────────────────────
-# VOXT Uninstaller - Comprehensive removal script
+# VOXD Uninstaller - Comprehensive removal script
 # ──────────────────────────────────────────────────────────────────────────────
 
 set -e
@@ -14,11 +14,11 @@ NC='\033[0m' # No Color
 
 # Script metadata
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VOXT_REPO_DIR="$SCRIPT_DIR"
+VOXD_REPO_DIR="$SCRIPT_DIR"
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║                    VOXT Uninstaller                           ║${NC}"
-echo -e "${BLUE}║               Complete removal of VOXT components             ║${NC}"
+echo -e "${BLUE}║                    VOXD Uninstaller                           ║${NC}"
+echo -e "${BLUE}║               Complete removal of VOXD components             ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -98,7 +98,7 @@ detect_package_manager() {
     elif command -v zypper >/dev/null 2>&1; then
         PKG_MANAGER="zypper"
         PKG_REMOVE="sudo zypper remove -y"
-        PKG_AUTOREMOVE="sudo zypper packages --unneeded | awk -F'|' 'NR==0 || NR==1 || NR==2 || NR==3 || NR==4 {next} {print \$3}' | grep -v Name | sudo xargs zypper remove -y"
+        PKG_AUTOREMOVE="sudo zypper packages --unneeded | awk -F'|' 'NR==0 || NR==1 || NR==2 || NR==3 || NR==4 {next} {print $3}' | grep -v Name | sudo xargs zypper remove -y"
     else
         PKG_MANAGER="unknown"
         PKG_REMOVE=""
@@ -117,12 +117,12 @@ detect_package_manager() {
 
 stop_running_processes() {
     echo ""
-    log_info "Checking for running VOXT processes..."
+    log_info "Checking for running VOXD processes..."
     
     local processes_found=false
     
-    if pgrep -f "voxt" >/dev/null 2>&1; then
-        log_warning "Found running VOXT processes"
+    if pgrep -f "voxd" >/dev/null 2>&1; then
+        log_warning "Found running VOXD processes"
         processes_found=true
     fi
     
@@ -137,9 +137,9 @@ stop_running_processes() {
     fi
     
     if [[ "$processes_found" == "true" ]]; then
-        if ask_user "Stop all running VOXT-related processes?"; then
+        if ask_user "Stop all running VOXD-related processes?"; then
             log_info "Stopping processes..."
-            pkill -f voxt 2>/dev/null || true
+            pkill -f voxd 2>/dev/null || true
             pkill -f llama-server 2>/dev/null || true
             pkill -f ydotoold 2>/dev/null || true
             sleep 2
@@ -148,7 +148,7 @@ stop_running_processes() {
             log_warning "Processes left running - some files may not be removable"
         fi
     else
-        log_info "No running VOXT processes found"
+        log_info "No running VOXD processes found"
     fi
 }
 
@@ -157,15 +157,15 @@ remove_pipx_installation() {
     log_info "Checking for pipx installation..."
     
     if command -v pipx >/dev/null 2>&1; then
-        if pipx list | grep -q "voxt"; then
-            log_warning "Found VOXT installed via pipx"
-            if ask_user "Remove VOXT from pipx?"; then
-                log_info "Uninstalling VOXT from pipx..."
-                pipx uninstall voxt
-                log_success "VOXT removed from pipx"
+        if pipx list | grep -q "voxd"; then
+            log_warning "Found VOXD installed via pipx"
+            if ask_user "Remove VOXD from pipx?"; then
+                log_info "Uninstalling VOXD from pipx..."
+                pipx uninstall voxd
+                log_success "VOXD removed from pipx"
             fi
         else
-            log_info "VOXT not found in pipx installations"
+            log_info "VOXD not found in pipx installations"
         fi
     else
         log_info "pipx not found - skipping pipx check"
@@ -179,17 +179,17 @@ remove_repository_files() {
     local repo_components=()
     
     # Check for virtual environment
-    if [[ -d "$VOXT_REPO_DIR/.venv" ]]; then
+    if [[ -d "$VOXD_REPO_DIR/.venv" ]]; then
         repo_components+=(".venv (Python virtual environment)")
     fi
     
     # Check for whisper.cpp
-    if [[ -d "$VOXT_REPO_DIR/whisper.cpp" ]]; then
+    if [[ -d "$VOXD_REPO_DIR/whisper.cpp" ]]; then
         repo_components+=("whisper.cpp (speech recognition)")
     fi
     
     # Check for llama.cpp
-    if [[ -d "$VOXT_REPO_DIR/llama.cpp" ]]; then
+    if [[ -d "$VOXD_REPO_DIR/llama.cpp" ]]; then
         repo_components+=("llama.cpp (local AI)")
     fi
     
@@ -219,9 +219,9 @@ remove_repository_files() {
             fi
             
             log_info "Removing repository components..."
-            rm -rf "$VOXT_REPO_DIR/.venv" 2>/dev/null || true
-            rm -rf "$VOXT_REPO_DIR/whisper.cpp" 2>/dev/null || true
-            rm -rf "$VOXT_REPO_DIR/llama.cpp" 2>/dev/null || true
+            rm -rf "$VOXD_REPO_DIR/.venv" 2>/dev/null || true
+            rm -rf "$VOXD_REPO_DIR/whisper.cpp" 2>/dev/null || true
+            rm -rf "$VOXD_REPO_DIR/llama.cpp" 2>/dev/null || true
             log_success "Repository components removed"
         fi
     else
@@ -253,23 +253,23 @@ remove_user_data() {
     local user_data_found=()
     
     # Check configuration
-    if [[ -d ~/.config/voxt ]]; then
-        user_data_found+=("~/.config/voxt (configuration files)")
+    if [[ -d ~/.config/voxd ]]; then
+        user_data_found+=("~/.config/voxd (configuration files)")
     fi
     
     # Check data directory
-    if [[ -d ~/.local/share/voxt ]]; then
-        local data_size=$(du -sh ~/.local/share/voxt 2>/dev/null | cut -f1)
-        user_data_found+=("~/.local/share/voxt (models, logs, data - $data_size)")
+    if [[ -d ~/.local/share/voxd ]]; then
+        local data_size=$(du -sh ~/.local/share/voxd 2>/dev/null | cut -f1)
+        user_data_found+=("~/.local/share/voxd (models, logs, data - $data_size)")
     fi
     
     # Check desktop launchers
     local launchers=()
-    if [[ -f ~/.local/share/applications/voxt.desktop ]]; then
-        launchers+=("~/.local/share/applications/voxt.desktop")
+    if [[ -f ~/.local/share/applications/voxd.desktop ]]; then
+        launchers+=("~/.local/share/applications/voxd.desktop")
     fi
-    if ls ~/.local/share/applications/voxt-*.desktop >/dev/null 2>&1; then
-        launchers+=(~/.local/share/applications/voxt-*.desktop)
+    if ls ~/.local/share/applications/voxd-*.desktop >/dev/null 2>&1; then
+        launchers+=(~/.local/share/applications/voxd-*.desktop)
     fi
     
     if [[ ${#user_data_found[@]} -gt 0 ]]; then
@@ -282,8 +282,8 @@ remove_user_data() {
         log_warning "⚠️  This includes all downloaded models, configuration, and logs!"
         if ask_user "Remove all user data and configuration?" "n"; then
             log_info "Removing user data..."
-            rm -rf ~/.config/voxt 2>/dev/null || true
-            rm -rf ~/.local/share/voxt 2>/dev/null || true
+            rm -rf ~/.config/voxd 2>/dev/null || true
+            rm -rf ~/.local/share/voxd 2>/dev/null || true
             log_success "User data removed"
         fi
     else
@@ -298,8 +298,8 @@ remove_user_data() {
         
         if ask_user "Remove desktop launchers?"; then
             log_info "Removing launchers..."
-            rm -f ~/.local/share/applications/voxt.desktop 2>/dev/null || true
-            rm -f ~/.local/share/applications/voxt-*.desktop 2>/dev/null || true
+            rm -f ~/.local/share/applications/voxd.desktop 2>/dev/null || true
+            rm -f ~/.local/share/applications/voxd-*.desktop 2>/dev/null || true
             log_success "Desktop launchers removed"
         fi
     else
@@ -349,7 +349,7 @@ remove_user_from_groups() {
     
     if groups | grep -q "input"; then
         log_warning "User is in 'input' group (added for ydotool)"
-        echo "  This may have been added specifically for VOXT/ydotool functionality"
+        echo "  This may have been added specifically for VOXD/ydotool functionality"
         if ask_user "Remove user from 'input' group? (requires sudo)" "n"; then
             log_info "Removing user from input group..."
             sudo gpasswd -d "$USER" input 2>/dev/null || true
@@ -367,12 +367,12 @@ remove_system_packages() {
     
     if [[ "$PKG_MANAGER" == "unknown" ]]; then
         log_warning "Package manager not detected - skipping package removal"
-        log_info "You may want to manually remove these packages if they were installed for VOXT:"
+        log_info "You may want to manually remove these packages if they were installed for VOXD:"
         echo "  - ffmpeg, portaudio19-dev, cmake, build-essential, git, curl, etc."
         return
     fi
     
-    log_warning "VOXT setup may have installed system packages like:"
+    log_warning "VOXD setup may have installed system packages like:"
     echo "  - ffmpeg (audio/video processing)"
     echo "  - portaudio19-dev (audio interface)"
     echo "  - cmake, build-essential (build tools)"
@@ -381,7 +381,7 @@ remove_system_packages() {
     echo ""
     echo "⚠️  These packages may be used by other applications!"
     
-    if ask_user "Remove VOXT-related system packages? (CAUTION: may break other apps)" "n"; then
+    if ask_user "Remove VOXD-related system packages? (CAUTION: may break other apps)" "n"; then
         log_info "Removing packages..."
         
         case "$PKG_MANAGER" in
@@ -410,15 +410,15 @@ remove_repository_directory() {
     echo ""
     log_info "Checking repository directory..."
     
-    if [[ -d "$VOXT_REPO_DIR" && "$PWD" == "$VOXT_REPO_DIR" ]]; then
-        log_warning "You are currently in the VOXT repository directory"
-        log_warning "Repository location: $VOXT_REPO_DIR"
+    if [[ -d "$VOXD_REPO_DIR" && "$PWD" == "$VOXD_REPO_DIR" ]]; then
+        log_warning "You are currently in the VOXD repository directory"
+        log_warning "Repository location: $VOXD_REPO_DIR"
         
-        if ask_user "Remove the entire VOXT repository directory?"; then
+        if ask_user "Remove the entire VOXD repository directory?"; then
             log_info "Moving out of repository directory..."
             cd ~
             log_info "Removing repository directory..."
-            rm -rf "$VOXT_REPO_DIR"
+            rm -rf "$VOXD_REPO_DIR"
             log_success "Repository directory removed"
             log_warning "⚠️  This uninstall script has been deleted along with the repository"
         fi
@@ -432,7 +432,7 @@ remove_repository_directory() {
 # ──────────────────────────────────────────────────────────────────────────────
 
 main() {
-    echo "This script will help you completely remove VOXT from your system."
+    echo "This script will help you completely remove VOXD from your system."
     echo "You will be prompted before each removal step."
     echo ""
     
@@ -456,12 +456,12 @@ main() {
     echo -e "${GREEN}║                    Uninstall Complete!                        ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    log_success "VOXT uninstall process completed"
+    log_success "VOXD uninstall process completed"
     echo ""
     echo "Notes:"
     echo "• If you removed yourself from the 'input' group, log out and back in"
     echo "• Some system packages were left to avoid breaking other applications"
-    echo "• Thank you for trying VOXT! 🗣️⌨️"
+    echo "• Thank you for trying VOXD! 🗣️⌨️"
 }
 
 # Run with proper error handling

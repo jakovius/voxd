@@ -1,6 +1,6 @@
 
 def test_aipp_provider_validation_resets_invalid():
-    from voxt.core.config import AppConfig
+    from voxd.core.config import AppConfig
     cfg = AppConfig()
     cfg.data["aipp_provider"] = "invalid"
     cfg._validate_aipp_config()
@@ -10,7 +10,7 @@ def test_aipp_provider_validation_resets_invalid():
 
 
 def test_llamacpp_status_flags_do_not_crash():
-    from voxt.core.config import AppConfig
+    from voxd.core.config import AppConfig
     cfg = AppConfig()
     status = cfg.validate_llamacpp_setup()
     assert {

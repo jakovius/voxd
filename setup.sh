@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  VOXT – one-shot installer / updater
+#  VOXD – one-shot installer / updater
 #
 #  • Installs system packages        (apt | dnf | pacman – auto-detected)
 #  • Creates / re-uses Python venv    (.venv)
-#  • Installs Python dependencies & VOXT itself (editable)
+#  • Installs Python dependencies & VOXD itself (editable)
 #  • Clones + builds whisper.cpp      → whisper.cpp/build/bin/whisper-cli
 #  • (Wayland) ensures ydotool + daemon, validates completeness, forces source build if needed
 #
@@ -363,7 +363,7 @@ EOF
       
       msg "ydotool configured – log out/in once to finalize group membership."
   else
-      msg "${YEL}ydotool could not be installed completely – VOXT will fall back to clipboard-paste only.${NC}"
+      msg "${YEL}ydotool could not be installed completely – VOXD will fall back to clipboard-paste only.${NC}"
   fi
 }
 
@@ -408,26 +408,26 @@ if ! command -v python >/dev/null && command -v python3 >/dev/null; then
 fi
 PY=python3         # use python3 explicitly from here on
 $PY -m pip install -U pip -q
-msg "Installing VOXT (editable, from pyproject.toml)…"
+msg "Installing VOXD (editable, from pyproject.toml)…"
 # Ensure recent build backend
 $PY -m pip install -q --upgrade "hatchling>=1.24"
 msg "(If you noticed a lengthy C compile: that's 'sounddevice' building against PortAudio headers.)"
-msg "Installing VOXT into venv (editable)…"
+msg "Installing VOXD into venv (editable)…"
 # Ensure tags exist locally; ignore failures (offline etc.)
 if git rev-parse --git-dir >/dev/null 2>&1; then
   git fetch --tags --force --prune 2>/dev/null || true
   # If no SemVer tag is found, force a pretend version so hatch-vcs doesn't error
   if ! git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' >/dev/null 2>&1; then
-    export SETUPTOOLS_SCM_PRETEND_VERSION="${VOXT_PRETEND_VERSION:-0.0.0}"
+    export SETUPTOOLS_SCM_PRETEND_VERSION="${VOXD_PRETEND_VERSION:-0.0.0}"
   fi
 else
-  export SETUPTOOLS_SCM_PRETEND_VERSION="${VOXT_PRETEND_VERSION:-0.0.0}"
+  export SETUPTOOLS_SCM_PRETEND_VERSION="${VOXD_PRETEND_VERSION:-0.0.0}"
 fi
 
 pip install -e .
 
 # Fix editable install .pth file if it's empty (hatchling bug workaround)
-PTH_FILE=".venv/lib/python3.12/site-packages/_voxt.pth"
+PTH_FILE=".venv/lib/python3.12/site-packages/_voxd.pth"
 if [[ -f "$PTH_FILE" && ! -s "$PTH_FILE" ]]; then
   echo "$PWD/src" > "$PTH_FILE"
   msg "Fixed editable install .pth file"
@@ -436,10 +436,10 @@ fi
 # ──────────────────  Prebuilt binaries config  ─────────────────────────────
 # Where prebuilts live (owner/repo with Releases containing tar.gz assets)
 # You can change these without editing code via env vars.
-VOXT_BIN_REPO="${VOXT_BIN_REPO:-Jacob8472/voxd-prebuilts}"   # e.g. voxt-app/voxt-prebuilts
-VOXT_BIN_TAG="${VOXT_BIN_TAG:-}"                 # optional; if empty → latest
-VOXT_BIN_DIR="$HOME/.local/share/voxt/bin"
-mkdir -p "$VOXT_BIN_DIR"
+VOXD_BIN_REPO="${VOXD_BIN_REPO:-Jacob8472/voxd-prebuilts}"
+VOXD_BIN_TAG="${VOXD_BIN_TAG:-}"
+VOXD_BIN_DIR="$HOME/.local/share/voxd/bin"
+mkdir -p "$VOXD_BIN_DIR"
 
 detect_cpu_variant() {
   # Echoes two values: arch variant
@@ -472,8 +472,8 @@ detect_cpu_variant() {
 # Arguments: <owner/repo> <asset_name>
 gh_release_asset_url() {
   local repo="$1" asset="$2" api url
-  if [[ -n "$VOXT_BIN_TAG" ]]; then
-    api="https://api.github.com/repos/$repo/releases/tags/$VOXT_BIN_TAG"
+  if [[ -n "$VOXD_BIN_TAG" ]]; then
+    api="https://api.github.com/repos/$repo/releases/tags/$VOXD_BIN_TAG"
   else
     api="https://api.github.com/repos/$repo/releases/latest"
   fi
@@ -482,7 +482,7 @@ gh_release_asset_url() {
   printf "%s" "$url"
 }
 
-# Download tar.gz + verify via SHA256SUMS file if present, then extract to VOXT_BIN_DIR.
+# Download tar.gz + verify via SHA256SUMS file if present, then extract to VOXD_BIN_DIR.
 # Echoes extracted binary full path on success; returns non-zero on failure.
 fetch_prebuilt_binary() {
   # Arguments: kind (whisper-cli|llama-server)
@@ -504,16 +504,16 @@ fetch_prebuilt_binary() {
   fi
 
   asset="${base}.tar.gz"
-  url="$(gh_release_asset_url "$VOXT_BIN_REPO" "$asset")"
+  url="$(gh_release_asset_url "$VOXD_BIN_REPO" "$asset")"
   if [[ -z "$url" ]]; then
     return 1
   fi
 
   # Try to locate a matching checksum list in the same release
   if [[ "$arch" == "amd64" ]]; then
-    sums_url="$(gh_release_asset_url "$VOXT_BIN_REPO" "SHA256SUMS_${arch}_${variant}.txt")"
+    sums_url="$(gh_release_asset_url "$VOXD_BIN_REPO" "SHA256SUMS_${arch}_${variant}.txt")"
   else
-    sums_url="$(gh_release_asset_url "$VOXT_BIN_REPO" "SHA256SUMS_${arch}.txt")"
+    sums_url="$(gh_release_asset_url "$VOXD_BIN_REPO" "SHA256SUMS_${arch}.txt")"
   fi
 
   local tmpdir
@@ -539,9 +539,9 @@ fetch_prebuilt_binary() {
     fi
   fi
 
-  # Extract to VOXT_BIN_DIR (contains only the binary + LICENSE + BUILDINFO)
-  tar -C "$VOXT_BIN_DIR" -xzf "$tarball"
-  binpath="$VOXT_BIN_DIR/$kind"
+  # Extract to VOXD_BIN_DIR (contains only the binary + LICENSE + BUILDINFO)
+  tar -C "$VOXD_BIN_DIR" -xzf "$tarball"
+  binpath="$VOXD_BIN_DIR/$kind"
   chmod +x "$binpath" 2>/dev/null || true
   echo "$binpath"
   rm -rf "$tmpdir"
@@ -567,7 +567,7 @@ fi
 
 # b) Try downloading a prebuilt from GitHub Releases
 if [[ -z "$WHISPER_BIN" ]]; then
-  msg "Attempting to fetch prebuilt whisper-cli from $VOXT_BIN_REPO ${VOXT_BIN_TAG:+(tag $VOXT_BIN_TAG)} …"
+  msg "Attempting to fetch prebuilt whisper-cli from $VOXD_BIN_REPO ${VOXD_BIN_TAG:+(tag $VOXD_BIN_TAG)} …"
   if prebuilt="$(fetch_prebuilt_binary "whisper-cli")"; then
     WHISPER_BIN="$prebuilt"
     msg "Using prebuilt whisper-cli: $WHISPER_BIN"
@@ -598,7 +598,7 @@ fi
 # ──────────────────  6. default model  ───────────────────────────────────────–
 # Store in XDG data dir and symlink into repo (consistent with runtime downloader)
 MODEL_BASE="${XDG_DATA_HOME:-$HOME/.local/share}"
-XDG_MODEL_DIR="$MODEL_BASE/voxt/models"
+XDG_MODEL_DIR="$MODEL_BASE/voxd/models"
 XDG_MODEL_FILE="$XDG_MODEL_DIR/ggml-base.en.bin"
 REPO_MODEL_DIR="whisper.cpp/models"
 REPO_MODEL_FILE="$REPO_MODEL_DIR/ggml-base.en.bin"
@@ -701,7 +701,7 @@ fi
 
 # b) Try downloading a prebuilt from GitHub Releases
 if [[ -z "$LLAMA_SERVER_BIN" ]]; then
-  msg "Attempting to fetch prebuilt llama-server from $VOXT_BIN_REPO ${VOXT_BIN_TAG:+(tag $VOXT_BIN_TAG)} …"
+  msg "Attempting to fetch prebuilt llama-server from $VOXD_BIN_REPO ${VOXD_BIN_TAG:+(tag $VOXD_BIN_TAG)} …"
   if prebuilt_llama="$(fetch_prebuilt_binary "llama-server")"; then
     LLAMA_SERVER_BIN="$prebuilt_llama"
     msg "Using prebuilt llama-server: $LLAMA_SERVER_BIN"
@@ -757,7 +757,7 @@ else
 fi
 
 # e) Offer model download
-LLAMACPP_MODELS_DIR="$HOME/.local/share/voxt/llamacpp_models"
+LLAMACPP_MODELS_DIR="$HOME/.local/share/voxd/llamacpp_models"
 if [[ ! -f "$LLAMACPP_MODELS_DIR/qwen2.5-3b-instruct-q4_k_m.gguf" ]]; then
   read -r -p "Download default qwen2.5-3b-instruct model for AIPP? [Y/n]: " download_model
   download_model=${download_model:-Y}
@@ -812,10 +812,10 @@ if repo_src.exists():
     sys.path.insert(0, str(repo_src))
 
 try:
-    from voxt.core.config import AppConfig  # type: ignore
-    from voxt.paths import LLAMACPP_MODELS_DIR, DATA_DIR  # type: ignore
+    from voxd.core.config import AppConfig  # type: ignore
+    from voxd.paths import LLAMACPP_MODELS_DIR, DATA_DIR  # type: ignore
 except ModuleNotFoundError as e:
-    print("[setup] Warning: could not import voxt (", e, ") – skipping config update.")
+    print("[setup] Warning: could not import voxd (", e, ") – skipping config update.")
     sys.exit(0)
 
 _p = Path("$WHISPER_BIN")
@@ -857,7 +857,7 @@ msg "Idempotency report:"
 if [[ -d .venv ]]; then echo "  • venv: present (.venv)"; else echo "  • venv: will be created"; fi
 if command -v whisper-cli >/dev/null 2>&1; then echo "  • whisper-cli: present ($(command -v whisper-cli))"; else echo "  • whisper-cli: not found"; fi
 MODEL_BASE_REPORT="${XDG_DATA_HOME:-$HOME/.local/share}"
-MODEL_FILE_REPORT="$MODEL_BASE_REPORT/voxt/models/ggml-base.en.bin"
+MODEL_FILE_REPORT="$MODEL_BASE_REPORT/voxd/models/ggml-base.en.bin"
 if [[ -f "$MODEL_FILE_REPORT" ]]; then echo "  • whisper model: present ($MODEL_FILE_REPORT)"; else echo "  • whisper model: missing"; fi
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]]; then
   if command -v ydotool >/dev/null 2>&1 && command -v ydotoold >/dev/null 2>&1; then
@@ -869,7 +869,7 @@ else
   echo "  • ydotool: not required (X11)"
 fi
 if command -v llama-server >/dev/null 2>&1; then echo "  • llama.cpp: present (llama-server)"; else echo "  • llama.cpp: not installed"; fi
-if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "voxt "; then echo "  • pipx 'voxt': installed"; else echo "  • pipx 'voxt': not installed"; fi
+if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "voxd "; then echo "  • pipx 'voxd': installed"; else echo "  • pipx 'voxd': not installed"; fi
 
 msg "${GRN}Setup complete!${NC}"
 echo "Setup log (appended per run): $(pwd)/$LOG_FILE"
@@ -878,7 +878,7 @@ if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && command -v ydotool >/dev/null; the
   echo -e "${GRN}➡  IMPORTANT:${NC} Log out or reboot once so 'ydotool' gains access to /dev/uinput."; read -n1 -r -p "Press any key to acknowledge…"
 fi
 echo "Activate venv:   source .venv/bin/activate"
-echo "Run GUI mode:    python -m voxt --mode gui"
+echo "Run GUI mode:    python -m voxd --mode gui"
 echo "---> see in README.md on easy use setup."
 
 # ──────────────────  5b. SELinux policy for whisper-cli  ────────────────────
@@ -904,10 +904,10 @@ if [[ $SELINUX_ACTIVE ]]; then
 fi
 
 # ────────────────── 10. optional pipx global install  ───────────────────────
-# Offer to install pipx (if missing) and register voxt command globally.
+# Offer to install pipx (if missing) and register voxd command globally.
 
 if ! command -v pipx >/dev/null; then
-  msg "pipx not detected – installing pipx for global 'voxt' command"
+  msg "pipx not detected – installing pipx for global 'voxd' command"
   case "$PM" in
     apt)   sudo apt install -y pipx ;;
     dnf|dnf5)   sudo $PM install -y pipx ;;
@@ -931,11 +931,11 @@ if ! command -v pipx >/dev/null; then
 fi
 
 if command -v pipx >/dev/null; then
-  if pipx list 2>/dev/null | grep -q "voxt "; then
-    msg "'voxt' already installed via pipx – forcing update"
+  if pipx list 2>/dev/null | grep -q "voxd "; then
+    msg "'voxd' already installed via pipx – forcing update"
     pipx install --force "$PWD" || true
   else
-    msg "Installing 'voxt' globally via pipx"
+    msg "Installing 'voxd' globally via pipx"
     pipx install --force "$PWD" || true
   fi
 else
@@ -946,7 +946,7 @@ fi
 echo ""
 msg "Hotkey setup (manual):"
 echo "  Configure a custom keyboard shortcut in your system to run:"
-echo "    bash -c 'voxt --trigger-record'"
+echo "    bash -c 'voxd --trigger-record'"
 echo "  Example binding: Super+Z (or any key you prefer)."
 echo "  Location: System Settings → Keyboard → Custom Shortcuts."
-echo "  Test the command directly with: voxt --trigger-record"
+echo "  Test the command directly with: voxd --trigger-record"

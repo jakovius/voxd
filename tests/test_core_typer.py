@@ -1,5 +1,5 @@
 def test_detect_backend_env(monkeypatch):
-    from voxt.core.typer import detect_backend
+    from voxd.core.typer import detect_backend
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
@@ -7,7 +7,7 @@ def test_detect_backend_env(monkeypatch):
 
 
 def test_typer_paste_path(monkeypatch):
-    from voxt.core.typer import SimulatedTyper
+    from voxd.core.typer import SimulatedTyper
     # Disable tools so it falls back to paste
     monkeypatch.setenv("WAYLAND_DISPLAY", "")
     monkeypatch.setenv("DISPLAY", "")

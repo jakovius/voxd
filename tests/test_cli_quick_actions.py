@@ -2,7 +2,7 @@ import sys
 
 
 def test_cli_transcribe_quick_action(monkeypatch, tmp_path, capsys):
-    import voxt.cli.cli_main as cli
+    import voxd.cli.cli_main as cli
 
     audio = tmp_path / "t.wav"; audio.write_bytes(b"x")
 

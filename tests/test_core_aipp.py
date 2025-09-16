@@ -1,5 +1,5 @@
 def test_get_final_text_disabled(monkeypatch):
-    from voxt.core.aipp import get_final_text
+    from voxd.core.aipp import get_final_text
     class Cfg:
         def __init__(self):
             self.data = {"aipp_enabled": False}
@@ -8,7 +8,7 @@ def test_get_final_text_disabled(monkeypatch):
 
 
 def test_get_final_text_enabled_routes(monkeypatch):
-    from voxt.core import aipp
+    from voxd.core import aipp
     class Cfg:
         def __init__(self):
             self.data = {

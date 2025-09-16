@@ -6,12 +6,12 @@ def test_paths_use_xdg_isolation(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
 
     import importlib, sys
-    if "voxt.paths" in sys.modules:
-        importlib.reload(sys.modules["voxt.paths"])  # type: ignore[arg-type]
+    if "voxd.paths" in sys.modules:
+        importlib.reload(sys.modules["voxd.paths"])  # type: ignore[arg-type]
     else:
-        import voxt.paths  # noqa: F401
+        import voxd.paths  # noqa: F401
 
-    import voxt.paths as P
+    import voxd.paths as P
     assert str(P.CONFIG_DIR).startswith(str(tmp_path))
     assert str(P.DATA_DIR).startswith(str(tmp_path))
 

@@ -11,7 +11,7 @@ def _write_pcm16_wav(path: Path, samples: bytes, channels=1, framerate=16000):
 
 
 def test_dbfs_lin_roundtrip():
-    from voxt.core.audio_preproc import dbfs_to_lin, lin_to_dbfs
+    from voxd.core.audio_preproc import dbfs_to_lin, lin_to_dbfs
     val = -6.0
     lin = dbfs_to_lin(val)
     back = lin_to_dbfs(lin)
@@ -19,7 +19,7 @@ def test_dbfs_lin_roundtrip():
 
 
 def test_analyze_and_preprocess_noop(tmp_path):
-    from voxt.core.audio_preproc import analyze_wav, preprocess_wav
+    from voxd.core.audio_preproc import analyze_wav, preprocess_wav
     # 100ms of silence PCM16
     samples = b"\x00\x00" * 1600
     wavp = tmp_path / "s.wav"

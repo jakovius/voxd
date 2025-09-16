@@ -1,5 +1,5 @@
 def test_clipboard_pyperclip_backend(monkeypatch):
-    import voxt.core.clipboard as cb
+    import voxd.core.clipboard as cb
 
     # Force backend to pyperclip
     monkeypatch.setenv("WAYLAND_DISPLAY", "")

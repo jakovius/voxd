@@ -3,7 +3,7 @@ import os
 
 
 def test_transcriber_generates_text(tmp_path, fake_whisper_run):
-    from voxt.core.transcriber import WhisperTranscriber
+    from voxd.core.transcriber import WhisperTranscriber
 
     audio = tmp_path / "a.wav"; audio.write_bytes(b"\x00\x00")
     model = tmp_path / "m.bin"; model.write_bytes(b"x")
@@ -18,7 +18,7 @@ def test_transcriber_generates_text(tmp_path, fake_whisper_run):
 
 
 def test_transcriber_missing_input_raises(tmp_path):
-    from voxt.core.transcriber import WhisperTranscriber
+    from voxd.core.transcriber import WhisperTranscriber
 
     model = tmp_path / "m.bin"; model.write_bytes(b"x")
     binary = tmp_path / "whisper-cli"; binary.write_text("#!/bin/sh\n"); binary.chmod(0o755)

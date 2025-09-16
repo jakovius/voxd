@@ -21,6 +21,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ---
-VOXT includes or depends on the external project "llama.cpp" which is distributed
-under the MIT license. VOXT itself remains MIT-licensed; this file is provided
+VOXD includes or depends on the external project "llama.cpp" which is distributed
+under the MIT license. VOXD itself remains MIT-licensed; this file is provided
 for completeness and license compliance.

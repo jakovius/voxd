@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  VOXT – Desktop-launcher helper
+#  VOXD – Desktop-launcher helper
 #
-#  Creates, edits, or removes .desktop entries for launching VOXT in GUI, Tray, or Flux mode.
+#  Creates, edits, or removes .desktop entries for launching VOXD in GUI, Tray, or Flux mode.
 #  • No sudo: everything lives in ~/.local/share
 #  • Prompts the user which launcher(s) to install
 #  • Use --edit to fix existing launchers with environment variables
@@ -18,14 +18,14 @@ die() { printf "${RED}error:${NC} %s\n" "$*" >&2; exit 1; }
 APP_DIR="$HOME/.local/share/applications"
 ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
 ICON_DIR_64="$HOME/.local/share/icons/hicolor/64x64/apps"
-ICON_DEST="$ICON_DIR/voxt.png"
-ICON_DEST_64="$ICON_DIR_64/voxt.png"
+ICON_DEST="$ICON_DIR/voxd.png"
+ICON_DEST_64="$ICON_DIR_64/voxd.png"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ICON_SRC="$SCRIPT_DIR/src/voxt/assets/voxt-0.png"
+ICON_SRC="$SCRIPT_DIR/src/voxd/assets/voxd-0.png"
 
-DESKTOP_GUI="$APP_DIR/voxt-gui.desktop"
-DESKTOP_TRAY="$APP_DIR/voxt-tray.desktop"
-DESKTOP_FLUX="$APP_DIR/voxt-flux.desktop"
+DESKTOP_GUI="$APP_DIR/voxd-gui.desktop"
+DESKTOP_TRAY="$APP_DIR/voxd-tray.desktop"
+DESKTOP_FLUX="$APP_DIR/voxd-flux.desktop"
 
 create_icon() {
   [[ -f "$ICON_SRC" ]] || { msg "Icon not found at $ICON_SRC – skipping icon copy."; return; }
@@ -37,35 +37,35 @@ create_icon() {
 create_desktop() {
   local mode="$1" dest="$2"
   
-  # Find the voxt executable - prefer virtual environment if available
-  local voxt_path=""
-  if command -v voxt >/dev/null 2>&1; then
-    voxt_path=$(command -v voxt)
+  # Find the voxd executable - prefer virtual environment if available
+  local voxd_path=""
+  if command -v voxd >/dev/null 2>&1; then
+    voxd_path=$(command -v voxd)
   else
     # Fallback: check common locations
-    for candidate in "$HOME/.local/bin/voxt" "/usr/local/bin/voxt" "/usr/bin/voxt"; do
+    for candidate in "$HOME/.local/bin/voxd" "/usr/local/bin/voxd" "/usr/bin/voxd"; do
       if [[ -x "$candidate" ]]; then
-        voxt_path="$candidate"
+        voxd_path="$candidate"
         break
       fi
     done
   fi
   
-  if [[ -z "$voxt_path" ]]; then
-    die "Cannot find voxt executable. Make sure voxt is installed and in PATH."
+  if [[ -z "$voxd_path" ]]; then
+    die "Cannot find voxd executable. Make sure voxd is installed and in PATH."
   fi
   
-  msg "Using voxt executable: $voxt_path"
+  msg "Using voxd executable: $voxd_path"
   
   # Create launcher with full environment setup
-  local exec_cmd="bash -c 'export PATH=\"\$HOME/.local/bin:/usr/local/bin:\$PATH\"; export YDOTOOL_SOCKET=\"\$HOME/.ydotool_socket\"; \"$voxt_path\" --$mode'"
+  local exec_cmd="bash -c 'export PATH=\"\$HOME/.local/bin:/usr/local/bin:\$PATH\"; export YDOTOOL_SOCKET=\"\$HOME/.ydotool_socket\"; \"$voxd_path\" --$mode'"
   
   cat > "$dest" <<EOF
 [Desktop Entry]
 Type=Application
-Name=VOXT ($mode)
+Name=VOXD ($mode)
 Exec=$exec_cmd
-Icon=voxt
+Icon=voxd
 Terminal=false
 Categories=Utility;AudioVideo;
 EOF
@@ -78,7 +78,7 @@ update_caches() {
   else
       # Fallback: register via xdg-icon-resource
       command -v xdg-icon-resource >/dev/null && \
-        xdg-icon-resource install --noupdate --size 64 "$ICON_DEST_64" voxt || true
+        xdg-icon-resource install --noupdate --size 64 "$ICON_DEST_64" voxd || true
   fi
 }
 
@@ -128,7 +128,7 @@ edit_existing_launchers() {
   done
   
   if [[ $found_any == false ]]; then
-    msg "No existing VOXT launchers found in $APP_DIR"
+    msg "No existing VOXD launchers found in $APP_DIR"
     msg "Run without --edit to create new launchers."
   else
     update_caches
