@@ -56,7 +56,7 @@ class SettingsDialog(QDialog):
         # Notice about global shortcut
         hint = QLabel(
             "<b>Global shortcut</b>: <i>Set up a custom keyboard shortcut that runs: </i>"
-            "<code>bash -c 'voxd --trigger-record'</code> <i>(e.g. Super+R)</i>."
+            "<code>bash -c 'voxd --trigger-record'</code> <i>(e.g. Super+Z)</i>."
         )
         hint.setWordWrap(True)
         main_vbox.addWidget(hint)

@@ -59,7 +59,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
     # Start IPC server for hotkey triggers
     start_ipc_server(on_ipc_trigger)
 
-    print("🌀 VOXD CLI Mode:\n--- ALWAYS picking up into clipboard\n--- Type 'h' for help")
+    print(f"{ORANGE}--- VOXD CLI prompt ('h' for help)---{RESET}\ntranscripts ALWAYS picked up into clipboard")
     # Disk space check: choose target directory
     from voxd.paths import RECORDINGS_DIR
     target = RECORDINGS_DIR if bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False)) else (Path(tempfile.gettempdir()) / "voxd_temp")
@@ -173,7 +173,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
             print("[cli] Unknown command. Type 'h' for help.")
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="voxd --cli", description="VOXD CLI Mode")
+    parser = argparse.ArgumentParser(prog="voxd", description="VOXD CLI Mode")
     parser.add_argument("--save-audio", action="store_true", help="Preserve audio recordings. If used alone, sets it persistently.")
     # --- Quick action flags (non-interactive shortcuts) ---
     qa = parser.add_argument_group("Quick actions")

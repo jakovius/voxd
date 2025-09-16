@@ -62,12 +62,12 @@ Well, first run the app (see below) with a global `voxd` command available in an
 
 ### Launch VOXD via Terminal, in any mode:
 ```bash
+voxd        # CLI mode (interactive); 'h' shows commands inside CLI
+voxd -h     # show top-level help and quick-actions
 voxd --gui  # friendly pill-button window
 voxd --tray # sits in the tray; perfect for continuous dictation
-voxd --cli  # terminal; 'h' shows commands
-voxd --rh   # Go directly to --cli 'rh' and leave in the background
+voxd --rh   # directly start hotkey-controlled continuous recording in CLI
 voxd --flux # VAD (Voice Activity Detection), voice-triggered continuous dictation
-voxd        # displays detailed list of options & flags
 ```
 
 Now leave it running in the background, then go to any app where you want to voice-type and:

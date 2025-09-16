@@ -596,27 +596,18 @@ if [[ -z "$WHISPER_BIN" ]]; then
 fi
 
 # ──────────────────  6. default model  ───────────────────────────────────────–
-# Store in XDG data dir and symlink into repo (consistent with runtime downloader)
+# Store in XDG data dir
 MODEL_BASE="${XDG_DATA_HOME:-$HOME/.local/share}"
 XDG_MODEL_DIR="$MODEL_BASE/voxd/models"
 XDG_MODEL_FILE="$XDG_MODEL_DIR/ggml-base.en.bin"
-REPO_MODEL_DIR="whisper.cpp/models"
-REPO_MODEL_FILE="$REPO_MODEL_DIR/ggml-base.en.bin"
 
-# Ensure target directories exist
+# Ensure XDG target directory exists
 mkdir -p "$XDG_MODEL_DIR"
-mkdir -p "$REPO_MODEL_DIR"
-
-# Migrate: if an old repo-local regular file exists and XDG missing, move it
-if [[ -f "$REPO_MODEL_FILE" && ! -L "$REPO_MODEL_FILE" && ! -f "$XDG_MODEL_FILE" ]]; then
-  msg "Migrating base model to XDG data dir ($XDG_MODEL_FILE)"
-  mv "$REPO_MODEL_FILE" "$XDG_MODEL_FILE"
-fi
 
 # Download to XDG location if missing
 if [[ ! -f "$XDG_MODEL_FILE" ]]; then
   if [[ $OFFLINE ]]; then
-    msg "Offline mode – model file not found. Please place ggml-base.en.bin into $XDG_MODEL_DIR manually."
+    msg "Offline – model file not found. Please place ggml-base.en.bin into $XDG_MODEL_DIR manually."
   else
     msg "Downloading default Whisper model (base.en) to XDG data dir…"
     curl -L -o "$XDG_MODEL_FILE" \
@@ -624,25 +615,6 @@ if [[ ! -f "$XDG_MODEL_FILE" ]]; then
   fi
 fi
 
-# Ensure repo symlink points to XDG file
-if [[ -f "$XDG_MODEL_FILE" ]]; then
-  XDG_MODEL_REAL=$(readlink -f "$XDG_MODEL_FILE" 2>/dev/null || echo "$XDG_MODEL_FILE")
-  if [[ -L "$REPO_MODEL_FILE" ]]; then
-    CUR_TARGET=$(readlink -f "$REPO_MODEL_FILE" 2>/dev/null || readlink "$REPO_MODEL_FILE")
-    if [[ "$CUR_TARGET" != "$XDG_MODEL_REAL" ]]; then
-      rm -f "$REPO_MODEL_FILE"
-      ln -s "$XDG_MODEL_REAL" "$REPO_MODEL_FILE"
-      msg "Updated repo symlink: $REPO_MODEL_FILE → $XDG_MODEL_REAL"
-    else
-      msg "Repo symlink already up to date"
-    fi
-  elif [[ -e "$REPO_MODEL_FILE" ]]; then
-    msg "Repo model path exists as a regular file; leaving it (no symlink created)."
-  else
-    ln -s "$XDG_MODEL_REAL" "$REPO_MODEL_FILE"
-    msg "Symlinked repo model: $REPO_MODEL_FILE → $XDG_MODEL_REAL"
-  fi
-fi
 
 # ──────────────────  7. ydotool (Wayland helper)  ─────────────────────────────
 ensure_ydotool

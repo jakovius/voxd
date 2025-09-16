@@ -16,14 +16,13 @@ def ensure_user_config() -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="VOXD App Entry Point", add_help=False)
-    # NOTE: we intentionally disable the automatic -h/--help so that when the user
-    # runs `voxd --cli -h` the `-h` flag is forwarded to the CLI parser instead
-    # of being swallowed here. We will render top-level help manually when no
-    # sub-mode flag is provided and -h/--help is present.
+    # NOTE: we intentionally disable the automatic -h/--help. Sub-mode parsers
+    # (and the CLI quick-actions parser) should receive -h/--help when relevant.
+    # We render top-level help manually only when no sub-mode or quick-action is
+    # present and -h/--help is provided.
     # Mutually-exclusive launch mode flags (simpler UX)
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument("--gui", action="store_true", help="Launch VOXD in GUI mode")
-    mode_group.add_argument("--cli", action="store_true", help="Launch VOXD in CLI mode")
     mode_group.add_argument("--tray", action="store_true", help="Launch VOXD tray-only mode (background)")
     mode_group.add_argument("--flux", action="store_true", help="Launch VOXD VAD-triggered dictation mode")
     mode_group.add_argument("--flux-tuner", action="store_true", help="Launch Flux Tuner (GUI)")
@@ -56,10 +55,10 @@ def main():
     unknown_flags = {u.split("=")[0] for u in unknown if u.startswith("-")}
 
     # ------------------------------------------------------------
-    #         Top-level help handling (only when no sub-mode)
+    #         Top-level help handling (only when no sub-mode or QA)
     # ------------------------------------------------------------
-    if not any([args.cli, args.gui, args.tray]):
-        if "-h" in unknown or "--help" in unknown or len(sys.argv) == 1:
+    if not any([args.gui, args.tray, args.flux, args.flux_tuner]) and not (unknown_flags & cli_flags):
+        if "-h" in unknown or "--help" in unknown:
             parser.print_help()
             # Show installed version
             try:
@@ -69,15 +68,14 @@ def main():
             # Also show CLI quick actions help for convenience
             try:
                 from voxd.cli.cli_main import build_parser as _build_cli_parser
-                print("\n[CLI quick actions] You can use these directly; they imply --cli:\n")
+                print("\n[CLI quick actions] You can use these directly; they run in CLI mode:\n")
                 print(_build_cli_parser().format_help())
             except Exception:
                 pass
             sys.exit(0)
 
     # Implicit CLI mode if any CLI-specific flags are present without a mode
-    if not any([args.cli, args.gui, args.tray]) and (unknown_flags & cli_flags):
-        args.cli = True
+    implied_cli = (not any([args.gui, args.tray, args.flux, args.flux_tuner]) and (unknown_flags & cli_flags))
 
     # If we're just the hotkey sender, dispatch and exit immediately
     if args.trigger_record:
@@ -86,9 +84,7 @@ def main():
         sys.exit(0)
 
     cfg = AppConfig()
-    if args.cli:
-        mode = "cli"
-    elif args.gui:
+    if args.gui:
         mode = "gui"
     elif args.tray:
         mode = "tray"  # internal identifier for tray mode
@@ -97,7 +93,8 @@ def main():
     elif args.flux_tuner:
         mode = "flux_tuner"
     else:
-        mode = "tray"
+        # Default to CLI when no explicit sub-mode selected
+        mode = "cli" if implied_cli or True else "cli"
 
     if args.diagnose:
         print(f"[Diagnose] Current mode: {mode}")
@@ -135,7 +132,7 @@ def main():
 
     # show shortcut hint
     if mode == "cli":
-        print("[VOXD] Tip: create a global shortcut that runs `bash -c 'voxd --trigger-record'` (e.g. Super+R)")
+        print("[VOXD] Tip: create a global shortcut that runs `bash -c 'voxd --trigger-record'` (e.g. Super+Z)")
         print("[VOXD] Use './hotkey_setup.sh guide' for setup instructions")
 
     if mode == "cli":
