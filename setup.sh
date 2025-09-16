@@ -439,7 +439,7 @@ fi
 # ──────────────────  Prebuilt binaries config  ─────────────────────────────
 # Where prebuilts live (owner/repo with Releases containing tar.gz assets)
 # You can change these without editing code via env vars.
-VOXT_BIN_REPO="${VOXT_BIN_REPO:-Jacob8472/voxt}"   # e.g. voxt-app/voxt-prebuilts
+VOXT_BIN_REPO="${VOXT_BIN_REPO:-Jacob8472/voxd-prebuilts}"   # e.g. voxt-app/voxt-prebuilts
 VOXT_BIN_TAG="${VOXT_BIN_TAG:-}"                 # optional; if empty → latest
 VOXT_BIN_DIR="$HOME/.local/share/voxt/bin"
 mkdir -p "$VOXT_BIN_DIR"
