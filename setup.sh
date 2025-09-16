@@ -408,11 +408,8 @@ if ! command -v python >/dev/null && command -v python3 >/dev/null; then
 fi
 PY=python3         # use python3 explicitly from here on
 $PY -m pip install -U pip -q
-msg "Installing Python dependencies…"
-# Prefer binary wheels to avoid noisy C-builds; keep output minimal
-PIP_DISABLE_PIP_VERSION_CHECK=1 \
-pip install --prefer-binary -q -r requirements.txt
-# Ensure recent hatch for editable install
+msg "Installing VOXT (editable, from pyproject.toml)…"
+# Ensure recent build backend
 $PY -m pip install -q --upgrade "hatchling>=1.24"
 msg "(If you noticed a lengthy C compile: that's 'sounddevice' building against PortAudio headers.)"
 msg "Installing VOXT into venv (editable)…"
@@ -650,7 +647,7 @@ fi
 # ──────────────────  7. ydotool (Wayland helper)  ─────────────────────────────
 ensure_ydotool
 
-# ──────────────────  8. llama.cpp (prefer prebuilt; non-optional)  ─────────────
+# ──────────────────  8. llama.cpp (prefer prebuilt)  ─────────────
 
 # Model download helper with verification
 download_qwen_model() {
@@ -852,21 +849,7 @@ else
   msg "Warning: No whisper-cli binary found – skipping config update."
 fi
 
-# ──────────────────  9a. Optional: Flux (VAD) setup ─
-setup_flux_optional_vad() {
-  echo ""
-  msg "Flux mode uses built-in Flux VAD - No additional runtime needed"
-}
-
 # ──────────────────  10. done  ───────────────────────────────────────────────––
-setup_flux_optional_vad
-
-# Ensure pyqtgraph is available for Flux Tuner in both venv and pipx
-PIP_DISABLE_PIP_VERSION_CHECK=1 pip install -q pyqtgraph || true
-if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "voxt "; then
-  msg "Injecting pyqtgraph into pipx voxt environment…"
-  pipx inject voxt pyqtgraph || true
-fi
 
 # ──────────────────  Report: what is already available  ─────────────────────
 echo ""
@@ -924,78 +907,39 @@ fi
 # Offer to install pipx (if missing) and register voxt command globally.
 
 if ! command -v pipx >/dev/null; then
-  read -r -p "pipx not detected – install pipx for a global 'voxt' command? [Y/n]: " reply
-  reply=${reply:-Y}
-  if [[ $reply =~ ^[Yy]$ ]]; then
-    case "$PM" in
-      apt)   sudo apt install -y pipx ;;
-      dnf|dnf5)   sudo $PM install -y pipx ;;
-      pacman)
-        if ! sudo pacman -S --noconfirm pipx; then
-          sudo pacman -S --noconfirm python-pipx || true
-        fi ;;
-    esac
-    pipx ensurepath
-    export PATH="$HOME/.local/bin:$PATH"
-    # Refresh current shell PATH for the remainder of this script
-    # Handle Fedora bashrc unbound variable issue
-    if [[ $SHELL =~ /bash$ ]] && [[ -f "$HOME/.bashrc" ]]; then 
-      set +u  # Temporarily disable unbound variable checking
-      source "$HOME/.bashrc" 2>/dev/null || true
-      set -u  # Re-enable unbound variable checking
-    fi
-    if [[ $SHELL =~ /zsh$ ]]  && [[ -f "$HOME/.zshrc"  ]]; then
-      source "$HOME/.zshrc" 2>/dev/null || true
-    fi
+  msg "pipx not detected – installing pipx for global 'voxt' command"
+  case "$PM" in
+    apt)   sudo apt install -y pipx ;;
+    dnf|dnf5)   sudo $PM install -y pipx ;;
+    pacman)
+      if ! sudo pacman -S --noconfirm pipx; then
+        sudo pacman -S --noconfirm python-pipx || true
+      fi ;;
+  esac
+  pipx ensurepath
+  export PATH="$HOME/.local/bin:$PATH"
+  # Refresh current shell PATH for the remainder of this script
+  # Handle Fedora bashrc unbound variable issue
+  if [[ $SHELL =~ /bash$ ]] && [[ -f "$HOME/.bashrc" ]]; then 
+    set +u  # Temporarily disable unbound variable checking
+    source "$HOME/.bashrc" 2>/dev/null || true
+    set -u  # Re-enable unbound variable checking
+  fi
+  if [[ $SHELL =~ /zsh$ ]]  && [[ -f "$HOME/.zshrc"  ]]; then
+    source "$HOME/.zshrc" 2>/dev/null || true
   fi
 fi
 
 if command -v pipx >/dev/null; then
   if pipx list 2>/dev/null | grep -q "voxt "; then
-    echo "✔  'voxt' is already installed via pipx."
-    read -r -p "Reinstall/update 'voxt' in pipx? [y/N]: " ans
-    ans=${ans:-N}
-    if [[ $ans =~ ^[Yy]$ ]]; then
-      if pipx install --force "$PWD" 2>/dev/null; then
-        echo "✔  'voxt' command (re)installed globally via pipx. Open a new shell if not yet on PATH."
-      else
-        msg "Attempting pipx (re)install with error handling..."
-        pipx install --force "$PWD" || {
-          msg "${YEL}pipx install had warnings but may have succeeded. Testing...${NC}"
-          if command -v voxt >/dev/null 2>&1; then
-            echo "✔  'voxt' command is available globally."
-          else
-            msg "${RED}pipx install failed. You can try manually: pipx install --force $PWD${NC}"
-          fi
-        }
-      fi
-    else
-      echo "Skipping pipx reinstall."
-    fi
+    msg "'voxt' already installed via pipx – forcing update"
+    pipx install --force "$PWD" || true
   else
-    read -r -p "Install voxt into pipx (global command) now? [Y/n]: " ans
-    ans=${ans:-Y}
-    if [[ $ans =~ ^[Yy]$ ]]; then
-      # Use --force to handle PATH warnings and existing installations
-      if pipx install --force "$PWD" 2>/dev/null; then
-        echo "✔  'voxt' command installed globally via pipx. Open a new shell if not yet on PATH."
-      else
-        msg "Attempting pipx install with error handling..."
-        pipx install --force "$PWD" || {
-          msg "${YEL}pipx install had warnings but may have succeeded. Testing...${NC}"
-          if command -v voxt >/dev/null 2>&1; then
-            echo "✔  'voxt' command is available globally."
-          else
-            msg "${RED}pipx install failed. You can try manually: pipx install --force $PWD${NC}"
-          fi
-        }
-      fi
-    else
-      echo "You can later run: pipx install --force $PWD"
-    fi
+    msg "Installing 'voxt' globally via pipx"
+    pipx install --force "$PWD" || true
   fi
 else
-  echo "pipx not available – skip global command install. You can install pipx later and run: pipx install --force $PWD"
+  msg "pipx still not available – skipping global install"
 fi
 
 # ────────────────── 11. Hotkey Guidance (manual)  ───────────────────────────
@@ -1003,6 +947,6 @@ echo ""
 msg "Hotkey setup (manual):"
 echo "  Configure a custom keyboard shortcut in your system to run:"
 echo "    bash -c 'voxt --trigger-record'"
-echo "  Example binding: Super+R (or any key you prefer)."
+echo "  Example binding: Super+Z (or any key you prefer)."
 echo "  Location: System Settings → Keyboard → Custom Shortcuts."
 echo "  Test the command directly with: voxt --trigger-record"
