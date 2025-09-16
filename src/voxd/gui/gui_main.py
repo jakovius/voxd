@@ -2,11 +2,11 @@ import sys
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QSizePolicy, QInputDialog, QGroupBox, QSystemTrayIcon
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QFileSystemWatcher
 from PyQt6.QtGui import QIcon
 from pathlib import Path
 
-from voxd.core.config import get_config
+from voxd.core.config import get_config, CONFIG_PATH
 from voxd.core.logger import SessionLogger
 from voxd.utils.ipc_server import start_ipc_server  # <-- Add this import
 from voxd.core.voxd_core import CoreProcessThread, show_options_dialog, _create_styled_checkbox
@@ -22,8 +22,8 @@ class VoxdApp(QWidget):
         self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_location)  # type: ignore[attr-defined]
 
         self.setWindowTitle("voxd")
-        self.setFixedWidth(270)  # 10% narrower
-        self.setMinimumHeight(180)  # 10% shorter minimum height
+        self.setFixedWidth(230)
+        self.setMinimumHeight(180)
         self.setStyleSheet("background-color: #1e1e1e; color: white;")
 
         self.status = "Record"
@@ -99,8 +99,15 @@ class VoxdApp(QWidget):
         toggles_layout.addWidget(trailing_widget)
         toggles_layout.addStretch(1)
 
+        # Watch config file for external changes and refresh toggle state
+        try:
+            self._cfg_watcher = QFileSystemWatcher([str(CONFIG_PATH)])
+            self._cfg_watcher.fileChanged.connect(self._on_cfg_file_changed)
+        except Exception:
+            self._cfg_watcher = None
+
         # Transcript display wrapped in a group-box for padding & visual separation
-        self.transcript_label = QLabel("The latest transcript will be shown here.")
+        self.transcript_label = QLabel("The transcript will be shown here.")
         self.transcript_label.setStyleSheet("color: darkgray; font-size: 9pt; font-style: italic;")
         self.transcript_label.setWordWrap(True)
         from PyQt6.QtCore import Qt as _Qt
@@ -114,10 +121,10 @@ class VoxdApp(QWidget):
         
         self.transcript_group.setLayout(group_layout)
         # Set fixed size for the transcript group box
-        self.transcript_group.setFixedSize(252, 54)
+        self.transcript_group.setFixedSize(210, 54)
         self.transcript_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-        self.hotkey_notice = QLabel("Hit your hotkey to record / stop\n(leave this in background to type)")
+        self.hotkey_notice = QLabel("<b>Hit your hotkey</b> to rec/stop<br>(leave this in background to type)")
         self.hotkey_notice.setStyleSheet("color: gray; font-size: 8pt;")
         self.hotkey_notice.setWordWrap(True)
         self.hotkey_notice.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
@@ -133,7 +140,7 @@ class VoxdApp(QWidget):
             QPushButton {
                 background-color: #444;
                 color: white;
-                border-radius: 10px;
+                border-radius: 5px;
             }
         """)
         self.options_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -332,7 +339,32 @@ class VoxdApp(QWidget):
         self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
 
     def show_options(self):
+        # Open Options (modal); when it closes, refresh AIPP toggle from config
         show_options_dialog(self, self.logger, cfg=self.cfg)
+        self._refresh_aipp_toggle_from_cfg()
+
+    def _refresh_aipp_toggle_from_cfg(self):
+        """Sync the AIPP checkbox button with the current config value."""
+        try:
+            desired = bool(self.cfg.data.get("aipp_enabled", False))
+            if self.aipp_btn.isChecked() != desired:
+                self.aipp_btn.setChecked(desired)
+        except Exception:
+            pass
+
+    def _on_cfg_file_changed(self, path: str):
+        """Reload config on disk change and refresh dependent UI bits."""
+        try:
+            # Re-add path in case editors replace the file atomically
+            if hasattr(self, "_cfg_watcher") and self._cfg_watcher is not None:
+                files = set(self._cfg_watcher.files())
+                if path and path not in files:
+                    self._cfg_watcher.addPath(path)
+            # Reload and sync UI
+            self.cfg.load()
+            self._refresh_aipp_toggle_from_cfg()
+        except Exception:
+            pass
 
 
 def main():

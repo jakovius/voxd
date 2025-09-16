@@ -71,20 +71,20 @@ DEFAULT_CONFIG = {
 
     # New: List of models per provider
     "aipp_models": {
+        "llamacpp_server": ["gemma-3-270m"],
         "ollama": ["llama3.2:latest", "mistral:latest", "gemma3:latest", "qwen2.5-coder:1.5b"],
         "openai": ["gpt-4o-mini-2024-07-18"],
         "anthropic": ["claude-3-opus-20240229", "claude-3-haiku"],
-        "xai": ["grok-3-latest"],
-        "llamacpp_server": ["gemma-3-270m"]
+        "xai": ["grok-3-latest"]
     },
 
     # New: Selected model per provider
     "aipp_selected_models": {
+        "llamacpp_server": "qwen2.5-3b-instruct-q4_k_m",
         "ollama": "gemma3:latest",
         "openai": "gpt-4o-mini-2024-07-18",
         "anthropic": "claude-3-opus-20240229",
-        "xai": "grok-3-latest",
-        "llamacpp_server": "gemma-3-270m"
+        "xai": "grok-3-latest"
     },
 
     # llama.cpp settings
