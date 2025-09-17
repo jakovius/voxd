@@ -20,14 +20,18 @@ import shutil
 from pathlib import Path
         
 def print_help():
-    print("""
+    print(f"""
 [ CLI Mode Commands ]
-  r      Start recording (stop with Enter)
-  rh     Wait for hotkey to start and stop recording
+  r      Start recording (stop with Enter) - for testing
+  rh     Hit {ORANGE}HOTKEY{RESET} to record / stop - while in any other app to {ORANGE}voice-type{RESET}
   l      Show current session log
   cfg    Edit configuration
   x      Exit
   h      Show this help
+  
+Note:
+- Transcripts ALWAYS picked up into clipboard.
+- get into voice-typing directly by running {ORANGE}'voxd --rh'{RESET}
 """)
 
 def edit_config(config_path="config.yaml"):
@@ -59,15 +63,15 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
     # Start IPC server for hotkey triggers
     start_ipc_server(on_ipc_trigger)
 
-    print(f"{ORANGE}--- VOXD CLI prompt ('h' for help)---{RESET}\ntranscripts ALWAYS picked up into clipboard")
+    print(f"{ORANGE}--- VOXD CLI ('h' for help) ---{RESET}")
+    
     # Disk space check: choose target directory
     from voxd.paths import RECORDINGS_DIR
     target = RECORDINGS_DIR if bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False)) else (Path(tempfile.gettempdir()) / "voxd_temp")
     target.mkdir(parents=True, exist_ok=True)
-    _print_disk_space_status(target)
 
     while True:
-        cmd = input("voxd-prompt> ").strip().lower()
+        cmd = input(f"{ORANGE}voxd-prompt{RESET}> ").strip().lower()
         if cmd == "r":
             print(" Simple mode | Recording... (ENTER to stop and output into the terminal)")
             recorder = AudioRecorder(

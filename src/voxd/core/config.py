@@ -183,7 +183,7 @@ class AppConfig:
     def save(self):
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.data, f, default_flow_style=False)
-        print("\n[config] Configuration saved.")
+        # print("\n[config] Configuration saved.")
 
     def set(self, key, value):
         if key not in DEFAULT_CONFIG:

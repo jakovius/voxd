@@ -5,8 +5,24 @@ import os
 from voxd.core.config import AppConfig
 
 from voxd.paths import CONFIG_FILE, resource_path
+from voxd.utils.libw import ORANGE, RESET
 import shutil, yaml
 import importlib.metadata
+
+def _print_boxed(msg: str):
+    """Print a single-line message inside a neat Unicode box.
+    Supports ANSI-colored text by ignoring escape codes for width calc.
+    """
+    import re
+    ansi = re.compile(r"\x1b\[[0-9;]*m")
+    inner = f" {msg} "
+    visible_len = len(ansi.sub('', inner))
+    top = "┌" + "─" * visible_len + "┐"
+    mid = "│" + inner + "│"
+    bot = "└" + "─" * visible_len + "┘"
+    print(top)
+    print(mid)
+    print(bot)
 
 def ensure_user_config() -> dict:
     if not CONFIG_FILE.exists():
@@ -34,7 +50,7 @@ def main():
     parser.add_argument(
         "--trigger-record",
         action="store_true",
-        help="(Internal) signal the running VOXD App to start recording"
+        help="(Internal) signal the running VOXD App to start recording - use for system-wide HOTKEY setup"
     )
     parser.add_argument(
         "--diagnose",
@@ -98,7 +114,6 @@ def main():
 
     if args.diagnose:
         print(f"[Diagnose] Current mode: {mode}")
-        print(f"[Diagnose] Detected shortcut: (use './hotkey_setup.sh list' for hotkey detection)")
         
         # Check ydotool daemon status on Wayland
         if os.environ.get("XDG_SESSION_TYPE") == "wayland":
@@ -128,12 +143,10 @@ def main():
         
         sys.exit(0)
 
-    print(f"Launching VOXD app in '{mode}' mode...")
-
+    print()
+    _print_boxed(f"Launching VOXD app in '{ORANGE}{mode}{RESET}' mode…")
     # show shortcut hint
-    if mode == "cli":
-        print("[VOXD] Tip: create a global shortcut that runs `bash -c 'voxd --trigger-record'` (e.g. Super+Z)")
-        print("[VOXD] Use './hotkey_setup.sh guide' for setup instructions")
+    print(f"Tip: create a global {ORANGE}HOTKEY{RESET} shortcut (in your system) that runs {ORANGE}`bash -c 'voxd --trigger-record'`{RESET} (e.g. Super+Z)")
 
     if mode == "cli":
         # Forward unknown args to cli_main
