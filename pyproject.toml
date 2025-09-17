@@ -32,7 +32,7 @@ voxd-model = "voxd.models:_cli"
 
 [tool.hatch.build]
 package-dir = "src"
-include = ["setup.sh","src/voxd/assets/*.png","src/voxd/defaults/*.yaml","launcher_setup.sh"]
+include = ["setup.sh","src/voxd/assets/*.png","src/voxd/defaults/*.yaml","launcher_setup.sh","src/voxd/setup_ydotool.sh"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/voxd"]

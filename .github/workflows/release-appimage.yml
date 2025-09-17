@@ -1,0 +1,36 @@
+name: Release AppImage
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. v1.3.2)"
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version env
+        run: echo "APP_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+
+      - name: Install appimage-builder
+        run: |
+          sudo apt update
+          sudo apt install -y python3-pip
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user appimage-builder
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Build AppImage
+        run: |
+          appimage-builder --recipe AppImageBuilder.yml --skip-tests
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VOXD-${{ env.APP_VERSION }}-x86_64.AppImage
+          path: ./*.AppImage

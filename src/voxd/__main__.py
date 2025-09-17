@@ -3,6 +3,7 @@ import argparse
 import subprocess
 import os
 from voxd.core.config import AppConfig
+from voxd.bootstrap import bootstrap_if_needed
 
 from voxd.paths import CONFIG_FILE, resource_path
 from voxd.utils.libw import ORANGE, RESET
@@ -178,6 +179,15 @@ def main():
         from voxd.utils.ipc_client import send_trigger
         send_trigger()
         sys.exit(0)
+
+    # Ensure required binaries, models, and Wayland helper are present
+    try:
+        import os as _os
+        if not (_os.environ.get("VOXD_SKIP_BOOTSTRAP") or _os.environ.get("PYTEST_CURRENT_TEST")):
+            bootstrap_if_needed()
+    except Exception:
+        # Non-fatal – app may still run in degraded mode
+        pass
 
     cfg = AppConfig()
     if args.gui:
