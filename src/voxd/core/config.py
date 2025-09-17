@@ -26,6 +26,9 @@ DEFAULT_CONFIG = {
     "audio_preproc_enabled": True,
     "audio_peak_dbfs": -3.0,
     "audio_clip_warn_threshold": 0.01,
+    # Mic autoset (best-effort; uses wpctl/pactl/amixer if present)
+    "mic_autoset_enabled": True,
+    "mic_autoset_level": 0.45,
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
     "whisper_model_path": "whisper.cpp/models/ggml-base.en.bin",
 

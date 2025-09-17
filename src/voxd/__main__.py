@@ -30,6 +30,86 @@ def ensure_user_config() -> dict:
         shutil.copy(default_tpl, CONFIG_FILE)
     return yaml.safe_load(CONFIG_FILE.read_text())
 
+def _mic_autoset_if_enabled(cfg):
+    """Best-effort: unmute default mic and set input gain to configured level.
+
+    Uses wpctl → pactl → amixer if available. Silently skips on failure.
+    """
+    try:
+        debug = bool(cfg.data.get("verbosity", False)) or bool(os.environ.get("VOXD_DEBUG_AUDIO"))
+        def log(msg: str):
+            if debug:
+                print(f"[mic] {msg}")
+
+        if not cfg.data.get("mic_autoset_enabled", False):
+            log("autoset disabled; skipping")
+            return
+        try:
+            level = float(cfg.data.get("mic_autoset_level", 0.40))
+        except Exception:
+            level = 0.40
+        level = max(0.0, min(1.0, level))
+        log(f"autoset enabled; target level={level:.2f}")
+
+        def have(cmd: str) -> bool:
+            found = shutil.which(cmd) is not None
+            log(f"tool '{cmd}': {'found' if found else 'missing'}")
+            return found
+
+        # Prefer PipeWire's wpctl if present
+        if have("wpctl"):
+            try:
+                log("trying wpctl … unmute")
+                cp1 = subprocess.run(["wpctl", "set-mute", "@DEFAULT_SOURCE@", "0"],
+                                     check=False, capture_output=True, timeout=2)
+                log(f"wpctl set-mute rc={cp1.returncode}")
+                log("trying wpctl … set-volume")
+                cp2 = subprocess.run(["wpctl", "set-volume", "@DEFAULT_SOURCE@", f"{level:.2f}"],
+                                     check=False, capture_output=True, timeout=2)
+                log(f"wpctl set-volume rc={cp2.returncode}")
+                return
+            except Exception as e:
+                log(f"wpctl path failed: {e}")
+
+        # Fallback to PulseAudio pactl (also works on PipeWire's pulse shim)
+        if have("pactl"):
+            try:
+                pct = str(int(round(level * 100))) + "%"
+                log("trying pactl … unmute")
+                cp1 = subprocess.run(["pactl", "set-source-mute", "@DEFAULT_SOURCE@", "0"],
+                                     check=False, capture_output=True, timeout=2)
+                log(f"pactl set-source-mute rc={cp1.returncode}")
+                log(f"trying pactl … set-volume {pct}")
+                cp2 = subprocess.run(["pactl", "set-source-volume", "@DEFAULT_SOURCE@", pct],
+                                     check=False, capture_output=True, timeout=2)
+                log(f"pactl set-source-volume rc={cp2.returncode}")
+                return
+            except Exception as e:
+                log(f"pactl path failed: {e}")
+
+        # Last resort: ALSA amixer (control names vary by card)
+        if have("amixer"):
+            try:
+                pct = str(int(round(level * 100))) + "%"
+                for ctl in ("Capture", "Mic"):
+                    log(f"trying amixer on control '{ctl}' … {pct} unmute")
+                    r = subprocess.run(["amixer", "-q", "set", ctl, pct, "unmute"],
+                                       capture_output=True, timeout=2)
+                    log(f"amixer rc={r.returncode}")
+                    if r.returncode == 0:
+                        return
+            except Exception as e:
+                log(f"amixer path failed: {e}")
+        log("no suitable backend succeeded; leaving mic unchanged")
+    except Exception as e:
+        # absolutely no-op on any unexpected error
+        try:
+            if bool(os.environ.get("VOXD_DEBUG_AUDIO")):
+                print(f"[mic] unexpected error: {e}")
+        except Exception:
+            pass
+        return
+
 def main():
     parser = argparse.ArgumentParser(description="VOXD App Entry Point", add_help=False)
     # NOTE: we intentionally disable the automatic -h/--help. Sub-mode parsers
@@ -142,6 +222,9 @@ def main():
                 print("[Diagnose] ydotool: ❌ not installed")
         
         sys.exit(0)
+
+    # Optionally ensure mic is on and set to desired level (best-effort)
+    _mic_autoset_if_enabled(cfg)
 
     print()
     _print_boxed(f"Launching VOXD app in '{ORANGE}{mode}{RESET}' mode…")

@@ -29,7 +29,7 @@ Hit a **global shortcut**, speak, and watch your words appear wherever the curso
 
 ## Installation
 
-Complete the 3 steps:
+Complete the 2 steps:
 ### 1. Clone the repo & run the setup:  
 
 Copy this code, paste into terminal (Ctrl+Shift+V), and execute:
@@ -55,9 +55,6 @@ b. **The command** to assign to the shortcut hotkey (EXACTLY as given):
 `bash -c 'voxd --trigger-record'`  
 
 c. Click **Add / Save**.  
-
-### 3. Your **mic is ON** (?), and the gain/**volume is at ca. 40%** of the max  
-*(Whisper and voice transcription is problematic at default sound input levels)*
 
 ### <span style="color: #FFD600;">READY! → Go type anywhere with your voice!</span>  
 Well, first run the app (see below) with a global `voxd` command.  
@@ -258,7 +255,7 @@ If an API key is missing, cloud-based AIPP providers will not work and you will 
 
 | Symptom                            | Likely cause / fix                                                                                             |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| *Getting randomly [BLANK_AUDIO], no transcript, or very poor transcript*    | Most likely your input features clipping & distortions at default volume levels - need to reduce your microphone input volume to ca. 40% level. |
+| *Getting randomly [BLANK_AUDIO], no transcript, or very poor transcript*    | Most likely: too high mic volume (clipping & distortions) VOXD will try to set your microphone optimally (configurable), but anyway check if input volume is not > 45%.
 | *Press hotkey, nothing happens*    | Troubleshoot with this command: `gnome-terminal -- bash -c "voxd --trigger-record; read -p 'Press Enter...'"` |
 | *Transcript printed but not typed* | Wayland: `ydotool` not installed or user not in `input` group → run `setup_ydotool.sh`, relog.                 |
 | *"whisper-cli not found"*          | Build failed - rerun `./setup.sh` and check any diagnostic output.                                                      |
