@@ -17,14 +17,23 @@ jobs:
       - name: Set version env
         run: echo "APP_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
 
-      - name: Install appimage-builder (snap)
+      - name: Install host deps for AppImage build
         run: |
-          sudo snap install appimage-builder --classic
-          echo "/snap/bin" >> $GITHUB_PATH
+          sudo apt update
+          sudo apt install -y libfuse2 squashfs-tools desktop-file-utils zsync curl file
+
+      - name: Download appimage-builder (AppImage)
+        run: |
+          set -e
+          URL=$(curl -s https://api.github.com/repos/AppImageCrafters/appimage-builder/releases/latest \
+            | grep -Eo 'https://[^"]+x86_64\.AppImage' | head -n1)
+          echo "Using: $URL"
+          curl -L "$URL" -o appimage-builder.AppImage
+          chmod +x appimage-builder.AppImage
 
       - name: Build AppImage
         run: |
-          appimage-builder --recipe AppImageBuilder.yml --skip-tests
+          ./appimage-builder.AppImage --recipe AppImageBuilder.yml --skip-tests | cat
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
