@@ -32,7 +32,7 @@ Hit a **global shortcut**, speak, and watch your words appear wherever the curso
 Complete this list:
 1. **Clone** the repo & **run the setup** (you will make some input):
 ```bash
-git clone https://github.com/jacob8472/voxd.git
+git clone https://github.com/jakovius/voxd.git
 
 cd voxd && ./setup.sh
 
@@ -51,7 +51,7 @@ a. Open your system keyboard-shortcuts panel
 3. make sure your **mic is ON**, and the gain/**volume is at ca. 40%** of the max  
 *(Whisper and voice transcription is problematic at default sound input levels)*
 
-**<span style="color: #FFD600;">You are set! → Go type anywhere with your voice!</span>**  
+**<span style="color: #FFD600;">READY! → Go type anywhere with your voice!</span>**  
 Well, first run the app (see below) with a global `voxd` command available in any shell.  
 *(You are always welcome to re-run `setup.sh` if you need any part of the setup and optional stuff revisited)*
 
