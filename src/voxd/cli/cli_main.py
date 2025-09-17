@@ -29,9 +29,7 @@ def print_help():
   x      Exit
   h      Show this help
   
-Note:
-- Transcripts ALWAYS picked up into clipboard.
-- get into voice-typing directly by running {ORANGE}'voxd --rh'{RESET}
+  Direct, uninterrupted voice-typing: run {ORANGE}'voxd --rh'{RESET} instead.
 """)
 
 def edit_config(config_path="config.yaml"):

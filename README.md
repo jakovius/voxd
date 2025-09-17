@@ -29,31 +29,39 @@ Hit a **global shortcut**, speak, and watch your words appear wherever the curso
 
 ## Installation
 
-Complete this list:
-1. **Clone** the repo & **run the setup** (you will make some input):
+Complete the 3 steps:
+### 1. Clone the repo & run the setup:  
+
+Copy this code, paste into terminal (Ctrl+Shift+V), and execute:
 ```bash
 git clone https://github.com/jakovius/voxd.git
 
 cd voxd && ./setup.sh
 
-# builds voxd + deps and installs a global `voxd` command (via pipx)
+# will require your sudo (password) & REBOOT (ydootool setup on Wayland systems)
 ```
-2. **Setup a global hotkey** shortcut for recording/stop in your system:  
-a. Open your system keyboard-shortcuts panel  
-   *GNOME:* Settings → Keyboard → "Custom Shortcuts"  
-   *KDE / XFCE / Cinnamon:* similar path.  
-   *Hyprland / Sway:* open the respective config file with keybindings, and add a key binding for this purpose.  
 
-   b. **The command to assign to the shortcut hotkey (EXACTLY as given):**  
- `bash -c 'voxd --trigger-record'`  
- c. Click **Add / Save**.  
+**Reboot** the system!  
+(required to complete **ydotool** setup).  
 
-3. make sure your **mic is ON**, and the gain/**volume is at ca. 40%** of the max  
+### 2. **Setup a global hotkey** shortcut  in your system, for recording/stop:  
+a. Open your system keyboard-shortcuts panel:  
+  - *GNOME:* Settings → Keyboard → "Custom Shortcuts"  
+  - *KDE / XFCE / Cinnamon:* similar path.  
+  - *Hyprland / Sway:* just add a keybinding in the respective config file.  
+
+b. **The command** to assign to the shortcut hotkey (EXACTLY as given):  
+
+`bash -c 'voxd --trigger-record'`  
+
+c. Click **Add / Save**.  
+
+### 3. Your **mic is ON** (?), and the gain/**volume is at ca. 40%** of the max  
 *(Whisper and voice transcription is problematic at default sound input levels)*
 
-**<span style="color: #FFD600;">READY! → Go type anywhere with your voice!</span>**  
-Well, first run the app (see below) with a global `voxd` command available in any shell.  
-*(You are always welcome to re-run `setup.sh` if you need any part of the setup and optional stuff revisited)*
+### <span style="color: #FFD600;">READY! → Go type anywhere with your voice!</span>  
+Well, first run the app (see below) with a global `voxd` command.  
+*(If you have been hacking a little too much, and need fixing, re-run `setup.sh`)*
 
 
 ---
@@ -62,11 +70,11 @@ Well, first run the app (see below) with a global `voxd` command available in an
 
 ### Launch VOXD via Terminal, in any mode:
 ```bash
-voxd        # CLI mode (interactive); 'h' shows commands inside CLI
+voxd        # CLI (interactive); 'h' shows commands inside CLI
+voxd --rh   # directly starts hotkey-controlled continuous recording in CLI
 voxd -h     # show top-level help and quick-actions
 voxd --gui  # friendly pill-button window
 voxd --tray # sits in the tray; perfect for continuous dictation
-voxd --rh   # directly start hotkey-controlled continuous recording in CLI
 voxd --flux # VAD (Voice Activity Detection), voice-triggered continuous dictation
 ```
 
@@ -79,7 +87,7 @@ Otherwise:
 | Press hotkey …   | VOXD does …                                                |
 | ---------------- | ----------------------------------------------------------- |
 | **First press**  | start recording                                             |
-| **Second press** | stop ⇢ [transcribe ⇢ copy to clipboard] ⇢ types the output |
+| **Second press** | stop ⇢ [transcribe ⇢ copy to clipboard] ⇢ types the output into any focused app |
 
 
 
@@ -87,7 +95,7 @@ Otherwise:
 Run this launcher setup first, and then find & run Voxd:  
 
 ```bash
-./launcher_setup.sh        # pick GUI, Tray, or both
+./launcher_setup.sh        # pick GUI, Tray, Flux or all.
 ./launcher_setup.sh --edit # fix existing launchers
 ```
 

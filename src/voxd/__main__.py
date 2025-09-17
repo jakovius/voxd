@@ -146,7 +146,11 @@ def main():
     print()
     _print_boxed(f"Launching VOXD app in '{ORANGE}{mode}{RESET}' mode…")
     # show shortcut hint
-    print(f"Tip: create a global {ORANGE}HOTKEY{RESET} shortcut (in your system) that runs {ORANGE}`bash -c 'voxd --trigger-record'`{RESET} (e.g. Super+Z)")
+    print(f"""Note:
+- create a global {ORANGE}HOTKEY{RESET} shortcut (in your system) that runs {ORANGE}`bash -c 'voxd --trigger-record'`{RESET} (e.g. Super+Z)"
+- directly start voice-typing by running {ORANGE}'voxd --rh'{RESET} in terminal.
+- transcripts ALWAYS picked up into clipboard.
+""")
 
     if mode == "cli":
         # Forward unknown args to cli_main
