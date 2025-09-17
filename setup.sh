@@ -847,7 +847,7 @@ msg "${GRN}Setup complete!${NC}"
 echo "Setup log (appended per run): $(pwd)/$LOG_FILE"
 # Wayland reminder for ydotool permissions
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && command -v ydotool >/dev/null; then
-  echo -e "${GRN}➡  IMPORTANT:${NC} Log out or reboot once so 'ydotool' gains access to /dev/uinput."; read -n1 -r -p "Press any key to acknowledge…"
+  echo -e "${GRN}➡  IMPORTANT:${NC} Reboot your system once so 'ydotool' gains access to /dev/uinput."; read -n1 -r -p "Press any key to acknowledge…"
 fi
 echo "Activate venv:   source .venv/bin/activate"
 echo "Run GUI mode:    python -m voxd --mode gui"
