@@ -49,8 +49,14 @@ AppDir:
       QML2_IMPORT_PATH: "$APPDIR/usr/qml"
       LD_LIBRARY_PATH: "$APPDIR/usr/lib:$APPDIR/lib:$LD_LIBRARY_PATH"
 script:
-  - pip3 install --upgrade pip
-  - pip3 install --prefix=$APPDIR/usr .
+  - |
+    set -e
+    PYV=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    PIP_USER=0 python3 -m pip install --upgrade pip
+    PIP_USER=0 python3 -m pip install \
+      --no-user --no-compile --no-warn-script-location \
+      --target=$APPDIR/usr/lib/python${PYV}/site-packages \
+      .
   - install -Dm644 src/voxd/assets/voxd-5.png $APPDIR/usr/share/icons/hicolor/256x256/apps/voxd.png
   - |
     cat > $APPDIR/voxd.desktop <<EOF

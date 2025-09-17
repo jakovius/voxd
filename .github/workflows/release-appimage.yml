@@ -3,19 +3,32 @@ name: Release AppImage
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Release version (e.g. v1.3.2)"
+      tag:
+        description: "SemVer tag (existing git tag, e.g. v1.3.2)"
         required: true
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # get tags
 
-      - name: Set version env
-        run: echo "APP_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+      - name: Validate tag and set version env
+        run: |
+          set -e
+          TAG=${{ github.event.inputs.tag }}
+          if ! git tag --list | grep -qx "$TAG"; then
+            echo "Tag '$TAG' not found in repository." >&2
+            echo "Available tags:" >&2
+            git tag --list | sed 's/^/  /' >&2
+            exit 1
+          fi
+          echo "APP_VERSION=$TAG" >> $GITHUB_ENV
 
       - name: Install host deps for AppImage build
         run: |
@@ -28,15 +41,37 @@ jobs:
           URL=$(curl -s https://api.github.com/repos/AppImageCrafters/appimage-builder/releases/latest \
             | grep -Eo 'https://[^"]+x86_64\.AppImage' | head -n1)
           echo "Using: $URL"
-          curl -L "$URL" -o appimage-builder.AppImage
-          chmod +x appimage-builder.AppImage
+          curl -L "$URL" -o aib-x86_64.AppImage
+          chmod +x aib-x86_64.AppImage
 
       - name: Build AppImage
         run: |
-          ./appimage-builder.AppImage --recipe AppImageBuilder.yml --skip-tests | cat
+          ./aib-x86_64.AppImage --recipe AppImageBuilder.yml --skip-tests | cat
+
+      - name: Verify product output
+        run: |
+          set -e
+          ls -l *.AppImage
+          echo "APPIMAGE_PATH=$(ls -1 *.AppImage | head -n1)" >> $GITHUB_ENV
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VOXD-${{ env.APP_VERSION }}-x86_64.AppImage
-          path: ./*.AppImage
+          name: VOXD-${{ env.APP_VERSION }}-x86_64
+          path: |
+            *.AppImage
+            *.zsync
+          if-no-files-found: error
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: VOXD ${{ github.event.inputs.tag }}
+          draft: false
+          prerelease: false
+          files: |
+            *.AppImage
+            *.zsync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
