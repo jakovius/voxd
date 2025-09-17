@@ -17,13 +17,10 @@ jobs:
       - name: Set version env
         run: echo "APP_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
 
-      - name: Install appimage-builder
+      - name: Install appimage-builder (snap)
         run: |
-          sudo apt update
-          sudo apt install -y python3-pip
-          python3 -m pip install --user --upgrade pip
-          python3 -m pip install --user appimage-builder
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          sudo snap install appimage-builder --classic
+          echo "/snap/bin" >> $GITHUB_PATH
 
       - name: Build AppImage
         run: |
