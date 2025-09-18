@@ -44,17 +44,21 @@ AppDir:
       - dist
   runtime:
     env:
-      PYTHONPATH: "$APPDIR/usr/lib/python3/dist-packages:$APPDIR/usr/lib/python3.10/site-packages:$APPDIR"
       QT_PLUGIN_PATH: "$APPDIR/usr/plugins"
       QML2_IMPORT_PATH: "$APPDIR/usr/qml"
       LD_LIBRARY_PATH: "$APPDIR/usr/lib:$APPDIR/lib:$LD_LIBRARY_PATH"
 script:
   - |
     set -e
-    PIP_USER=0 python3 -m pip install \
-      --no-user --no-compile --no-warn-script-location \
-      --prefix=$APPDIR/usr \
-      .
+    python3 -m venv $APPDIR/usr/venv
+    $APPDIR/usr/venv/bin/pip install --no-cache-dir --no-compile .
+    install -d $APPDIR/usr/bin
+    cat > $APPDIR/usr/bin/voxd <<'EOF'
+    #!/bin/sh
+    HERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/.."
+    exec "$HERE/venv/bin/python" -m voxd "$@"
+    EOF
+    chmod +x $APPDIR/usr/bin/voxd
   - install -Dm644 src/voxd/assets/voxd-5.png $APPDIR/usr/share/icons/hicolor/256x256/apps/voxd.png
   - |
     cat > $APPDIR/voxd.desktop <<EOF
