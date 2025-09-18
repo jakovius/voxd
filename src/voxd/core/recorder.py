@@ -38,8 +38,7 @@ class AudioRecorder:
         self._chunk_paths = []
         self._chunk_index = 0
         self._chunk_written_frames = 0
-        if self.record_chunked:
-            self._open_new_chunk()
+        # Delay opening the first chunk until the effective sample rate is known
 
         def callback(indata, frames, time, status):
             if status:
@@ -63,6 +62,9 @@ class AudioRecorder:
 
         # Try opening stream at configured sample rate; fall back to device defaults
         self.stream = self._open_stream_with_fallback(callback)
+        # Now that self.fs may have changed, open the first chunk with the effective rate
+        if self.record_chunked:
+            self._open_new_chunk()
         self.stream.start()
 
     def stop_recording(self, preserve=False):
