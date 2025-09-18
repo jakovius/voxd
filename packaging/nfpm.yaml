@@ -82,5 +82,5 @@ overrides:
       - portaudio
 
 scripts:
-  postinstall: ./postinstall.sh
-  postremove: ./postremove.sh
+  postinstall: packaging/postinstall.sh
+  postremove: packaging/postremove.sh
