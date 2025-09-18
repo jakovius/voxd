@@ -38,8 +38,10 @@ git clone https://github.com/jakovius/voxd.git
 
 cd voxd && ./setup.sh
 
-# will require your sudo (password) & REBOOT (ydootool setup on Wayland systems)
+# requires sudo for packages & REBOOT (ydotool setup on Wayland systems). Launchers (GUI, Tray, Flux) are installed automatically.
 ```
+
+Setup is non-interactive with minimal console output; a detailed setup log is saved in the repo directory (e.g. `2025-09-18-setup-log.txt`).
 
 **Reboot** the system!  
 (required to complete **ydotool** setup).  
@@ -88,13 +90,12 @@ Otherwise:
 
 
 
-### ... or from your app launcher:  
-Run this launcher setup first, and then find & run Voxd:  
+### ... or from your app launcher:
+After running `./setup.sh`, desktop launchers are installed automatically. Open your application menu and launch:
 
-```bash
-./launcher_setup.sh        # pick GUI, Tray, Flux or all.
-./launcher_setup.sh --edit # fix existing launchers
-```
+- VOXD (gui)
+- VOXD (tray)
+- VOXD (flux)
 
 
 ### 🎙️  Managing speech models

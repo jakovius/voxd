@@ -14,13 +14,139 @@ set -euo pipefail
 
 # ────────────────── Setup logging ─────────────────────────────────────────────
 LOG_FILE="$(date +%F)-setup-log.txt"
-# Append all stdout/stderr to log while keeping it on console
-exec > >(tee -a "$LOG_FILE") 2>&1
+# Quiet console: keep original stdout on FD 3, send all output to log by default
+exec 3>&1
+exec >"$LOG_FILE" 2>&1
 
 # ───────────────────────────── helpers ────────────────────────────────────────
 YEL=$'\033[1;33m'; GRN=$'\033[1;32m'; RED=$'\033[0;31m'; NC=$'\033[0m'
-msg() { printf "${YEL}==>${NC} %s\n" "$*"; }
-die() { printf "${RED}error:${NC} %s\n" "$*" >&2; exit 1; }
+# Log-only message (console is quiet by default)
+msg() { printf "==> %s\n" "$*"; }
+# Console + log message
+note() { printf "${YEL}==>${NC} %s\n" "$*" >&3; printf "==> %s\n" "$*"; }
+# Fatal error: print to console and log, then exit
+die() { printf "${RED}error:${NC} %s\n" "$*" >&3; printf "error: %s\n" "$*" >&2; exit 1; }
+
+# ────────────────── Minimal CLI spinner/step helpers ──────────────────────────
+SPINNER_PID=""; SPINNER_MSG="";
+spinner_start() {
+  SPINNER_MSG="$1"
+  # Print initial line on console
+  printf "%s " "$SPINNER_MSG" >&3
+  # Hide cursor if possible
+  tput civis 2>/dev/null || true
+  (
+    # spinner loop
+    i=0
+    frames=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+    while true; do
+      printf "\r%s %s" "$SPINNER_MSG" "${frames[$((i%10))]}" >&3
+      i=$((i+1))
+      sleep 0.1
+    done
+  ) &
+  SPINNER_PID=$!
+}
+spinner_stop() {
+  local rc=${1:-0}
+  if [[ -n "$SPINNER_PID" ]] && kill -0 "$SPINNER_PID" 2>/dev/null; then
+    kill "$SPINNER_PID" 2>/dev/null || true
+    wait "$SPINNER_PID" 2>/dev/null || true
+  fi
+  # Restore cursor
+  tput cnorm 2>/dev/null || true
+  if [[ $rc -eq 0 ]]; then
+    printf "\r%s ${GRN}✓${NC}\n" "$SPINNER_MSG" >&3
+  else
+    printf "\r%s ${RED}✗${NC}\n" "$SPINNER_MSG" >&3
+  fi
+  SPINNER_PID=""; SPINNER_MSG="";
+}
+
+# Ensure spinner stops on unexpected errors
+trap 'spinner_stop 1 2>/dev/null || true' ERR
+# Always restore cursor / kill spinner on exit or signals
+trap 'tput cnorm 2>/dev/null || true; [[ -n "$SPINNER_PID" ]] && kill "$SPINNER_PID" 2>/dev/null || true' EXIT INT TERM
+
+# Current script directory (repo root)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Tell user where logs will be written
+note "VOXD setup started. Log: $(pwd)/$LOG_FILE"
+note "Requesting sudo access (may prompt once)"
+sudo -v || true
+
+# ────────────────── Launcher helpers (auto-install) ───────────────────────────
+APP_DIR="$HOME/.local/share/applications"
+ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
+ICON_DIR_64="$HOME/.local/share/icons/hicolor/64x64/apps"
+ICON_DEST="$ICON_DIR/voxd.png"
+ICON_DEST_64="$ICON_DIR_64/voxd.png"
+ICON_SRC="$SCRIPT_DIR/src/voxd/assets/voxd-0.png"
+
+DESKTOP_GUI="$APP_DIR/voxd-gui.desktop"
+DESKTOP_TRAY="$APP_DIR/voxd-tray.desktop"
+DESKTOP_FLUX="$APP_DIR/voxd-flux.desktop"
+
+create_icon() {
+  [[ -f "$ICON_SRC" ]] || { msg "Icon not found at $ICON_SRC – skipping icon copy."; return; }
+  mkdir -p "$ICON_DIR" "$ICON_DIR_64"
+  cp -f "$ICON_SRC" "$ICON_DEST"
+  cp -f "$ICON_SRC" "$ICON_DEST_64"
+}
+
+create_desktop() {
+  local mode="$1" dest="$2"
+
+  # Try to locate voxd executable (prefer PATH); fall back to plain command
+  local voxd_path="voxd"
+  if command -v voxd >/dev/null 2>&1; then
+    voxd_path=$(command -v voxd)
+  else
+    for candidate in "$HOME/.local/bin/voxd" \
+                    "/usr/local/bin/voxd" \
+                    "/usr/bin/voxd"; do
+      if [[ -x "$candidate" ]]; then
+        voxd_path="$candidate"
+        break
+      fi
+    done
+  fi
+
+  local exec_cmd="bash -c 'export PATH=\"$HOME/.local/bin:/usr/local/bin:$PATH\"; export YDOTOOL_SOCKET=\"$HOME/.ydotool_socket\"; \"$voxd_path\" --$mode'"
+
+  cat > "$dest" <<EOF
+[Desktop Entry]
+Type=Application
+Name=VOXD ($mode)
+Exec=$exec_cmd
+Icon=voxd
+Terminal=false
+Categories=Utility;AudioVideo;
+EOF
+}
+
+update_caches() {
+  if command -v update-desktop-database >/dev/null; then
+    timeout 15s update-desktop-database "$APP_DIR" || true
+  fi
+  if command -v gtk-update-icon-cache >/dev/null; then
+      timeout 20s gtk-update-icon-cache -q "$HOME/.local/share/icons/hicolor" || true
+  else
+      if command -v xdg-icon-resource >/dev/null; then
+        timeout 10s xdg-icon-resource install --noupdate --size 64 "$ICON_DEST_64" voxd || true
+      fi
+  fi
+}
+
+install_voxd_launchers() {
+  mkdir -p "$APP_DIR"
+  create_icon
+  create_desktop gui  "$DESKTOP_GUI"
+  create_desktop tray "$DESKTOP_TRAY"
+  create_desktop flux "$DESKTOP_FLUX"
+  update_caches
+}
 [[ $EUID == 0 ]] && die "Run as a normal user, not root."
 
 # bail out on missing cmd, or install compiler tool-chain on the fly
@@ -86,7 +212,9 @@ if command -v getenforce >/dev/null && [[ $(getenforce) == Enforcing && $PM == d
 fi
 
 # ──────────────────  0. make sure compilers exist  ───────────────────────────–
+spinner_start "Ensuring build tools"
 need_compiler
+spinner_stop $?
 
 # ──────────────────  1. distro-specific dependency list  ────────────────────
 case "$PM" in
@@ -368,8 +496,7 @@ EOF
 }
 
 # ──────────────────  3. install system packages  ─────────────────────────────–
-msg "Installing system deps: ${SYS_DEPS[*]}"
-
+spinner_start "Installing system packages"
 # ---------- 1) try one big transaction ----------
 if $INSTALL "${SYS_DEPS[@]}"; then
     msg "System deps installed / already present."
@@ -393,8 +520,10 @@ else
         esac
     done
 fi
+spinner_stop 0
 
 # ──────────────────  4. python venv & deps  ─────────────────────────────────––
+spinner_start "Setting up Python env and installing VOXD"
 if [[ ! -d .venv ]]; then
   msg "Creating virtualenv (.venv)…"
   python3 -m venv .venv
@@ -432,6 +561,7 @@ if [[ -f "$PTH_FILE" && ! -s "$PTH_FILE" ]]; then
   echo "$PWD/src" > "$PTH_FILE"
   msg "Fixed editable install .pth file"
 fi
+spinner_stop 0
 
 # ──────────────────  Prebuilt binaries config  ─────────────────────────────
 # Where prebuilts live (owner/repo with Releases containing tar.gz assets)
@@ -549,6 +679,7 @@ fetch_prebuilt_binary() {
 }
 
 # ──────────────────  5. whisper.cpp (prefer prebuilt)  ─────────────────────
+spinner_start "Setting up Whisper engine (whisper-cli)"
 WHISPER_BIN=""
 
 # a) If whisper-cli already on PATH and valid, reuse (keeps your current behavior)
@@ -594,6 +725,42 @@ if [[ -z "$WHISPER_BIN" ]]; then
   fi
   WHISPER_BIN="$PWD/whisper.cpp/build/bin/whisper-cli"
 fi
+spinner_stop 0
+
+# Whisper CLI symlink
+spinner_start "Linking whisper-cli to ~/.local/bin"
+LOCAL_BIN="$HOME/.local/bin"
+mkdir -p "$LOCAL_BIN"
+SYMLINK_PATH="$LOCAL_BIN/whisper-cli"
+
+# Ensure we have a valid binary path (not a symlink)
+if [[ -L "$WHISPER_BIN" ]]; then
+  REAL_BIN=$(readlink -f "$WHISPER_BIN" 2>/dev/null || echo "$WHISPER_BIN")
+else
+  REAL_BIN="$WHISPER_BIN"
+fi
+
+# Prevent circular symlinks
+if [[ "$REAL_BIN" == "$SYMLINK_PATH" ]]; then
+   msg "whisper-cli symlink would point to itself – skipping to avoid loop."
+elif [[ ! -f "$REAL_BIN" ]]; then
+   msg "Warning: whisper-cli binary not found at $REAL_BIN – skipping symlink creation."
+else
+   # Remove any existing symlink/file first
+   if [[ -L "$SYMLINK_PATH" ]]; then
+      rm -f "$SYMLINK_PATH"
+   elif [[ -e "$SYMLINK_PATH" ]]; then
+      msg "File named whisper-cli already exists at $SYMLINK_PATH – leaving untouched."
+      REAL_BIN=""  # Skip symlink creation
+   fi
+   
+   # Create new symlink if safe to do so
+   if [[ -n "$REAL_BIN" ]]; then
+      ln -s "$REAL_BIN" "$SYMLINK_PATH"
+      msg "Symlinked whisper-cli to $SYMLINK_PATH"
+   fi
+fi
+spinner_stop 0
 
 # ──────────────────  6. default model  ───────────────────────────────────────–
 # Store in XDG data dir
@@ -604,7 +771,8 @@ XDG_MODEL_FILE="$XDG_MODEL_DIR/ggml-base.en.bin"
 # Ensure XDG target directory exists
 mkdir -p "$XDG_MODEL_DIR"
 
-# Download to XDG location if missing
+# Download to XDG location if missing (non-interactive)
+spinner_start "Ensuring Whisper model (base.en)"
 if [[ ! -f "$XDG_MODEL_FILE" ]]; then
   if [[ $OFFLINE ]]; then
     msg "Offline – model file not found. Please place ggml-base.en.bin into $XDG_MODEL_DIR manually."
@@ -614,10 +782,13 @@ if [[ ! -f "$XDG_MODEL_FILE" ]]; then
          https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
   fi
 fi
+spinner_stop 0
 
 
 # ──────────────────  7. ydotool (Wayland helper)  ─────────────────────────────
+spinner_start "Configuring Wayland typing (ydotool)"
 ensure_ydotool
+spinner_stop $?
 
 # ──────────────────  8. llama.cpp (prefer prebuilt)  ─────────────
 
@@ -655,6 +826,7 @@ download_qwen_model() {
     fi
 }
 
+spinner_start "Setting up llama.cpp server"
 LLAMA_SERVER_BIN=""
 
 # a) Reuse existing llama-server if present
@@ -727,51 +899,20 @@ else
     msg "Symlinked llama-server to $LLAMA_SYMLINK_PATH"
   fi
 fi
+spinner_stop 0
 
-# e) Offer model download
+# e) Ensure Qwen model is available (non-interactive)
+spinner_start "Ensuring Qwen 2.5 3B-Instruct model"
 LLAMACPP_MODELS_DIR="$HOME/.local/share/voxd/llamacpp_models"
 if [[ ! -f "$LLAMACPP_MODELS_DIR/qwen2.5-3b-instruct-q4_k_m.gguf" ]]; then
-  read -r -p "Download default qwen2.5-3b-instruct model for AIPP? [Y/n]: " download_model
-  download_model=${download_model:-Y}
-  if [[ $download_model =~ ^[Yy]$ ]]; then
-    download_qwen_model "$LLAMACPP_MODELS_DIR" || true
-  fi
+  download_qwen_model "$LLAMACPP_MODELS_DIR" || true
 fi
+spinner_stop 0
 
-# ──────────────────  9. symlink whisper-cli to ~/.local/bin  ─────────────────
-LOCAL_BIN="$HOME/.local/bin"
-mkdir -p "$LOCAL_BIN"
-SYMLINK_PATH="$LOCAL_BIN/whisper-cli"
-
-# Ensure we have a valid binary path (not a symlink)
-if [[ -L "$WHISPER_BIN" ]]; then
-  REAL_BIN=$(readlink -f "$WHISPER_BIN" 2>/dev/null || echo "$WHISPER_BIN")
-else
-  REAL_BIN="$WHISPER_BIN"
-fi
-
-# Prevent circular symlinks
-if [[ "$REAL_BIN" == "$SYMLINK_PATH" ]]; then
-   msg "whisper-cli symlink would point to itself – skipping to avoid loop."
-elif [[ ! -f "$REAL_BIN" ]]; then
-   msg "Warning: whisper-cli binary not found at $REAL_BIN – skipping symlink creation."
-else
-   # Remove any existing symlink/file first
-   if [[ -L "$SYMLINK_PATH" ]]; then
-      rm -f "$SYMLINK_PATH"
-   elif [[ -e "$SYMLINK_PATH" ]]; then
-      msg "File named whisper-cli already exists at $SYMLINK_PATH – leaving untouched."
-      REAL_BIN=""  # Skip symlink creation
-   fi
-   
-   # Create new symlink if safe to do so
-   if [[ -n "$REAL_BIN" ]]; then
-      ln -s "$REAL_BIN" "$SYMLINK_PATH"
-      msg "Symlinked whisper-cli to $SYMLINK_PATH"
-   fi
-fi
+# (whisper-cli symlink step moved earlier)
 
 # ──────────────────  9b. persist absolute paths in config.yaml  ──────────────
+spinner_start "Writing configuration"
 export LLAMA_SERVER_BIN
 if [[ -n "$WHISPER_BIN" ]]; then
   $PY - <<PY
@@ -820,38 +961,9 @@ PY
 else
   msg "Warning: No whisper-cli binary found – skipping config update."
 fi
+spinner_stop $?
 
 # ──────────────────  10. done  ───────────────────────────────────────────────––
-
-# ──────────────────  Report: what is already available  ─────────────────────
-echo ""
-msg "Idempotency report:"
-if [[ -d .venv ]]; then echo "  • venv: present (.venv)"; else echo "  • venv: will be created"; fi
-if command -v whisper-cli >/dev/null 2>&1; then echo "  • whisper-cli: present ($(command -v whisper-cli))"; else echo "  • whisper-cli: not found"; fi
-MODEL_BASE_REPORT="${XDG_DATA_HOME:-$HOME/.local/share}"
-MODEL_FILE_REPORT="$MODEL_BASE_REPORT/voxd/models/ggml-base.en.bin"
-if [[ -f "$MODEL_FILE_REPORT" ]]; then echo "  • whisper model: present ($MODEL_FILE_REPORT)"; else echo "  • whisper model: missing"; fi
-if [[ ${XDG_SESSION_TYPE:-} == wayland* ]]; then
-  if command -v ydotool >/dev/null 2>&1 && command -v ydotoold >/dev/null 2>&1; then
-    echo "  • ydotool: present (Wayland typing enabled)"
-  else
-    echo "  • ydotool: not fully configured (Wayland)"
-  fi
-else
-  echo "  • ydotool: not required (X11)"
-fi
-if command -v llama-server >/dev/null 2>&1; then echo "  • llama.cpp: present (llama-server)"; else echo "  • llama.cpp: not installed"; fi
-if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "voxd "; then echo "  • pipx 'voxd': installed"; else echo "  • pipx 'voxd': not installed"; fi
-
-msg "${GRN}Setup complete!${NC}"
-echo "Setup log (appended per run): $(pwd)/$LOG_FILE"
-# Wayland reminder for ydotool permissions
-if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && command -v ydotool >/dev/null; then
-  echo -e "${GRN}➡  IMPORTANT:${NC} Reboot your system once so 'ydotool' gains access to /dev/uinput."; read -n1 -r -p "Press any key to acknowledge…"
-fi
-echo "Activate venv:   source .venv/bin/activate"
-echo "Run GUI mode:    python -m voxd --mode gui"
-echo "---> see in README.md on easy use setup."
 
 # ──────────────────  5b. SELinux policy for whisper-cli  ────────────────────
 if [[ $SELINUX_ACTIVE ]]; then
@@ -875,9 +987,8 @@ if [[ $SELINUX_ACTIVE ]]; then
   echo "ℹ️  SELinux policy 'whisper_execmem' installed. If whisper-cli still throws execmem denials, consult README or run 'sudo setenforce 0' for a temporary test."
 fi
 
-# ────────────────── 10. optional pipx global install  ───────────────────────
+spinner_start "Setting up global 'voxd' command (pipx)"
 # Offer to install pipx (if missing) and register voxd command globally.
-
 if ! command -v pipx >/dev/null; then
   msg "pipx not detected – installing pipx for global 'voxd' command"
   case "$PM" in
@@ -913,7 +1024,41 @@ if command -v pipx >/dev/null; then
 else
   msg "pipx still not available – skipping global install"
 fi
+spinner_stop 0
 
+# ──────────────────  10b. install desktop launchers (auto, all modes) ────────
+spinner_start "Installing desktop launchers (gui, tray, flux)"
+_launch_rc=0
+timeout 60s install_voxd_launchers || _launch_rc=$?
+spinner_stop $_launch_rc
+
+# ──────────────────  Final Idempotency Report (console + log) ────────────────
+note "Idempotency report:"
+if [[ -d .venv ]]; then line="  • venv: present (.venv)"; else line="  • venv: will be created"; fi; printf "%s\n" "$line" >&3; printf "%s\n" "$line"
+if command -v whisper-cli >/dev/null 2>&1; then line="  • whisper-cli: present ($(command -v whisper-cli))"; else line="  • whisper-cli: not found"; fi; printf "%s\n" "$line" >&3; printf "%s\n" "$line"
+MODEL_BASE_REPORT="${XDG_DATA_HOME:-$HOME/.local/share}"; MODEL_FILE_REPORT="$MODEL_BASE_REPORT/voxd/models/ggml-base.en.bin"
+if [[ -f "$MODEL_FILE_REPORT" ]]; then line="  • whisper model: present ($MODEL_FILE_REPORT)"; else line="  • whisper model: missing"; fi; printf "%s\n" "$line" >&3; printf "%s\n" "$line"
+if [[ ${XDG_SESSION_TYPE:-} == wayland* ]]; then
+  if command -v ydotool >/dev/null 2>&1 && command -v ydotoold >/dev/null 2>&1; then line="  • ydotool: present (Wayland typing enabled)"; else line="  • ydotool: not fully configured (Wayland)"; fi
+else
+  line="  • ydotool: not required (X11)"
+fi
+printf "%s\n" "$line" >&3; printf "%s\n" "$line"
+if command -v llama-server >/dev/null 2>&1; then line="  • llama.cpp: present (llama-server)"; else line="  • llama.cpp: not installed"; fi; printf "%s\n" "$line" >&3; printf "%s\n" "$line"
+if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "voxd "; then line="  • pipx 'voxd': installed"; else line="  • pipx 'voxd': not installed"; fi; printf "%s\n" "$line" >&3; printf "%s\n" "$line"
+
+if [[ -f "$DESKTOP_GUI" && -f "$DESKTOP_TRAY" && -f "$DESKTOP_FLUX" ]]; then
+  note "Desktop launchers installed: VOXD (gui, tray, flux)"
+else
+  note "Desktop launchers installation was partial or skipped – see setup log"
+fi
+note "Setup complete. Log: $(pwd)/$LOG_FILE"
+note "Reboot required to finalize ydotool permissions."
+printf "\n${GRN}IMPORTANT:${NC} Please reboot your system to finalize ydotool permissions.\n" >&3
+printf "${YEL}Tip:${NC} Add a system hotkey to trigger recording:\n" >&3
+printf "  Command: voxd --trigger-record\n" >&3
+printf "  Where:   System Settings → Keyboard → Custom Shortcuts\n" >&3
+printf "  Example: Bind to Super+Z\n\n" >&3
 # ────────────────── 11. Hotkey Guidance (manual)  ───────────────────────────
 echo ""
 msg "Hotkey setup (manual):"
