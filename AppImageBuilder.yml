@@ -8,8 +8,8 @@ AppDir:
     name: VOXD
     icon: voxd
     version: ${APP_VERSION}
-    exec: usr/bin/voxd
-    exec_args: --gui
+    exec: usr/venv/bin/python
+    exec_args: -m voxd --gui
   apt:
     arch: amd64
     sources:
@@ -53,20 +53,13 @@ script:
     set -e
     python3 -m venv AppDir/usr/venv
     AppDir/usr/venv/bin/pip install --no-cache-dir --no-compile .
-    install -d AppDir/usr/bin
-    cat > AppDir/usr/bin/voxd <<'EOF'
-    #!/bin/sh
-    HERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/.."
-    exec "$HERE/venv/bin/python" -m voxd "$@"
-    EOF
-    chmod +x AppDir/usr/bin/voxd
   - install -Dm644 src/voxd/assets/voxd-5.png AppDir/usr/share/icons/hicolor/256x256/apps/voxd.png
   - |
     cat > AppDir/voxd.desktop <<EOF
     [Desktop Entry]
     Type=Application
     Name=VOXD
-    Exec=usr/bin/voxd --gui
+    Exec=usr/venv/bin/python -m voxd --gui
     Icon=voxd
     Categories=Utility;Audio;Qt;
     EOF
