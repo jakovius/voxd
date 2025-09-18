@@ -563,6 +563,99 @@ if [[ -f "$PTH_FILE" && ! -s "$PTH_FILE" ]]; then
 fi
 spinner_stop 0
 
+# ──────────────────  4b. prune PyQt6 runtime (idempotent)  ────────────────────
+prune_pyqt6() {
+  # Determine PyQt6 Qt6 directory via current venv python
+  local qt_dir plugins_dir lib_dir qml_dir
+  qt_dir="$($PY - <<'PY'
+import sys, pathlib
+try:
+    import PyQt6  # type: ignore
+    p = pathlib.Path(PyQt6.__file__).resolve().parent / "Qt6"
+    print(str(p))
+except Exception:
+    print("")
+PY
+)"
+  [[ -z "$qt_dir" || ! -d "$qt_dir" ]] && return 0
+
+  plugins_dir="$qt_dir/plugins"
+  lib_dir="$qt_dir/lib"
+  qml_dir="$qt_dir/qml"
+
+  # Remove QML tree (VOXD does not use QtQuick/QML)
+  rm -rf "$qml_dir" 2>/dev/null || true
+
+  # Remove unused plugin groups; keep platforms, themes, icon/image formats, tls,
+  # inputcontexts, wayland/xcb integrations, generic
+  if [[ -d "$plugins_dir" ]]; then
+    local d
+    for d in help multimedia networkinformation position printsupport \
+             qmllint qmlls renderplugins sceneparsers scxmldatamodel \
+             sensors sqldrivers texttospeech webview geometryloaders; do
+      rm -rf "$plugins_dir/$d" 2>/dev/null || true
+    done
+    # Trim platform backends we don't target
+    local so
+    for so in libqeglfs.so libqlinuxfb.so libqvkkhrdisplay.so libqvnc.so libqminimalegl.so; do
+      rm -f "$plugins_dir/platforms/$so" 2>/dev/null || true
+    done
+  fi
+
+  # Remove heavy, unused Qt libs
+  if [[ -d "$lib_dir" ]]; then
+    local f
+    # FFmpeg libs bundled by Qt Multimedia
+    for so in libavcodec.so.* libavformat.so.* libavutil.so.* libswresample.so.* libswscale.so.*; do
+      for f in "$lib_dir"/$so; do [[ -e "$f" ]] && rm -f "$f" 2>/dev/null || true; done
+    done
+    # Families we don't use
+    local patterns=(
+      'libQt6Multimedia*.so*'
+      'libQt6Pdf*.so*'
+      'libQt6RemoteObjects*.so*'
+      'libQt6Sensors*.so*'
+      'libQt6SerialPort*.so*'
+      'libQt6Positioning*.so*'
+      'libQt6WebChannel*.so*'
+      'libQt6WebSockets*.so*'
+      'libQt6SpatialAudio*.so*'
+      'libQt6Quick3D*.so*'
+      'libQt6QuickControls2*.so*'
+      'libQt6QuickDialogs2*.so*'
+      'libQt6QuickEffects*.so*'
+      'libQt6QuickLayouts*.so*'
+      'libQt6QuickParticles*.so*'
+      'libQt6QuickShapes*.so*'
+      'libQt6QuickTemplates2*.so*'
+      'libQt6QuickTest*.so*'
+      'libQt6QuickTimeline*.so*'
+      'libQt6QuickVectorImage*.so*'
+      'libQt6QuickWidgets*.so*'
+      'libQt6Quick*.so*'
+      'libQt6Qml*.so*'
+      'libQt6ShaderTools*.so*'
+      'libQt6Designer*.so*'
+      'libQt6Help*.so*'
+      'libQt6Nfc*.so*'
+      'libQt6Sql*.so*'
+      'libQt6Test*.so*'
+    )
+    local pat
+    for pat in "${patterns[@]}"; do
+      for f in "$lib_dir"/$pat; do [[ -e "$f" ]] && rm -f "$f" 2>/dev/null || true; done
+    done
+  fi
+}
+
+if [[ -z "${VOXD_SKIP_QT_PRUNE:-}" ]]; then
+  spinner_start "Pruning PyQt6 runtime (Qt6)"
+  prune_pyqt6 || true
+  spinner_stop 0
+else
+  msg "Skipping PyQt6 prune (VOXD_SKIP_QT_PRUNE set)"
+fi
+
 # ──────────────────  Prebuilt binaries config  ─────────────────────────────
 # Where prebuilts live (owner/repo with Releases containing tar.gz assets)
 # You can change these without editing code via env vars.
