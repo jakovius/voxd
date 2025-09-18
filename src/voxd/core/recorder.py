@@ -1,6 +1,7 @@
 import sounddevice as sd
 import numpy as np
 import wave
+import time
 from datetime import datetime
 from pathlib import Path
 import tempfile
@@ -126,11 +127,36 @@ class AudioRecorder:
 
         Returns an active sounddevice.InputStream.
         """
-        # Candidate sample rates: requested, device default, and common rates
-        candidates = []
-        # 1) requested
-        candidates.append(int(self.fs))
-        # 2) device default samplerate if available
+        # Pick an input device (prefer current default, else first with input channels)
+        def pick_input_device_index() -> int | None:
+            try:
+                default_dev = sd.default.device
+                in_index = default_dev[0] if isinstance(default_dev, (list, tuple)) else default_dev
+            except Exception:
+                in_index = None
+            try:
+                devices = sd.query_devices()
+            except Exception:
+                devices = []
+            # Validate default
+            if isinstance(in_index, int):
+                try:
+                    info = sd.query_devices(in_index, 'input')
+                    if isinstance(info, dict) and info.get('max_input_channels', 0) > 0:
+                        return in_index
+                except Exception:
+                    pass
+            # Otherwise choose first device with input channels
+            for idx, info in enumerate(devices):
+                try:
+                    if isinstance(info, dict) and info.get('max_input_channels', 0) > 0:
+                        return idx
+                except Exception:
+                    continue
+            return None
+
+        # Candidate sample rates: device default first, then requested, then common rates
+        candidates: list[int] = []
         try:
             default_sr = None
             # Prefer current default input device info
@@ -147,30 +173,38 @@ class AudioRecorder:
                     default_sr = int(sd.default.samplerate)
         except Exception:
             default_sr = None
-        if default_sr and default_sr not in candidates:
+        if default_sr:
             candidates.append(default_sr)
+        # 2) requested
+        if int(self.fs) not in candidates:
+            candidates.append(int(self.fs))
         # 3) Common rates
         for sr in (48000, 44100, 32000, 22050):
             if sr not in candidates:
                 candidates.append(sr)
 
         last_err: Exception | None = None
-        for sr in candidates:
-            try:
-                stream = sd.InputStream(
-                    samplerate=sr,
-                    channels=self.channels,
-                    callback=callback
-                )
-                # Update effective samplerate and dependent counters
-                if sr != self.fs:
-                    verbo(f"[recorder] Falling back to supported input sample rate {sr} Hz (was {self.fs} Hz)")
-                    self.fs = sr
-                    self._chunk_target_frames = self.chunk_seconds * self.fs
-                return stream
-            except Exception as e:
-                last_err = e
-                continue
+        for attempt in range(3):
+            device_index = pick_input_device_index()
+            for sr in candidates:
+                try:
+                    stream = sd.InputStream(
+                        device=device_index if device_index is not None else None,
+                        samplerate=sr,
+                        channels=self.channels,
+                        callback=callback
+                    )
+                    # Update effective samplerate and dependent counters
+                    if sr != self.fs:
+                        verbo(f"[recorder] Falling back to supported input sample rate {sr} Hz (was {self.fs} Hz)")
+                        self.fs = sr
+                        self._chunk_target_frames = self.chunk_seconds * self.fs
+                    return stream
+                except Exception as e:
+                    last_err = e
+                    continue
+            # Brief delay and retry device discovery if first pass failed (e.g., device hot-swap)
+            time.sleep(0.2)
         # If all attempts failed, raise the last error
         if last_err:
             raise last_err
