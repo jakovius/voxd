@@ -59,9 +59,9 @@ script:
     exec "$HERE/venv/bin/python" -m voxd "$@"
     EOF
     chmod +x AppDir/usr/bin/voxd
-  - install -Dm644 src/voxd/assets/voxd-5.png $APPDIR/usr/share/icons/hicolor/256x256/apps/voxd.png
+  - install -Dm644 src/voxd/assets/voxd-5.png AppDir/usr/share/icons/hicolor/256x256/apps/voxd.png
   - |
-    cat > $APPDIR/voxd.desktop <<EOF
+    cat > AppDir/voxd.desktop <<EOF
     [Desktop Entry]
     Type=Application
     Name=VOXD
