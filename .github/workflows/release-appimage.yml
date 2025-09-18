@@ -51,16 +51,19 @@ jobs:
       - name: Verify product output
         run: |
           set -e
-          ls -l *.AppImage
-          echo "APPIMAGE_PATH=$(ls -1 *.AppImage | head -n1)" >> $GITHUB_ENV
+          ls -l VOXD-*.AppImage || (echo "No VOXD AppImage produced" >&2; exit 1)
+          echo "APPIMAGE_PATH=$(ls -1 VOXD-*.AppImage | head -n1)" >> $GITHUB_ENV
+
+      - name: Remove builder binary from workspace
+        run: rm -f aib-x86_64.AppImage || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: VOXD-${{ env.APP_VERSION }}-x86_64
           path: |
-            *.AppImage
-            *.zsync
+            VOXD-*.AppImage
+            VOXD-*.zsync
           if-no-files-found: error
 
       - name: Create GitHub Release and upload assets
@@ -71,7 +74,7 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            *.AppImage
-            *.zsync
+            VOXD-*.AppImage
+            VOXD-*.zsync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
