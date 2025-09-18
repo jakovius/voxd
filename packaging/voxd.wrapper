@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APPDIR=/opt/voxd
+
+if [[ -x "$APPDIR/.venv/bin/python" ]]; then
+  PY="$APPDIR/.venv/bin/python"
+else
+  PY="$(command -v python3 || command -v python)"
+fi
+
+# First-run per-user setup if config missing
+CFG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/voxd/config.yaml"
+if [[ ! -f "$CFG_FILE" ]]; then
+  "$PY" -m voxd --setup || true
+fi
+
+exec "$PY" -m voxd "$@"
+
+

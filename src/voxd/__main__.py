@@ -123,6 +123,11 @@ def main():
     mode_group.add_argument("--flux", action="store_true", help="Launch VOXD VAD-triggered dictation mode")
     mode_group.add_argument("--flux-tuner", action="store_true", help="Launch Flux Tuner (GUI)")
     parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="Run per-user setup (models, ydotool user service, desktop launchers) and exit",
+    )
+    parser.add_argument(
         "--version",
         action="store_true",
         help="Print version and exit"
@@ -141,6 +146,15 @@ def main():
 
     if args.version:
         print(importlib.metadata.version("voxd"))
+        sys.exit(0)
+
+    if args.setup:
+        try:
+            from voxd.utils.setup_user import run_user_setup
+            run_user_setup()
+            print("[setup] Per-user setup complete.")
+        except Exception as e:
+            print(f"[setup] Per-user setup encountered issues: {e}")
         sys.exit(0)
 
     # Recognize CLI quick-action flags at top-level to implicitly enter CLI mode

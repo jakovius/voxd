@@ -1,0 +1,74 @@
+name: voxd
+arch: ${ARCH}
+version: ${VERSION}
+release: "1"
+section: utils
+priority: optional
+license: MIT
+maintainer: "VOXD Maintainers <you@example.com>"
+homepage: "https://github.com/jakovius/voxd"
+description: "VOXD - voice typing on Linux (CLI/GUI/Tray/Flux)"
+vendor: "VOXD"
+
+contents:
+  - src: ..
+    dst: /opt/voxd
+    exclude:
+      - .git
+      - .venv
+      - build
+      - dist
+      - whisper.cpp
+      - llama.cpp
+      - tests
+
+  - src: ./voxd.wrapper
+    dst: /usr/bin/voxd
+    file_info:
+      mode: 0755
+
+  - src: ./99-uinput.rules
+    dst: /etc/udev/rules.d/99-uinput.rules
+    file_info:
+      mode: 0644
+
+overrides:
+  deb:
+    depends:
+      - ffmpeg
+      - cmake
+      - curl
+      - xclip
+      - xsel
+      - wl-clipboard
+      - xdotool
+      - python3-venv
+      - libportaudio2
+  rpm:
+    depends:
+      - ffmpeg
+      - cmake
+      - curl
+      - xclip
+      - xsel
+      - wl-clipboard
+      - xdotool
+      - python3-virtualenv
+      - portaudio
+  archlinux:
+    depends:
+      - ffmpeg
+      - cmake
+      - curl
+      - xclip
+      - xsel
+      - wl-clipboard
+      - xdotool
+      - python-virtualenv
+      - portaudio
+
+scripts:
+  postinstall: ./postinstall.sh
+  postremove: ./postremove.sh
+
+
