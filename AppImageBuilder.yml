@@ -65,7 +65,7 @@ script:
     [Desktop Entry]
     Type=Application
     Name=VOXD
-    Exec=python3 -m voxd --gui
+    Exec=usr/bin/voxd --gui
     Icon=voxd
     Categories=Utility;Audio;Qt;
     EOF
