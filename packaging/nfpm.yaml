@@ -13,14 +13,16 @@ vendor: "VOXD"
 contents:
   - src: ..
     dst: /opt/voxd
-    exclude:
-      - .git
-      - .venv
-      - build
-      - dist
-      - whisper.cpp
-      - llama.cpp
-      - tests
+    type: dir
+    filters:
+      exclude:
+        - .git/**
+        - .venv/**
+        - build/**
+        - dist/**
+        - whisper.cpp/**
+        - llama.cpp/**
+        - tests/**
 
   - src: ./voxd.wrapper
     dst: /usr/bin/voxd
@@ -70,5 +72,4 @@ overrides:
 scripts:
   postinstall: ./postinstall.sh
   postremove: ./postremove.sh
-
 
