@@ -61,11 +61,8 @@ class AudioRecorder:
             else:
                 self.recording.append(indata.copy())
 
-        self.stream = sd.InputStream(
-            samplerate=self.fs,
-            channels=self.channels,
-            callback=callback
-        )
+        # Try opening stream at configured sample rate; fall back to device defaults
+        self.stream = self._open_stream_with_fallback(callback)
         self.stream.start()
 
     def stop_recording(self, preserve=False):
@@ -121,6 +118,62 @@ class AudioRecorder:
         self._chunk_wave.setsampwidth(2)
         self._chunk_wave.setframerate(self.fs)
         verbo(f"[recorder] Opened new chunk: {chunk_path}")
+
+    def _open_stream_with_fallback(self, callback):
+        """Open InputStream at self.fs, falling back to a supported rate if needed.
+
+        Returns an active sounddevice.InputStream.
+        """
+        # Candidate sample rates: requested, device default, and common rates
+        candidates = []
+        # 1) requested
+        candidates.append(int(self.fs))
+        # 2) device default samplerate if available
+        try:
+            default_sr = None
+            # Prefer current default input device info
+            dev = sd.default.device[0] if isinstance(sd.default.device, (list, tuple)) else sd.default.device
+            if dev is not None:
+                try:
+                    info = sd.query_devices(dev, 'input')
+                    default_sr = int(info.get('default_samplerate') or 0) or None
+                except Exception:
+                    default_sr = None
+            if not default_sr:
+                # Fallback to global default samplerate
+                if getattr(sd.default, 'samplerate', None):
+                    default_sr = int(sd.default.samplerate)
+        except Exception:
+            default_sr = None
+        if default_sr and default_sr not in candidates:
+            candidates.append(default_sr)
+        # 3) Common rates
+        for sr in (48000, 44100, 32000, 22050):
+            if sr not in candidates:
+                candidates.append(sr)
+
+        last_err: Exception | None = None
+        for sr in candidates:
+            try:
+                stream = sd.InputStream(
+                    samplerate=sr,
+                    channels=self.channels,
+                    callback=callback
+                )
+                # Update effective samplerate and dependent counters
+                if sr != self.fs:
+                    verbo(f"[recorder] Falling back to supported input sample rate {sr} Hz (was {self.fs} Hz)")
+                    self.fs = sr
+                    self._chunk_target_frames = self.chunk_seconds * self.fs
+                return stream
+            except Exception as e:
+                last_err = e
+                continue
+        # If all attempts failed, raise the last error
+        if last_err:
+            raise last_err
+        # Fallback safeguard
+        raise RuntimeError("Failed to open audio input stream: no supported sample rate found")
 
     def _stitch_chunks(self, output_path: Path):
         if not self._chunk_paths:
