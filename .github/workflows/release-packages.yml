@@ -22,10 +22,29 @@ jobs:
       fail-fast: false
       matrix:
         arch: [amd64, arm64]
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Derive version strings
+        id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          INPUT="$INPUT_VERSION"
+          if [[ "$INPUT" == v* ]]; then
+            VERSION="${INPUT#v}"
+            TAG="$INPUT"
+          else
+            VERSION="$INPUT"
+            TAG="v$INPUT"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Setup Go (for nfpm)
         uses: actions/setup-go@v5
@@ -42,7 +61,7 @@ jobs:
 
       - name: Build packages
         env:
-          VERSION: ${{ startsWith(github.event.inputs.version, 'v') && slice(github.event.inputs.version, 1, 100) || github.event.inputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
           ARCH: ${{ matrix.arch }}
         run: |
           nfpm pkg --packager deb       -f packaging/nfpm.yaml --target dist/
@@ -52,7 +71,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: voxd-${{ startsWith(github.event.inputs.version, 'v') && slice(github.event.inputs.version, 1, 100) || github.event.inputs.version }}-${{ matrix.arch }}
+          name: voxd-${{ steps.version.outputs.version }}-${{ matrix.arch }}
           path: dist/*
 
   release:
@@ -71,11 +90,10 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.event.inputs.version, 'v') && github.event.inputs.version || format('v{0}', github.event.inputs.version) }}
-          name: VOXD ${{ startsWith(github.event.inputs.version, 'v') && github.event.inputs.version || format('v{0}', github.event.inputs.version) }}
+          tag_name: ${{ needs.build.outputs.tag }}
+          name: VOXD ${{ needs.build.outputs.tag }}
           prerelease: ${{ github.event.inputs.prerelease }}
           files: |
             dist/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
