@@ -793,7 +793,7 @@ spinner_stop $?
 # ──────────────────  8. llama.cpp (prefer prebuilt)  ─────────────
 
 # Model download helper with verification
-download_qwen_model() {
+download_default_llamacpp_model() {
     local model_dir="$1"
     local model_file="$model_dir/qwen2.5-3b-instruct-q4_k_m.gguf"
     local download_url="https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf?download=true"
@@ -905,7 +905,7 @@ spinner_stop 0
 spinner_start "Ensuring Qwen 2.5 3B-Instruct model"
 LLAMACPP_MODELS_DIR="$HOME/.local/share/voxd/llamacpp_models"
 if [[ ! -f "$LLAMACPP_MODELS_DIR/qwen2.5-3b-instruct-q4_k_m.gguf" ]]; then
-  download_qwen_model "$LLAMACPP_MODELS_DIR" || true
+  download_default_llamacpp_model "$LLAMACPP_MODELS_DIR" || true
 fi
 spinner_stop 0
 
