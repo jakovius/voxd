@@ -9,7 +9,6 @@ maintainer: "VOXD Maintainers <you@example.com>"
 homepage: "https://github.com/jakovius/voxd"
 description: "VOXD - voice typing on Linux (CLI/GUI/Tray/Flux)"
 vendor: "VOXD"
-file_name_template: "{{ .Name }}-{{ .Version }}-{{ .Arch }}"
 
 contents:
   # Only ship the runtime sources under /opt/voxd/src (paths relative to repo root)
