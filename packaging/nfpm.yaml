@@ -11,16 +11,9 @@ description: "VOXD - voice typing on Linux (CLI/GUI/Tray/Flux)"
 vendor: "VOXD"
 
 contents:
-  - src: ..
-    dst: /opt/voxd
-    exclude:
-      - .git
-      - .venv
-      - build
-      - dist
-      - whisper.cpp
-      - llama.cpp
-      - tests
+  # Only ship the runtime sources under /opt/voxd/src
+  - src: ../src
+    dst: /opt/voxd/src
 
   - src: ./voxd.wrapper
     dst: /usr/bin/voxd
