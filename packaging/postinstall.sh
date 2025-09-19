@@ -21,4 +21,21 @@ fi
 
 echo "voxd installed. Each user should run: voxd --setup"
 
+# Create a local virtualenv to ensure missing Python deps (e.g., sounddevice) are available
+# We inherit system site-packages to avoid duplicating distro Python libs
+APPDIR="/opt/voxd"
+PY="$(command -v python3 || command -v python || true)"
+if [ -n "$PY" ]; then
+  if [ ! -x "$APPDIR/.venv/bin/python" ]; then
+    "$PY" -m venv --system-site-packages "$APPDIR/.venv" >/dev/null 2>&1 || true
+  fi
+  if [ -x "$APPDIR/.venv/bin/python" ]; then
+    VPY="$APPDIR/.venv/bin/python"
+    # Upgrade pip quietly; then install minimal extras that may be missing from repos
+    "$VPY" -m pip install --upgrade --disable-pip-version-check pip >/dev/null 2>&1 || true
+    "$VPY" -m pip install --disable-pip-version-check --no-input \
+      sounddevice>=0.5 >/dev/null 2>&1 || true
+  fi
+fi
+
 
