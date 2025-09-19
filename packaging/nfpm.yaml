@@ -11,16 +11,16 @@ description: "VOXD - voice typing on Linux (CLI/GUI/Tray/Flux)"
 vendor: "VOXD"
 
 contents:
-  # Only ship the runtime sources under /opt/voxd/src
-  - src: ../src
+  # Only ship the runtime sources under /opt/voxd/src (paths relative to repo root)
+  - src: ./src
     dst: /opt/voxd/src
 
-  - src: ./voxd.wrapper
+  - src: packaging/voxd.wrapper
     dst: /usr/bin/voxd
     file_info:
       mode: 0755
 
-  - src: ./99-uinput.rules
+  - src: packaging/99-uinput.rules
     dst: /etc/udev/rules.d/99-uinput.rules
     file_info:
       mode: 0644
@@ -61,7 +61,7 @@ overrides:
       - portaudio
 
 scripts:
-  postinstall: ./postinstall.sh
-  postremove: ./postremove.sh
+  postinstall: packaging/postinstall.sh
+  postremove: packaging/postremove.sh
 
 
