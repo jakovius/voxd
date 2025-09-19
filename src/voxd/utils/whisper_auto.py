@@ -5,6 +5,8 @@ import shutil
 import subprocess
 import webbrowser
 from pathlib import Path
+import tarfile
+import tempfile
 from typing import Literal
 
 import importlib.resources as pkg
@@ -101,11 +103,137 @@ def ensure_whisper_cli(ui: Literal["cli", "gui"] = "cli") -> Path | None:
     ask = _ask_gui if ui == "gui" else _ask_cli
     info = _info_gui if ui == "gui" else _info_cli
 
+    # Helper: attempt to fetch a prebuilt whisper-cli into XDG data dir
+    def _fetch_prebuilt() -> Path | None:
+        try:
+            import requests  # type: ignore
+        except Exception:
+            return None
+
+        # Resolve arch/variant
+        def _detect_cpu_variant() -> tuple[str, str]:
+            m = (os.uname().machine or "").lower()
+            if m in ("x86_64", "amd64"):
+                # Prefer lscpu when available
+                try:
+                    out = subprocess.check_output(["lscpu"], text=True)
+                except Exception:
+                    out = ""
+                flags = out
+                if not flags:
+                    try:
+                        flags = Path("/proc/cpuinfo").read_text()
+                    except Exception:
+                        flags = ""
+                if "avx2" in flags:
+                    return ("amd64", "avx2")
+                if "sse4_2" in flags or "sse4.2" in flags:
+                    return ("amd64", "sse42")
+                # Fallback: no supported simd → return unknown
+                return ("amd64", "none")
+            if m in ("aarch64", "arm64"):
+                return ("arm64", "neon")
+            return (m, "none")
+
+        arch, variant = _detect_cpu_variant()
+        if arch == "amd64" and variant not in ("avx2", "sse42"):
+            return None
+        if arch not in ("amd64", "arm64"):
+            return None
+
+        bin_repo = os.environ.get("VOXD_BIN_REPO", "Jacob8472/voxd-prebuilts")
+        bin_tag = os.environ.get("VOXD_BIN_TAG", "")
+
+        if arch == "amd64":
+            base = f"whisper-cli_linux_{arch}_{variant}"
+        else:
+            base = f"whisper-cli_linux_{arch}"
+        asset = f"{base}.tar.gz"
+
+        if bin_tag:
+            api = f"https://api.github.com/repos/{bin_repo}/releases/tags/{bin_tag}"
+        else:
+            api = f"https://api.github.com/repos/{bin_repo}/releases/latest"
+
+        try:
+            r = requests.get(api, timeout=15)
+            r.raise_for_status()
+            url = None
+            for a in r.json().get("assets", []):
+                if a.get("name") == asset:
+                    url = a.get("browser_download_url")
+                    break
+            if not url:
+                return None
+        except Exception:
+            return None
+
+        # Download and extract
+        data_home = Path(os.getenv("XDG_DATA_HOME", str(Path.home() / ".local" / "share")))
+        out_dir = data_home / "voxd" / "bin"
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return None
+        tmpd = Path(tempfile.mkdtemp())
+        tar_path = tmpd / asset
+        try:
+            with requests.get(url, stream=True, timeout=60) as resp:  # type: ignore
+                resp.raise_for_status()
+                with open(tar_path, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=1024 * 512):
+                        if chunk:
+                            f.write(chunk)
+            with tarfile.open(tar_path, "r:gz") as tf:
+                tf.extractall(out_dir)
+            bin_path = out_dir / "whisper-cli"
+            try:
+                os.chmod(bin_path, 0o755)
+            except Exception:
+                pass
+            # Make discoverable in this process
+            os.environ["VOXD_WC_BIN"] = str(bin_path)
+            # Best-effort symlink to ~/.local/bin
+            try:
+                local_bin = Path.home() / ".local/bin"
+                local_bin.mkdir(parents=True, exist_ok=True)
+                link = local_bin / "whisper-cli"
+                if link.exists() or link.is_symlink():
+                    if link.is_symlink() or link.name == "whisper-cli":
+                        try:
+                            link.unlink()
+                        except Exception:
+                            pass
+                try:
+                    link.symlink_to(bin_path)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            return bin_path
+        except Exception:
+            return None
+        finally:
+            try:
+                for p in tmpd.glob("*"):
+                    try:
+                        p.unlink()
+                    except Exception:
+                        pass
+                tmpd.rmdir()
+            except Exception:
+                pass
+
     # 0. Fast path – binary already present ---------------------------------
     try:
         return whisper_cli()
     except FileNotFoundError:
         pass  # Need to build
+
+    # 0.5 Try to fetch a prebuilt binary (packaging-friendly) ----------------
+    pre = _fetch_prebuilt()
+    if pre and pre.exists():
+        return pre
 
     # 1. Check tool-chain dependencies -------------------------------------
     missing = _missing_tools()
