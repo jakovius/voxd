@@ -11,37 +11,23 @@ description: "VOXD - voice typing on Linux (CLI/GUI/Tray/Flux)"
 vendor: "VOXD"
 
 contents:
-  - src: src
-    dst: /opt/voxd/src
+  - src: ..
+    dst: /opt/voxd
+    exclude:
+      - .git
+      - .venv
+      - build
+      - dist
+      - whisper.cpp
+      - llama.cpp
+      - tests
 
-  - src: pyproject.toml
-    dst: /opt/voxd/pyproject.toml
-
-  - src: README.md
-    dst: /opt/voxd/README.md
-
-  - src: LICENSE
-    dst: /opt/voxd/LICENSE
-
-  - src: THIRD_PARTY_LICENSES
-    dst: /opt/voxd/THIRD_PARTY_LICENSES
-
-  - src: setup.sh
-    dst: /opt/voxd/setup.sh
-    file_info:
-      mode: 0755
-
-  - src: uninstall.sh
-    dst: /opt/voxd/uninstall.sh
-    file_info:
-      mode: 0755
-
-  - src: packaging/voxd.wrapper
+  - src: ./voxd.wrapper
     dst: /usr/bin/voxd
     file_info:
       mode: 0755
 
-  - src: packaging/99-uinput.rules
+  - src: ./99-uinput.rules
     dst: /etc/udev/rules.d/99-uinput.rules
     file_info:
       mode: 0644
@@ -82,5 +68,7 @@ overrides:
       - portaudio
 
 scripts:
-  postinstall: packaging/postinstall.sh
-  postremove: packaging/postremove.sh
+  postinstall: ./postinstall.sh
+  postremove: ./postremove.sh
+
+

@@ -11,9 +11,6 @@ on:
         required: false
         default: "false"
 
-permissions:
-  contents: write
-
 jobs:
   build:
     name: Build packages (${{ matrix.arch }})
@@ -22,29 +19,10 @@ jobs:
       fail-fast: false
       matrix:
         arch: [amd64, arm64]
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Derive version strings
-        id: version
-        env:
-          INPUT_VERSION: ${{ github.event.inputs.version }}
-        run: |
-          INPUT="$INPUT_VERSION"
-          if [[ "$INPUT" == v* ]]; then
-            VERSION="${INPUT#v}"
-            TAG="$INPUT"
-          else
-            VERSION="$INPUT"
-            TAG="v$INPUT"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Setup Go (for nfpm)
         uses: actions/setup-go@v5
@@ -61,7 +39,7 @@ jobs:
 
       - name: Build packages
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ github.event.inputs.version }}
           ARCH: ${{ matrix.arch }}
         run: |
           nfpm pkg --packager deb       -f packaging/nfpm.yaml --target dist/
@@ -71,15 +49,13 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: voxd-${{ steps.version.outputs.version }}-${{ matrix.arch }}
+          name: voxd-${{ github.event.inputs.version }}-${{ matrix.arch }}
           path: dist/*
 
   release:
     name: Create GitHub Release and upload assets
     runs-on: ubuntu-latest
     needs: build
-    permissions:
-      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -90,10 +66,12 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.build.outputs.tag }}
-          name: VOXD ${{ needs.build.outputs.tag }}
+          tag_name: v${{ github.event.inputs.version }}
+          name: VOXD v${{ github.event.inputs.version }}
           prerelease: ${{ github.event.inputs.prerelease }}
           files: |
             dist/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+

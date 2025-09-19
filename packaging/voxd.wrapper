@@ -9,6 +9,9 @@ else
   PY="$(command -v python3 || command -v python)"
 fi
 
+# Ensure Python can import the embedded source tree
+export PYTHONPATH="$APPDIR/src${PYTHONPATH:+:$PYTHONPATH}"
+
 # First-run per-user setup if config missing
 CFG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/voxd/config.yaml"
 if [[ ! -f "$CFG_FILE" ]]; then
