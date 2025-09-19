@@ -37,6 +37,7 @@ overrides:
       - xdotool
       - python3-venv
       - libportaudio2
+    file_name_template: "{{ .Name }}_{{ .Version }}_{{ .Arch }}"
   rpm:
     depends:
       - ffmpeg
@@ -48,6 +49,7 @@ overrides:
       - xdotool
       - python3-virtualenv
       - portaudio
+    file_name_template: "{{ .Name }}-{{ .Version }}.{{ .Arch }}"
   archlinux:
     depends:
       - ffmpeg
@@ -59,6 +61,7 @@ overrides:
       - xdotool
       - python-virtualenv
       - portaudio
+    file_name_template: "{{ .Name }}-{{ .Version }}-{{ .Arch }}"
 
 scripts:
   postinstall: packaging/postinstall.sh
