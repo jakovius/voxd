@@ -85,7 +85,6 @@ overrides:
       - python-tqdm
       - python-pyqt6
       - python-pyqtgraph
-      - python-sounddevice
 
 scripts:
   postinstall: packaging/postinstall.sh

@@ -12,6 +12,25 @@ fi
 # Ensure Python can import the embedded source tree
 export PYTHONPATH="$APPDIR/src${PYTHONPATH:+:$PYTHONPATH}"
 
+# Ensure critical Python deps on Arch where some are not packaged
+# Best-effort: install sounddevice to user site if missing
+need_sd="$($PY - <<'PY'
+try:
+    import importlib.util
+    print('0' if importlib.util.find_spec('sounddevice') else '1')
+except Exception:
+    print('1')
+PY
+)"
+if [[ "$need_sd" == "1" ]]; then
+  # Try pip install to user site; ignore failures
+  if ! "$PY" -m pip --version >/dev/null 2>&1; then
+    "$PY" -m ensurepip --upgrade >/dev/null 2>&1 || true
+  fi
+  "$PY" -m pip install --user --disable-pip-version-check --no-input \
+    --no-color "sounddevice>=0.5" >/dev/null 2>&1 || true
+fi
+
 # First-run per-user setup if config missing
 CFG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/voxd/config.yaml"
 if [[ ! -f "$CFG_FILE" ]]; then
