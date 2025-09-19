@@ -3,13 +3,19 @@ name: Release packages
 on:
   workflow_dispatch:
     inputs:
+      tag:
+        description: "Existing git tag to release (e.g., v1.4.1). If set, 'version' is ignored."
+        required: false
       version:
-        description: "SemVer version (e.g., 1.3.1)"
-        required: true
+        description: "SemVer version without 'v' (e.g., 1.3.1). Used if 'tag' is empty."
+        required: false
       prerelease:
         description: "Mark as prerelease"
         required: false
         default: "false"
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -23,6 +29,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Compute version/tag
+        id: meta
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          VER="${{ github.event.inputs.version }}"
+          if [[ -n "$TAG" ]]; then
+            CLEAN="${TAG#v}"
+            echo "version=$CLEAN" >> $GITHUB_OUTPUT
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+          else
+            CLEAN="${VER#v}"
+            if [[ -z "$CLEAN" ]]; then
+              echo "::error::Provide either 'tag' (e.g. v1.4.1) or 'version' (e.g. 1.4.1).";
+              exit 1
+            fi
+            echo "version=$CLEAN" >> $GITHUB_OUTPUT
+            echo "tag=v$CLEAN" >> $GITHUB_OUTPUT
+          fi
 
       - name: Setup Go (for nfpm)
         uses: actions/setup-go@v5
@@ -39,7 +65,7 @@ jobs:
 
       - name: Build packages
         env:
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ steps.meta.outputs.version }}
           ARCH: ${{ matrix.arch }}
         run: |
           nfpm pkg --packager deb       -f packaging/nfpm.yaml --target dist/
@@ -49,8 +75,12 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: voxd-${{ github.event.inputs.version }}-${{ matrix.arch }}
+          name: voxd-${{ steps.meta.outputs.version }}-${{ matrix.arch }}
           path: dist/*
+
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
 
   release:
     name: Create GitHub Release and upload assets
@@ -66,9 +96,9 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.event.inputs.version }}
-          name: VOXD v${{ github.event.inputs.version }}
-          prerelease: ${{ github.event.inputs.prerelease }}
+          tag_name: ${{ needs.build.outputs.tag }}
+          name: VOXD ${{ needs.build.outputs.tag }}
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
           files: |
             dist/**
         env:
