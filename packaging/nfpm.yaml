@@ -37,6 +37,15 @@ overrides:
       - xdotool
       - python3-venv
       - libportaudio2
+      - python3-numpy
+      - python3-requests
+      - python3-yaml
+      - python3-psutil
+      - python3-pyperclip
+      - python3-tqdm
+      - python3-pyqt6
+      - python3-pyqtgraph
+      - python3-sounddevice
     file_name_template: "{{ .Name }}_{{ .Version }}_{{ .Arch }}"
   rpm:
     depends:
@@ -49,6 +58,15 @@ overrides:
       - xdotool
       - python3-virtualenv
       - portaudio
+      - python3-numpy
+      - python3-requests
+      - python3-PyYAML
+      - python3-psutil
+      - python3-pyperclip
+      - python3-tqdm
+      - python3-qt6
+      - python3-pyqtgraph
+      - python3-sounddevice
     file_name_template: "{{ .Name }}-{{ .Version }}.{{ .Arch }}"
   archlinux:
     depends:
@@ -61,6 +79,15 @@ overrides:
       - xdotool
       - python-virtualenv
       - portaudio
+      - python-numpy
+      - python-requests
+      - python-yaml
+      - python-psutil
+      - python-pyperclip
+      - python-tqdm
+      - python-pyqt6
+      - python-pyqtgraph
+      - python-sounddevice
     file_name_template: "{{ .Name }}-{{ .Version }}-{{ .Arch }}"
 
 scripts:
