@@ -659,7 +659,7 @@ fi
 # ──────────────────  Prebuilt binaries config  ─────────────────────────────
 # Where prebuilts live (owner/repo with Releases containing tar.gz assets)
 # You can change these without editing code via env vars.
-VOXD_BIN_REPO="${VOXD_BIN_REPO:-Jacob8472/voxd-prebuilts}"
+VOXD_BIN_REPO="${VOXD_BIN_REPO:-jakovius/voxd-prebuilts}"
 VOXD_BIN_TAG="${VOXD_BIN_TAG:-}"
 VOXD_BIN_DIR="$HOME/.local/share/voxd/bin"
 mkdir -p "$VOXD_BIN_DIR"

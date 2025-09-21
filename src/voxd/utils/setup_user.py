@@ -224,7 +224,7 @@ def _ensure_llamacpp_server_prebuilt() -> str | None:
     else:
         base = f"llama-server_linux_{arch}"
     asset = base + ".tar.gz"
-    repo = os.environ.get("VOXD_BIN_REPO", "Jacob8472/voxd-prebuilts")
+    repo = os.environ.get("VOXD_BIN_REPO", "jakovius/voxd-prebuilts")
     tag = os.environ.get("VOXD_BIN_TAG", None)
     url = _gh_release_asset_url(repo, asset, tag)
     if not url:

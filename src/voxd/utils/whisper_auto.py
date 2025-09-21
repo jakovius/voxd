@@ -141,7 +141,7 @@ def ensure_whisper_cli(ui: Literal["cli", "gui"] = "cli") -> Path | None:
         if arch not in ("amd64", "arm64"):
             return None
 
-        bin_repo = os.environ.get("VOXD_BIN_REPO", "Jacob8472/voxd-prebuilts")
+        bin_repo = os.environ.get("VOXD_BIN_REPO", "jakovius/voxd-prebuilts")
         bin_tag = os.environ.get("VOXD_BIN_TAG", "")
 
         if arch == "amd64":
