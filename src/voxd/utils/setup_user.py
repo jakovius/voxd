@@ -19,56 +19,38 @@ def _ensure_dir(p: Path) -> None:
         pass
 
 
-class _Spinner:
-    """Minimal console spinner with start/stop, safe on non-TTY.
-
-    Usage:
-        with _Spinner("Ensuring llama-server"):
-            do_work()
-    """
-    def __init__(self, message: str):
-        self.message = message
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._is_tty = sys.stdout.isatty()
-
-    def _run(self):
-        frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        i = 0
-        # Initial line
-        print(f"{self.message} …", flush=True)
-        while not self._stop.is_set():
-            if self._is_tty:
-                sys.stdout.write("\r" + f"{self.message} {frames[i % len(frames)]}")
-                sys.stdout.flush()
-            time.sleep(0.1)
-            i += 1
-
-    def start(self):
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def stop(self, ok: bool = True):
-        self._stop.set()
-        if self._thread and self._thread.is_alive():
-            try:
-                self._thread.join(timeout=1)
-            except Exception:
-                pass
-        # Final line
-        sym = "✓" if ok else "✗"
-        # Ensure we move to a fresh line when TTY was used and clear residual frame
-        if self._is_tty:
-            sys.stdout.write("\r")
-            sys.stdout.flush()
-        print(f"{self.message} {sym}", flush=True)
-
-    def __enter__(self):
-        self.start()
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        self.stop(ok=exc is None)
+def _download_with_progress(url: str, dest: Path, label: str, timeout: int = 60) -> bool:
+    """Download URL to dest with a simple progress bar. Returns True on success."""
+    try:
+        import requests  # type: ignore
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        print(f"[setup] {label}: {dest}")
+        with requests.get(url, stream=True, timeout=timeout) as r:  # type: ignore
+            r.raise_for_status()
+            total = int(r.headers.get("Content-Length", 0))
+            downloaded = 0
+            chunk = 1024 * 1024
+            tmp = dest.with_suffix(dest.suffix + ".tmp")
+            with open(tmp, "wb") as f:
+                for part in r.iter_content(chunk_size=chunk):
+                    if part:
+                        f.write(part)
+                        downloaded += len(part)
+                        if total > 0 and sys.stdout.isatty():
+                            pct = downloaded * 100 // total
+                            bar_len = 30
+                            filled = int(bar_len * downloaded / total)
+                            bar = "#" * filled + "-" * (bar_len - filled)
+                            sys.stdout.write(f"\r[setup] downloading [{bar}] {pct}%")
+                            sys.stdout.flush()
+                if total > 0 and sys.stdout.isatty():
+                    sys.stdout.write("\n")
+            tmp.replace(dest)
+        print(f"[setup] {label}: done")
+        return True
+    except Exception as e:
+        print(f"[setup] {label}: failed ({e})")
+        return False
 
 
 def _download_default_model() -> None:
@@ -81,21 +63,14 @@ def _download_default_model() -> None:
         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
     )
     try:
-        from contextlib import contextmanager
-        import requests  # type: ignore
-
-        with _Spinner("Ensuring Whisper base model"):
-            with requests.get(url, stream=True, timeout=30) as r:  # type: ignore
-                r.raise_for_status()
-                tmp = model_file.with_suffix(".tmp")
-                with open(tmp, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=1024 * 1024):
-                        if chunk:
-                            f.write(chunk)
-                tmp.replace(model_file)
-    except Exception:
-        # Best-effort only; user can download later
-        print("[setup] Whisper model download skipped or failed (best-effort).", flush=True)
+        _download_with_progress(
+            url,
+            model_file,
+            label="Whisper base model",
+            timeout=60,
+        )
+    except Exception as e:
+        print(f"[setup] Whisper model download failed ({e}).", flush=True)
 
 
 def _ensure_input_group_membership() -> None:
@@ -291,17 +266,13 @@ def _ensure_llamacpp_server_prebuilt() -> str | None:
         import tarfile
         import tempfile
         import requests  # type: ignore
-        with _Spinner("Ensuring llama-server binary"):
-            with tempfile.TemporaryDirectory() as td:
-                tar_path = Path(td) / asset
-                with requests.get(url, stream=True, timeout=30) as r:  # type: ignore
-                    r.raise_for_status()
-                    with open(tar_path, "wb") as f:
-                        for chunk in r.iter_content(chunk_size=1024 * 1024):
-                            if chunk:
-                                f.write(chunk)
-                with tarfile.open(tar_path, "r:gz") as tf:
-                    tf.extractall(bin_dir)
+        print("[setup] Ensuring llama-server binary…", flush=True)
+        with tempfile.TemporaryDirectory() as td:
+            tar_path = Path(td) / asset
+            if not _download_with_progress(url, tar_path, label="llama-server archive", timeout=60):
+                return None
+            with tarfile.open(tar_path, "r:gz") as tf:
+                tf.extractall(bin_dir)
         try:
             dest.chmod(0o755)
         except Exception:
@@ -324,16 +295,8 @@ def _ensure_llamacpp_default_model() -> str | None:
         if model_file.exists():
             return str(model_file.resolve())
         url = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf?download=true"
-        import requests  # type: ignore
-        # Download without spinner here; caller may be background thread
-        with requests.get(url, stream=True, timeout=30) as r:  # type: ignore
-            r.raise_for_status()
-            tmp = model_file.with_suffix(".tmp")
-            with open(tmp, "wb") as f:
-                for chunk in r.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        f.write(chunk)
-            tmp.replace(model_file)
+        if not _download_with_progress(url, model_file, label="AIPP model (qwen2.5-3b-instruct)", timeout=300):
+            return None
         return str(model_file.resolve())
     except Exception:
         return None
@@ -346,16 +309,9 @@ def _setup_llamacpp_user_components() -> None:
     usable for transcription even if AIPP is not ready yet.
     """
     server_path = _ensure_llamacpp_server_prebuilt()
-    # Start model download in the background thread to not block first run
-    model_path_box: dict[str, str | None] = {"path": None}
-
-    def _bg_fetch_model():
-        print("[setup] AIPP model download started in background (qwen2.5-3b)…", flush=True)
-        model_path_box["path"] = _ensure_llamacpp_default_model()
-
-    t = threading.Thread(target=_bg_fetch_model, daemon=True)
-    t.start()
-    if not server_path and not t.is_alive():
+    # Download model synchronously so user sees progress and completes setup fully
+    model_path = _ensure_llamacpp_default_model()
+    if not server_path and not model_path:
         return
     try:
         cfg = AppConfig()
@@ -364,29 +320,12 @@ def _setup_llamacpp_user_components() -> None:
             cfg.data["llamacpp_server_path"] = server_path
             cfg.llamacpp_server_path = server_path  # attribute mirror
             updated = True
-        # If model already finished, save now; otherwise, save when it completes
-        if not t.is_alive():
-            mp = model_path_box["path"]
-            if mp:
-                cfg.data["llamacpp_default_model"] = mp
-                cfg.llamacpp_default_model = mp
-                updated = True
+        if model_path:
+            cfg.data["llamacpp_default_model"] = model_path
+            cfg.llamacpp_default_model = model_path
+            updated = True
         if updated:
             cfg.save()
-        # When background model download completes, persist its absolute path
-        def _finalize_when_ready():
-            t.join()
-            mp2 = model_path_box["path"]
-            if mp2:
-                try:
-                    cfg2 = AppConfig()
-                    cfg2.data["llamacpp_default_model"] = mp2
-                    cfg2.llamacpp_default_model = mp2
-                    cfg2.save()
-                    print("[setup] AIPP model ready.", flush=True)
-                except Exception:
-                    pass
-        threading.Thread(target=_finalize_when_ready, daemon=True).start()
     except Exception:
         pass
 
