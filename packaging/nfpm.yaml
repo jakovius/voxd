@@ -51,7 +51,7 @@ overrides:
       - python3-tqdm
       - python3-pyqt6
       - python3-pyqtgraph
-      - python3-sounddevice
+      # python3-sounddevice not available on all Ubuntu versions; install via venv in postinstall
   rpm:
     depends:
       - ffmpeg
@@ -72,7 +72,7 @@ overrides:
       - python3-tqdm
       - python3-qt6
       - python3-pyqtgraph
-      - python3-sounddevice
+      # sounddevice installed via venv in postinstall
   archlinux:
     depends:
       - ffmpeg

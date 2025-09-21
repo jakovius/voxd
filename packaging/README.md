@@ -31,9 +31,14 @@ ls -lh dist/
 
 Install (example)
 ```bash
-sudo dpkg -i dist/voxd_*_amd64.deb     # Debian/Ubuntu
-sudo rpm -i  dist/voxd-*x86_64.rpm     # Fedora/openSUSE
-sudo pacman -U dist/voxd-*-x86_64.pkg.tar.zst  # Arch
+# Prefer cross-distro helper (resolves dependencies)
+bash packaging/install_voxd.sh dist/voxd_*_amd64.deb
+
+# Or native commands:
+sudo apt install -y ./dist/voxd_*_amd64.deb     # Debian/Ubuntu (pulls deps)
+sudo dnf install -y dist/voxd-*x86_64.rpm       # Fedora
+sudo zypper --non-interactive install --force-resolution dist/voxd-*x86_64.rpm  # openSUSE
+sudo pacman -U dist/voxd-*-x86_64.pkg.tar.zst   # Arch
 ```
 
 Post-install
