@@ -57,9 +57,10 @@ class _Spinner:
                 pass
         # Final line
         sym = "✓" if ok else "✗"
-        # Ensure we move to a fresh line when TTY was used
+        # Ensure we move to a fresh line when TTY was used and clear residual frame
         if self._is_tty:
             sys.stdout.write("\r")
+            sys.stdout.flush()
         print(f"{self.message} {sym}", flush=True)
 
     def __enter__(self):
@@ -293,7 +294,7 @@ def _ensure_llamacpp_server_prebuilt() -> str | None:
         with _Spinner("Ensuring llama-server binary"):
             with tempfile.TemporaryDirectory() as td:
                 tar_path = Path(td) / asset
-                with requests.get(url, stream=True, timeout=60) as r:  # type: ignore
+                with requests.get(url, stream=True, timeout=30) as r:  # type: ignore
                     r.raise_for_status()
                     with open(tar_path, "wb") as f:
                         for chunk in r.iter_content(chunk_size=1024 * 1024):
@@ -324,15 +325,15 @@ def _ensure_llamacpp_default_model() -> str | None:
             return str(model_file.resolve())
         url = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf?download=true"
         import requests  # type: ignore
-        with _Spinner("Downloading AIPP model (qwen2.5-3b-instruct)"):
-            with requests.get(url, stream=True, timeout=60) as r:  # type: ignore
-                r.raise_for_status()
-                tmp = model_file.with_suffix(".tmp")
-                with open(tmp, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=1024 * 1024):
-                        if chunk:
-                            f.write(chunk)
-                tmp.replace(model_file)
+        # Download without spinner here; caller may be background thread
+        with requests.get(url, stream=True, timeout=30) as r:  # type: ignore
+            r.raise_for_status()
+            tmp = model_file.with_suffix(".tmp")
+            with open(tmp, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+            tmp.replace(model_file)
         return str(model_file.resolve())
     except Exception:
         return None
@@ -349,6 +350,7 @@ def _setup_llamacpp_user_components() -> None:
     model_path_box: dict[str, str | None] = {"path": None}
 
     def _bg_fetch_model():
+        print("[setup] AIPP model download started in background (qwen2.5-3b)…", flush=True)
         model_path_box["path"] = _ensure_llamacpp_default_model()
 
     t = threading.Thread(target=_bg_fetch_model, daemon=True)
