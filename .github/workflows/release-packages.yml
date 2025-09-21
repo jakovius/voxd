@@ -4,11 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing git tag to release (e.g., v1.4.1). If set, 'version' is ignored."
+        description: "Git tag to release (e.g., v1.4.1). Leave empty or set to 'latest' to use the latest v* tag."
         required: false
-      version:
-        description: "SemVer version without 'v' (e.g., 1.3.1). Used if 'tag' is empty."
-        required: false
+        default: "latest"
       prerelease:
         description: "Mark as prerelease"
         required: false
@@ -29,26 +27,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # fetch all history and tags so we can resolve 'latest'
 
       - name: Compute version/tag
         id: meta
         shell: bash
         run: |
-          TAG="${{ github.event.inputs.tag }}"
-          VER="${{ github.event.inputs.version }}"
-          if [[ -n "$TAG" ]]; then
-            CLEAN="${TAG#v}"
-            echo "version=$CLEAN" >> $GITHUB_OUTPUT
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
-          else
-            CLEAN="${VER#v}"
-            if [[ -z "$CLEAN" ]]; then
-              echo "::error::Provide either 'tag' (e.g. v1.4.1) or 'version' (e.g. 1.4.1).";
+          set -euo pipefail
+          INPUT_TAG="${{ github.event.inputs.tag }}"
+          if [[ -z "${INPUT_TAG}" || "${INPUT_TAG}" == "latest" ]]; then
+            # Find latest SemVer-ish tag starting with 'v'
+            TAG=$(git tag --list 'v*' | sort -V | tail -n1)
+            if [[ -z "$TAG" ]]; then
+              echo "::error::No tags found matching 'v*'. Push a tag like v1.4.1 or specify a tag manually.";
               exit 1
             fi
-            echo "version=$CLEAN" >> $GITHUB_OUTPUT
-            echo "tag=v$CLEAN" >> $GITHUB_OUTPUT
+          else
+            TAG="${INPUT_TAG}"
           fi
+          # Validate tag exists
+          if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag not found: $TAG";
+            git tag --list | sort -V | tail -n 20 | sed 's/^/hint: /'
+            exit 1
+          fi
+          CLEAN="${TAG#v}"
+          echo "version=$CLEAN" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Setup Go (for nfpm)
         uses: actions/setup-go@v5
