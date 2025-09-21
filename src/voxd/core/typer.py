@@ -57,6 +57,10 @@ class SimulatedTyper:
         self.tool = None
         self.enabled = self._detect_typing_tool()
         
+        # Ensure ydotool CLI uses the same user socket as our service
+        if self.enabled and self.tool and os.path.basename(self.tool) == "ydotool":
+            os.environ.setdefault("YDOTOOL_SOCKET", str(Path.home() / ".ydotool_socket"))
+        
         # Check daemon status for ydotool and attempt auto-start if needed
         if self.enabled and not self._check_ydotool_daemon():
             print("[typer] ⚠️ ydotool available but daemon not running - attempting auto-start...")
@@ -118,7 +122,22 @@ class SimulatedTyper:
         if not self.tool or "ydotool" not in os.path.basename(self.tool):
             return True
             
+        # Ensure consistent socket path for checks
+        os.environ.setdefault("YDOTOOL_SOCKET", str(Path.home() / ".ydotool_socket"))
+        sock = os.environ.get("YDOTOOL_SOCKET")
         try:
+            # Prefer a quick socket probe: if ydotool can talk, the daemon is usable
+            if sock and os.path.exists(sock):
+                try:
+                    cp = subprocess.run(
+                        ["ydotool", "sleep", "0"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2
+                    )
+                    if cp.returncode == 0:
+                        return True
+                except Exception:
+                    pass
+
             # Check if systemd service exists and is active
             result = subprocess.run(
                 ["systemctl", "--user", "is-active", "ydotoold.service"],
@@ -156,51 +175,49 @@ class SimulatedTyper:
                 capture_output=True, text=True, timeout=5
             )
             if result.returncode == 0:
-                time.sleep(1)  # Give it a moment to start
-                return self._check_ydotool_daemon()
+                # Poll for readiness (handles 'activating' race)
+                for _ in range(6):
+                    if self._check_ydotool_daemon():
+                        return True
+                    time.sleep(0.5)
             
             # If systemctl failed, try with sg input (for immediate group access)
             verbo("[typer] systemctl start failed, trying with sg input...")
             
-            # Check if sg command is available and user is in input group
+            # Check if sg command is available
             if not shutil.which("sg"):
                 verbo("[typer] sg command not available")
                 return False
                 
             # Get current user and socket path
             home_dir = os.path.expanduser("~")
-            socket_path = f"{home_dir}/.ydotool_socket"
+            socket_path = os.environ.get("YDOTOOL_SOCKET", f"{home_dir}/.ydotool_socket")
+            yd = shutil.which("ydotoold") or "ydotoold"
             uid = os.getuid()
             gid = os.getgid()
             
-            # Try to start with sg input - use & to background the daemon properly
-            cmd_str = f"ydotoold --socket-path='{socket_path}' --socket-own={uid}:{gid} &"
+            # Try to start with sg input - background the daemon properly
+            cmd_str = f"nohup {yd} --socket-path='{socket_path}' --socket-own={uid}:{gid} >/dev/null 2>&1 &"
             cmd = ["sg", "input", "-c", cmd_str]
             
             verbo(f"[typer] Starting ydotoold with command: {' '.join(cmd)}")
             
-            # Start daemon in background - expect timeout since daemon runs continuously
-            try:
-                result = subprocess.run(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    timeout=3  # Shorter timeout since we expect it to hang
-                )
-            except subprocess.TimeoutExpired:
-                # This is expected for a background daemon
-                verbo("[typer] ydotoold started in background (timeout expected)")
+            # Start daemon in background
+            subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=5
+            )
             
-            # Give daemon time to start
-            time.sleep(2)
-            
-            # Check if it's running
-            if self._check_ydotool_daemon():
-                verbo("[typer] ydotool daemon started with sg input")
-                return True
-            else:
-                verbo("[typer] ydotool daemon failed to start with sg input")
-                return False
+            # Poll for readiness
+            for _ in range(8):
+                if self._check_ydotool_daemon():
+                    verbo("[typer] ydotool daemon started with sg input")
+                    return True
+                time.sleep(0.5)
+            verbo("[typer] ydotool daemon failed to start with sg input")
+            return False
                 
         except Exception as e:
             verbo(f"[typer] Failed to auto-start ydotool daemon: {e}")

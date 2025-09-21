@@ -41,10 +41,37 @@ def _download_default_model() -> None:
         pass
 
 
+def _ensure_input_group_membership() -> None:
+    """Ensure the current user is in 'input' group (required for /dev/uinput)."""
+    try:
+        import grp, getpass
+        user = os.environ.get("USER") or getpass.getuser()
+        # Check membership
+        in_group = False
+        try:
+            grp_info = grp.getgrnam("input")
+            in_group = user in grp_info.gr_mem
+        except KeyError:
+            # Group may not exist on some systems
+            return
+        if not in_group:
+            # Try to add via sudo; ignore failures (user will be prompted)
+            subprocess.run(["sudo", "usermod", "-aG", "input", user], check=False)
+            try:
+                print("[setup] Added user to 'input' group (you must log out and back in to take effect).")
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def _setup_ydotool_user_service() -> None:
     yd = shutil.which("ydotoold")
     if not yd:
         return
+
+    # Ensure the user has permissions for /dev/uinput
+    _ensure_input_group_membership()
 
     user_systemd = Path.home() / ".config/systemd/user"
     _ensure_dir(user_systemd)
@@ -59,6 +86,7 @@ After=default.target
 [Service]
 ExecStart=%s --socket-path=%%h/.ydotool_socket --socket-own=%%U:%%G
 Restart=on-failure
+RestartSec=1s
 
 [Install]
 WantedBy=default.target
@@ -85,7 +113,27 @@ WantedBy=default.target
     try:
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
         subprocess.run(["systemctl", "--user", "enable", "ydotoold.service"], check=False)
-        subprocess.run(["systemctl", "--user", "start", "ydotoold.service"], check=False)
+        # Retry start and fallback to sg similar to setup.sh
+        started = False
+        for _ in range(3):
+            subprocess.run(["systemctl", "--user", "start", "ydotoold.service"], check=False)
+            # Give time to settle
+            try:
+                import time as _t
+                _t.sleep(1.0)
+            except Exception:
+                pass
+            r = subprocess.run(["systemctl", "--user", "is-active", "ydotoold.service"], check=False)
+            if r.returncode == 0:
+                started = True
+                break
+        if not started and shutil.which("sg"):
+            uid, gid = os.getuid(), os.getgid()
+            cmd = [
+                "sg", "input", "-c",
+                f"ydotoold --socket-path='$HOME/.ydotool_socket' --socket-own={uid}:{gid} &",
+            ]
+            subprocess.run(cmd, check=False)
     except Exception:
         pass
 

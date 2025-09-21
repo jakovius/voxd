@@ -10,6 +10,11 @@ if [ -f "/etc/udev/rules.d/99-uinput.rules" ]; then
   udevadm trigger || true
 fi
 
+# If installed via sudo, add that user to 'input' group for ydotool permissions
+if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+  usermod -aG input "$SUDO_USER" 2>/dev/null || true
+fi
+
 # Optional: load SELinux policy if shipped (rpm-based systems)
 if command -v getenforce >/dev/null 2>&1; then
   if [ "$(getenforce 2>/dev/null)" = "Enforcing" ]; then
