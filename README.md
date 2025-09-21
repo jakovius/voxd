@@ -225,7 +225,6 @@ llamacpp_server_timeout: 30
 # Selected models per provider (automatically updated by VOXD)
 aipp_selected_models:
   llamacpp_server: "qwen2.5-3b-instruct-q4_k_m"
-  llamacpp_direct: "qwen2.5-3b-instruct-q4_k_m"
 ```
 
 ---
@@ -248,7 +247,7 @@ export XAI_API_KEY="..."
 ```
 
 **Note:**  
-If an API key is missing, cloud-based AIPP providers will not work and you will see an error.
+If an API key is missing, the respective cloud-based AIPP provider will not work.
 
 ---
 

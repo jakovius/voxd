@@ -374,7 +374,8 @@ def main():
 
     # IPC server triggers the same as clicking the main button
     def on_ipc_trigger():
-        gui.on_button_clicked()
+        # Ensure GUI actions run on the main thread
+        QTimer.singleShot(0, gui.on_button_clicked)
 
     start_ipc_server(on_ipc_trigger)
 

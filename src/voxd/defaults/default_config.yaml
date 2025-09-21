@@ -1,4 +1,3 @@
-# app_mode: whisp
 log_enabled: true
 log_location: ''
 perf_collect: false
@@ -51,7 +50,7 @@ flux_noise_subtract_enabled: true
 
 # --- ✨ AIPP (AI post-processing) ------------------------------------------
 aipp_enabled: false
-aipp_provider: ollama
+aipp_provider: llamacpp_server
 aipp_active_prompt: default
 
 # List of models per provider
@@ -82,4 +81,4 @@ aipp_prompts:
   default: "Rewrite the following input so that it is clean and concise. Do not add any additional text or commentary. Just the rewritten text."
   prompt1: "Interpret the following text to the best of your ability as a C programming language code and output it as such. Do not add any additional text or commentary. Just the corresponding C code."
   prompt2: "Interpret the following text to the best of your ability as a Python programming language code and output it as such. Do not add any additional text or commentary. Just the corresponding Python code."
-  prompt3: "Rewrite the following text to appear as if Master Yoda from Star Wars is saying it."
+  prompt3: "Rewrite the following text as a three-verse poem."

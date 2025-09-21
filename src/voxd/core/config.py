@@ -69,7 +69,7 @@ DEFAULT_CONFIG = {
 
     # --- ✨ AIPP (AI post-processing) ------------------------------------------
     "aipp_enabled": False,
-    "aipp_provider": "ollama",           # ollama / openai / anthropic / xai / llamacpp_server
+    "aipp_provider": "llamacpp_server",           # ollama / openai / anthropic / xai / llamacpp_server
     "aipp_active_prompt": "default",
 
     # New: List of models per provider
@@ -103,7 +103,7 @@ DEFAULT_CONFIG = {
         "default": "Rewrite the following input so that it is clean and concise. Do not add any additional text or commentary. Just the rewritten text.",
         "prompt1": "Interpret the following text to the best of your ability as a C programming language code and output it as such. Do not add any additional text or commentary. Just the corresponding C code.",
         "prompt2": "Interpret the following text to the best of your ability as a Python programming language code and output it as such. Do not add any additional text or commentary. Just the corresponding Python code.",
-        "prompt3": "Rewrite the following text to appear as if Master Yoda from Star Wars is saying it.",
+        "prompt3": "Rewrite the following text as a three-verse poem.",
     }
 }
 
