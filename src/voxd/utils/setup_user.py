@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 from voxd.core.config import AppConfig, CONFIG_PATH
-from voxd.paths import DATA_DIR
+from voxd.paths import DATA_DIR, LLAMACPP_MODELS_DIR
 
 
 def _ensure_dir(p: Path) -> None:
@@ -138,6 +138,171 @@ WantedBy=default.target
         pass
 
 
+def _detect_cpu_variant() -> tuple[str, str]:
+    """Return (arch, variant) for prebuilt selection.
+    arch: amd64|arm64; variant: avx2|sse42|neon|none
+    """
+    try:
+        import platform
+        machine = platform.machine().lower()
+    except Exception:
+        machine = ""
+    arch = ""; variant = "none"
+    if machine in ("x86_64", "amd64"):
+        arch = "amd64"
+        # Try lscpu first
+        try:
+            out = subprocess.run(["lscpu"], capture_output=True, text=True, timeout=2)
+            txt = (out.stdout or "") + (out.stderr or "")
+        except Exception:
+            try:
+                txt = (Path("/proc/cpuinfo").read_text())
+            except Exception:
+                txt = ""
+        t = txt.lower()
+        if "avx2" in t:
+            variant = "avx2"
+        elif "sse4_2" in t or "sse4.2" in t:
+            variant = "sse42"
+        else:
+            variant = "none"
+    elif machine in ("aarch64", "arm64"):
+        arch = "arm64"
+        variant = "neon"
+    else:
+        arch = machine or "unknown"
+        variant = "none"
+    return arch, variant
+
+
+def _gh_release_asset_url(repo: str, asset_name: str, tag: str | None = None) -> str:
+    api = f"https://api.github.com/repos/{repo}/releases/{'tags/' + tag if tag else 'latest'}"
+    try:
+        import requests  # type: ignore
+        r = requests.get(api, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        assets = data.get("assets", [])
+        for a in assets:
+            if a.get("name") == asset_name and a.get("browser_download_url"):
+                return a["browser_download_url"]
+    except Exception:
+        pass
+    return ""
+
+
+def _ensure_llamacpp_server_prebuilt() -> str | None:
+    """Ensure llama-server exists, trying PATH then prebuilt download.
+    Returns absolute path to llama-server or None on failure.
+    """
+    which = shutil.which("llama-server")
+    if which:
+        try:
+            return str(Path(which).resolve())
+        except Exception:
+            return which
+
+    # Try prebuilt download into ~/.local/share/voxd/bin
+    bin_dir = Path.home() / ".local/share/voxd/bin"
+    try:
+        bin_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    dest = bin_dir / "llama-server"
+    if dest.exists():
+        return str(dest.resolve())
+
+    arch, variant = _detect_cpu_variant()
+    if arch not in ("amd64", "arm64"):
+        return None
+    if arch == "amd64" and variant not in ("avx2", "sse42"):
+        # No compatible x86 feature → skip prebuilts
+        return None
+
+    if arch == "amd64":
+        base = f"llama-server_linux_{arch}_{variant}"
+    else:
+        base = f"llama-server_linux_{arch}"
+    asset = base + ".tar.gz"
+    repo = os.environ.get("VOXD_BIN_REPO", "Jacob8472/voxd-prebuilts")
+    tag = os.environ.get("VOXD_BIN_TAG", None)
+    url = _gh_release_asset_url(repo, asset, tag)
+    if not url:
+        return None
+
+    try:
+        import tarfile
+        import tempfile
+        import requests  # type: ignore
+        with tempfile.TemporaryDirectory() as td:
+            tar_path = Path(td) / asset
+            with requests.get(url, stream=True, timeout=60) as r:  # type: ignore
+                r.raise_for_status()
+                with open(tar_path, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
+            with tarfile.open(tar_path, "r:gz") as tf:
+                tf.extractall(bin_dir)
+        try:
+            dest.chmod(0o755)
+        except Exception:
+            pass
+        if dest.exists():
+            return str(dest.resolve())
+    except Exception:
+        return None
+    return None
+
+
+def _ensure_llamacpp_default_model() -> str | None:
+    """Ensure the default llama.cpp model is available.
+    Returns absolute path or None on failure.
+    """
+    try:
+        model_dir = LLAMACPP_MODELS_DIR
+        model_dir.mkdir(parents=True, exist_ok=True)
+        model_file = model_dir / "qwen2.5-3b-instruct-q4_k_m.gguf"
+        if model_file.exists():
+            return str(model_file.resolve())
+        url = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf?download=true"
+        import requests  # type: ignore
+        with requests.get(url, stream=True, timeout=60) as r:  # type: ignore
+            r.raise_for_status()
+            tmp = model_file.with_suffix(".tmp")
+            with open(tmp, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+            tmp.replace(model_file)
+        return str(model_file.resolve())
+    except Exception:
+        return None
+
+
+def _setup_llamacpp_user_components() -> None:
+    """Ensure llama-server binary and default model exist and write absolute paths to config."""
+    server_path = _ensure_llamacpp_server_prebuilt()
+    model_path = _ensure_llamacpp_default_model()
+    if not server_path and not model_path:
+        return
+    try:
+        cfg = AppConfig()
+        updated = False
+        if server_path:
+            cfg.data["llamacpp_server_path"] = server_path
+            cfg.llamacpp_server_path = server_path  # attribute mirror
+            updated = True
+        if model_path:
+            cfg.data["llamacpp_default_model"] = model_path
+            cfg.llamacpp_default_model = model_path
+            updated = True
+        if updated:
+            cfg.save()
+    except Exception:
+        pass
+
+
 def _install_desktop_launchers() -> None:
     # Copy icon
     try:
@@ -201,6 +366,12 @@ def run_user_setup() -> None:
     # Ensure whisper paths are resolved (AppConfig does this on save)
     try:
         cfg.save()
+    except Exception:
+        pass
+
+    # Ensure llama.cpp server and model (best-effort, packaged installs)
+    try:
+        _setup_llamacpp_user_components()
     except Exception:
         pass
 

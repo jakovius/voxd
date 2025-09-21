@@ -332,21 +332,26 @@ def resolve_model_path(path_hint: str) -> Path:
         return p.resolve()
 
 def resolve_llamacpp_server(path_hint: str) -> Path:
-    """Resolve llama-server given a user hint (absolute/relative)."""
+    """Resolve llama-server given a user hint.
+
+    Only accept absolute existing paths or fall back to standard resolvers;
+    avoid resolving relative hints against the current working directory.
+    """
     p = Path(path_hint)
     if p.is_absolute() and p.exists():
         return p
-    try:
-        return _locate_llama_server()
-    except FileNotFoundError:
-        return p.resolve()
+    # Try environment, repo-local, PATH
+    located = _locate_llama_server()
+    return located
 
 def resolve_llamacpp_model(path_hint: str) -> Path:
-    """Resolve llama.cpp model file given a user hint (absolute/relative)."""
+    """Resolve llama.cpp model file given a user hint.
+
+    Only accept absolute existing paths or fall back to canonical locations;
+    avoid resolving relative hints against the current working directory.
+    """
     p = Path(path_hint)
     if p.is_absolute() and p.exists():
         return p
-    try:
-        return _locate_default_llamacpp_model()
-    except FileNotFoundError:
-        return p.resolve()
+    # Try env override and canonical XDG/repo locations
+    return _locate_default_llamacpp_model()
