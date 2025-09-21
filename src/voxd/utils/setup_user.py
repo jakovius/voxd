@@ -4,6 +4,9 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+import sys
+import threading
+import time
 
 from voxd.core.config import AppConfig, CONFIG_PATH
 from voxd.paths import DATA_DIR, LLAMACPP_MODELS_DIR
@@ -16,6 +19,57 @@ def _ensure_dir(p: Path) -> None:
         pass
 
 
+class _Spinner:
+    """Minimal console spinner with start/stop, safe on non-TTY.
+
+    Usage:
+        with _Spinner("Ensuring llama-server"):
+            do_work()
+    """
+    def __init__(self, message: str):
+        self.message = message
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._is_tty = sys.stdout.isatty()
+
+    def _run(self):
+        frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        i = 0
+        # Initial line
+        print(f"{self.message} …", flush=True)
+        while not self._stop.is_set():
+            if self._is_tty:
+                sys.stdout.write("\r" + f"{self.message} {frames[i % len(frames)]}")
+                sys.stdout.flush()
+            time.sleep(0.1)
+            i += 1
+
+    def start(self):
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self, ok: bool = True):
+        self._stop.set()
+        if self._thread and self._thread.is_alive():
+            try:
+                self._thread.join(timeout=1)
+            except Exception:
+                pass
+        # Final line
+        sym = "✓" if ok else "✗"
+        # Ensure we move to a fresh line when TTY was used
+        if self._is_tty:
+            sys.stdout.write("\r")
+        print(f"{self.message} {sym}", flush=True)
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.stop(ok=exc is None)
+
+
 def _download_default_model() -> None:
     model_dir = DATA_DIR / "models"
     _ensure_dir(model_dir)
@@ -26,19 +80,21 @@ def _download_default_model() -> None:
         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
     )
     try:
+        from contextlib import contextmanager
         import requests  # type: ignore
 
-        with requests.get(url, stream=True, timeout=30) as r:  # type: ignore
-            r.raise_for_status()
-            tmp = model_file.with_suffix(".tmp")
-            with open(tmp, "wb") as f:
-                for chunk in r.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        f.write(chunk)
-            tmp.replace(model_file)
+        with _Spinner("Ensuring Whisper base model"):
+            with requests.get(url, stream=True, timeout=30) as r:  # type: ignore
+                r.raise_for_status()
+                tmp = model_file.with_suffix(".tmp")
+                with open(tmp, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
+                tmp.replace(model_file)
     except Exception:
         # Best-effort only; user can download later
-        pass
+        print("[setup] Whisper model download skipped or failed (best-effort).", flush=True)
 
 
 def _ensure_input_group_membership() -> None:
@@ -234,16 +290,17 @@ def _ensure_llamacpp_server_prebuilt() -> str | None:
         import tarfile
         import tempfile
         import requests  # type: ignore
-        with tempfile.TemporaryDirectory() as td:
-            tar_path = Path(td) / asset
-            with requests.get(url, stream=True, timeout=60) as r:  # type: ignore
-                r.raise_for_status()
-                with open(tar_path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=1024 * 1024):
-                        if chunk:
-                            f.write(chunk)
-            with tarfile.open(tar_path, "r:gz") as tf:
-                tf.extractall(bin_dir)
+        with _Spinner("Ensuring llama-server binary"):
+            with tempfile.TemporaryDirectory() as td:
+                tar_path = Path(td) / asset
+                with requests.get(url, stream=True, timeout=60) as r:  # type: ignore
+                    r.raise_for_status()
+                    with open(tar_path, "wb") as f:
+                        for chunk in r.iter_content(chunk_size=1024 * 1024):
+                            if chunk:
+                                f.write(chunk)
+                with tarfile.open(tar_path, "r:gz") as tf:
+                    tf.extractall(bin_dir)
         try:
             dest.chmod(0o755)
         except Exception:
@@ -267,24 +324,36 @@ def _ensure_llamacpp_default_model() -> str | None:
             return str(model_file.resolve())
         url = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf?download=true"
         import requests  # type: ignore
-        with requests.get(url, stream=True, timeout=60) as r:  # type: ignore
-            r.raise_for_status()
-            tmp = model_file.with_suffix(".tmp")
-            with open(tmp, "wb") as f:
-                for chunk in r.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        f.write(chunk)
-            tmp.replace(model_file)
+        with _Spinner("Downloading AIPP model (qwen2.5-3b-instruct)"):
+            with requests.get(url, stream=True, timeout=60) as r:  # type: ignore
+                r.raise_for_status()
+                tmp = model_file.with_suffix(".tmp")
+                with open(tmp, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
+                tmp.replace(model_file)
         return str(model_file.resolve())
     except Exception:
         return None
 
 
 def _setup_llamacpp_user_components() -> None:
-    """Ensure llama-server binary and default model exist and write absolute paths to config."""
+    """Ensure llama-server binary and default model exist and write absolute paths to config.
+
+    UX: Download of the model can be lengthy; we show a spinner. The app remains
+    usable for transcription even if AIPP is not ready yet.
+    """
     server_path = _ensure_llamacpp_server_prebuilt()
-    model_path = _ensure_llamacpp_default_model()
-    if not server_path and not model_path:
+    # Start model download in the background thread to not block first run
+    model_path_box: dict[str, str | None] = {"path": None}
+
+    def _bg_fetch_model():
+        model_path_box["path"] = _ensure_llamacpp_default_model()
+
+    t = threading.Thread(target=_bg_fetch_model, daemon=True)
+    t.start()
+    if not server_path and not t.is_alive():
         return
     try:
         cfg = AppConfig()
@@ -293,12 +362,29 @@ def _setup_llamacpp_user_components() -> None:
             cfg.data["llamacpp_server_path"] = server_path
             cfg.llamacpp_server_path = server_path  # attribute mirror
             updated = True
-        if model_path:
-            cfg.data["llamacpp_default_model"] = model_path
-            cfg.llamacpp_default_model = model_path
-            updated = True
+        # If model already finished, save now; otherwise, save when it completes
+        if not t.is_alive():
+            mp = model_path_box["path"]
+            if mp:
+                cfg.data["llamacpp_default_model"] = mp
+                cfg.llamacpp_default_model = mp
+                updated = True
         if updated:
             cfg.save()
+        # When background model download completes, persist its absolute path
+        def _finalize_when_ready():
+            t.join()
+            mp2 = model_path_box["path"]
+            if mp2:
+                try:
+                    cfg2 = AppConfig()
+                    cfg2.data["llamacpp_default_model"] = mp2
+                    cfg2.llamacpp_default_model = mp2
+                    cfg2.save()
+                    print("[setup] AIPP model ready.", flush=True)
+                except Exception:
+                    pass
+        threading.Thread(target=_finalize_when_ready, daemon=True).start()
     except Exception:
         pass
 
