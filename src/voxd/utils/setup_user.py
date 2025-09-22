@@ -19,33 +19,42 @@ def _ensure_dir(p: Path) -> None:
         pass
 
 
-def _download_with_progress(url: str, dest: Path, label: str, timeout: int = 60) -> bool:
+def _download_with_progress(url: str, dest: Path, label: str, timeout: int = 60, retries: int = 3) -> bool:
     """Download URL to dest with a simple progress bar. Returns True on success."""
     try:
         import requests  # type: ignore
         dest.parent.mkdir(parents=True, exist_ok=True)
         print(f"[setup] {label}: {dest}")
-        with requests.get(url, stream=True, timeout=timeout) as r:  # type: ignore
-            r.raise_for_status()
-            total = int(r.headers.get("Content-Length", 0))
-            downloaded = 0
-            chunk = 1024 * 1024
-            tmp = dest.with_suffix(dest.suffix + ".tmp")
-            with open(tmp, "wb") as f:
-                for part in r.iter_content(chunk_size=chunk):
-                    if part:
-                        f.write(part)
-                        downloaded += len(part)
+        attempt = 0
+        while attempt < retries:
+            attempt += 1
+            try:
+                with requests.get(url, stream=True, timeout=timeout) as r:  # type: ignore
+                    r.raise_for_status()
+                    total = int(r.headers.get("Content-Length", 0))
+                    downloaded = 0
+                    chunk = 1024 * 1024
+                    tmp = dest.with_suffix(dest.suffix + ".tmp")
+                    with open(tmp, "wb") as f:
+                        for part in r.iter_content(chunk_size=chunk):
+                            if part:
+                                f.write(part)
+                                downloaded += len(part)
+                                if total > 0 and sys.stdout.isatty():
+                                    pct = downloaded * 100 // total
+                                    bar_len = 30
+                                    filled = int(bar_len * downloaded / total)
+                                    bar = "#" * filled + "-" * (bar_len - filled)
+                                    sys.stdout.write(f"\r[setup] downloading [{bar}] {pct}%")
+                                    sys.stdout.flush()
                         if total > 0 and sys.stdout.isatty():
-                            pct = downloaded * 100 // total
-                            bar_len = 30
-                            filled = int(bar_len * downloaded / total)
-                            bar = "#" * filled + "-" * (bar_len - filled)
-                            sys.stdout.write(f"\r[setup] downloading [{bar}] {pct}%")
-                            sys.stdout.flush()
-                if total > 0 and sys.stdout.isatty():
-                    sys.stdout.write("\n")
-            tmp.replace(dest)
+                            sys.stdout.write("\n")
+                    tmp.replace(dest)
+                break
+            except Exception as e:
+                if attempt >= retries:
+                    raise
+                print(f"[setup] {label}: retrying ({attempt}/{retries})…", flush=True)
         print(f"[setup] {label}: done")
         return True
     except Exception as e:
@@ -100,7 +109,12 @@ def _ensure_input_group_membership() -> None:
 def _setup_ydotool_user_service() -> None:
     yd = shutil.which("ydotoold")
     if not yd:
-        return
+        # Best-effort: fetch prebuilt ydotool/ydotoold into ~/.local/share/voxd/bin
+        yd = _ensure_ydotool_prebuilt() or ""
+        if not yd:
+            # Can't proceed without daemon
+            print("[setup] ydotoold not found. See project notes: https://github.com/ReimuNotMoe/ydotool", flush=True)
+            return
 
     # Ensure the user has permissions for /dev/uinput
     _ensure_input_group_membership()
@@ -161,13 +175,62 @@ WantedBy=default.target
                 break
         if not started and shutil.which("sg"):
             uid, gid = os.getuid(), os.getgid()
-            cmd = [
-                "sg", "input", "-c",
-                f"ydotoold --socket-path='$HOME/.ydotool_socket' --socket-own={uid}:{gid} &",
-            ]
+            # Use the resolved ydotoold path if we downloaded prebuilts
+            ydbin = shutil.which("ydotoold") or "ydotoold"
+            cmd = ["sg", "input", "-c", f"{ydbin} --socket-path='$HOME/.ydotool_socket' --socket-own={uid}:{gid} &"]
             subprocess.run(cmd, check=False)
+        if not started:
+            print("[setup] ydotoold may require a logout/login after joining 'input' group.", flush=True)
     except Exception:
         pass
+
+
+def _ensure_ydotool_prebuilt() -> str | None:
+    """Download ydotool/ydotoold prebuilt into ~/.local/share/voxd/bin if missing.
+    Returns path to ydotoold or None.
+    """
+    try:
+        which_d = shutil.which("ydotoold")
+        if which_d:
+            return which_d
+        bin_dir = Path.home() / ".local/share/voxd/bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        ydbin = bin_dir / "ydotoold"
+        ycbin = bin_dir / "ydotool"
+        if ydbin.exists() and os.access(ydbin, os.X_OK):
+            return str(ydbin)
+        # Determine asset name (no CPU feature variants)
+        import platform, tempfile, tarfile, requests  # type: ignore
+        arch = platform.machine().lower()
+        if arch in ("x86_64", "amd64"):
+            arch = "amd64"
+        elif arch in ("aarch64", "arm64"):
+            arch = "arm64"
+        else:
+            return None
+        base = f"ydotool_linux_{arch}"
+        asset = base + ".tar.gz"
+        repo = os.environ.get("VOXD_BIN_REPO", "jakovius/voxd-prebuilts")
+        tag = os.environ.get("VOXD_BIN_TAG", None)
+        url = _gh_release_asset_url(repo, asset, tag)
+        if not url:
+            return None
+        with tempfile.TemporaryDirectory() as td:
+            tar_path = Path(td) / asset
+            if not _download_with_progress(url, tar_path, label="ydotool archive", timeout=60):
+                return None
+            with tarfile.open(tar_path, "r:gz") as tf:
+                tf.extractall(bin_dir)
+        try:
+            ydbin.chmod(0o755)
+            ycbin.chmod(0o755)
+        except Exception:
+            pass
+        if ydbin.exists():
+            return str(ydbin)
+    except Exception:
+        return None
+    return None
 
 
 def _detect_cpu_variant() -> tuple[str, str]:

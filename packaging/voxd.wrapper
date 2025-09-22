@@ -6,6 +6,9 @@ APPDIR=/opt/voxd
 # Ensure ydotool picks up our user-scoped socket (matches our user service)
 export YDOTOOL_SOCKET="${YDOTOOL_SOCKET:-$HOME/.ydotool_socket}"
 
+# Ensure user-local bin is on PATH so ~/.local/bin tools are found
+export PATH="$HOME/.local/bin:$PATH"
+
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && command -v ydotool >/dev/null 2>&1; then
   # Opportunistically enable and start the user daemon (no-op if unavailable)
   systemctl --user is-active --quiet ydotoold.service || systemctl --user enable --now ydotoold.service || true

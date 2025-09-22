@@ -61,12 +61,39 @@ class AudioRecorder:
             else:
                 self.recording.append(indata.copy())
 
-        self.stream = sd.InputStream(
-            samplerate=self.fs,
-            channels=self.channels,
-            callback=callback
-        )
-        self.stream.start()
+        # Try preferred sample rate; if it fails, fall back to device default
+        try:
+            self.stream = sd.InputStream(
+                samplerate=self.fs,
+                channels=self.channels,
+                callback=callback
+            )
+            self.stream.start()
+        except Exception as e:
+            verr(f"[recorder] Opening stream at {self.fs} Hz failed ({e}); trying device default rate")
+            try:
+                dev = sd.default.device[0]
+            except Exception:
+                dev = None
+            try:
+                info = sd.query_devices(dev, 'input')
+                fallback_fs = int(info.get('default_samplerate') or 48000)
+            except Exception:
+                fallback_fs = 48000
+            self.fs = fallback_fs
+            self._chunk_target_frames = self.chunk_seconds * self.fs
+            if self.record_chunked and self._chunk_wave is not None:
+                try:
+                    self._chunk_wave.close()
+                except Exception:
+                    pass
+                self._open_new_chunk()
+            self.stream = sd.InputStream(
+                samplerate=self.fs,
+                channels=self.channels,
+                callback=callback
+            )
+            self.stream.start()
 
     def stop_recording(self, preserve=False):
         if not self.is_recording:
