@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# voxd-ydotoold: self-healing user service launcher for ydotoold
+# Ensures ydotoold binary availability (system or prebuilt), then execs it.
+
+SOCKET_PATH="${HOME}/.ydotool_socket"
+OWNER_UID="$(id -u)"
+OWNER_GID="$(id -g)"
+
+have_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+resolve_ydotoold() {
+  if have_cmd ydotoold; then
+    command -v ydotoold
+    return 0
+  fi
+  # Try VOXD-managed prebuilt
+  BIN_DIR="${HOME}/.local/share/voxd/bin"
+  mkdir -p "$BIN_DIR"
+  if [[ -x "$BIN_DIR/ydotoold" ]]; then
+    echo "$BIN_DIR/ydotoold"
+    return 0
+  fi
+  # Download prebuilt tarball matching arch
+  ARCH="$(uname -m | tr '[:upper:]' '[:lower:]')"
+  case "$ARCH" in
+    x86_64|amd64) ARCH=amd64 ;;
+    aarch64|arm64) ARCH=arm64 ;;
+    *) echo "Unsupported arch: $ARCH" >&2; return 1 ;;
+  esac
+  REPO="${VOXD_BIN_REPO:-jakovius/voxd-prebuilts}"
+  TAG="${VOXD_BIN_TAG:-}"
+  ASSET="ydotool_linux_${ARCH}.tar.gz"
+  if [[ -n "$TAG" ]]; then
+    API="https://api.github.com/repos/${REPO}/releases/tags/${TAG}"
+  else
+    API="https://api.github.com/repos/${REPO}/releases/latest"
+  fi
+  URL="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" | grep -oE "https://[^\"]*/${ASSET//./\\.}" | head -n1 || true)"
+  if [[ -z "$URL" ]]; then
+    echo "Failed to locate ydotool prebuilt asset for $ARCH" >&2
+    return 1
+  fi
+  TMPD="$(mktemp -d)"
+  trap 'rm -rf "$TMPD"' EXIT
+  curl -fsSL -o "$TMPD/$ASSET" "$URL"
+  tar -C "$BIN_DIR" -xzf "$TMPD/$ASSET"
+  if [[ -x "$BIN_DIR/ydotoold" ]]; then
+    chmod +x "$BIN_DIR/ydotoold" "$BIN_DIR/ydotool" 2>/dev/null || true
+    echo "$BIN_DIR/ydotoold"
+    return 0
+  fi
+  echo "Failed to install ydotoold prebuilt" >&2
+  return 1
+}
+
+YDBIN="$(resolve_ydotoold)" || {
+  echo "voxd-ydotoold: cannot resolve ydotoold" >&2
+  exit 1
+}
+
+# Exec daemon with desired socket path and ownership
+exec "$YDBIN" --socket-path="$SOCKET_PATH" --socket-own="$OWNER_UID:$OWNER_GID"
+

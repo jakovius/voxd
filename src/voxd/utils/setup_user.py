@@ -444,13 +444,32 @@ def _install_desktop_launchers() -> None:
         pass
 
 
-def run_user_setup() -> None:
+def run_user_setup(verbose: bool = False) -> None:
     # Create config if needed and load
     cfg = AppConfig()
     # Download default whisper model
     _download_default_model()
-    # ydotool user service (if ydotoold is installed)
+    # ydotool user service (ensure daemon exists and service is enabled)
+    if verbose:
+      try:
+        print("[setup:v] ydotool on PATH:", shutil.which("ydotool"))
+        print("[setup:v] ydotoold on PATH:", shutil.which("ydotoold"))
+        bin_dir = Path.home() / ".local/share/voxd/bin"
+        print("[setup:v] voxd-managed ydotoold:", (bin_dir / "ydotoold"))
+      except Exception:
+        pass
     _setup_ydotool_user_service()
+    if verbose:
+      try:
+        # Show unit resolution and status
+        print("[setup:v] systemd --user unit file:", str(Path.home() / ".config/systemd/user/ydotoold.service"))
+        subprocess.run(["systemctl", "--user", "status", "ydotoold.service"], check=False)
+        # Mini test: try a no-op command against the daemon using ydotool debug
+        if shutil.which("ydotool"):
+          print("[setup:v] ydotool debug (socket):")
+          subprocess.run(["ydotool", "debug"], check=False)
+      except Exception:
+        pass
     # Install desktop entries and icons
     _install_desktop_launchers()
     # Ensure whisper paths are resolved (AppConfig does this on save)
@@ -462,6 +481,12 @@ def run_user_setup() -> None:
     # Ensure llama.cpp server and model (best-effort, packaged installs)
     try:
         _setup_llamacpp_user_components()
+        if verbose:
+          try:
+            print("[setup:v] llamacpp_server_path:", cfg.data.get("llamacpp_server_path"))
+            print("[setup:v] llamacpp_default_model:", cfg.data.get("llamacpp_default_model"))
+          except Exception:
+            pass
     except Exception:
         pass
 

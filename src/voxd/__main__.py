@@ -128,6 +128,11 @@ def main():
         help="Run per-user setup (models, ydotool user service, desktop launchers) and exit",
     )
     parser.add_argument(
+        "--setup-verbose",
+        action="store_true",
+        help="Run per-user setup with detailed diagnostics and exit",
+    )
+    parser.add_argument(
         "--version",
         action="store_true",
         help="Print version and exit"
@@ -148,10 +153,10 @@ def main():
         print(importlib.metadata.version("voxd"))
         sys.exit(0)
 
-    if args.setup:
+    if args.setup or args.setup_verbose:
         try:
             from voxd.utils.setup_user import run_user_setup
-            run_user_setup()
+            run_user_setup(verbose=bool(args.setup_verbose))
             print("[setup] Per-user setup complete.")
         except Exception as e:
             print(f"[setup] Per-user setup encountered issues: {e}")
