@@ -22,7 +22,7 @@ resolve_ydotoold() {
     echo "$BIN_DIR/ydotoold"
     return 0
   fi
-  # Download prebuilt tarball matching arch
+  # Download prebuilt tarball(s) matching arch
   ARCH="$(uname -m | tr '[:upper:]' '[:lower:]')"
   case "$ARCH" in
     x86_64|amd64) ARCH=amd64 ;;
@@ -31,23 +31,37 @@ resolve_ydotoold() {
   esac
   REPO="${VOXD_BIN_REPO:-jakovius/voxd-prebuilts}"
   TAG="${VOXD_BIN_TAG:-}"
-  ASSET="ydotool_linux_${ARCH}.tar.gz"
+  ASSET_COMBINED="ydotool_linux_${ARCH}.tar.gz"
+  ASSET_D_ONLY="ydotoold_linux_${ARCH}.tar.gz"
+  ASSET_C_ONLY="ydotool_linux_${ARCH}.tar.gz"
   if [[ -n "$TAG" ]]; then
     API="https://api.github.com/repos/${REPO}/releases/tags/${TAG}"
   else
     API="https://api.github.com/repos/${REPO}/releases/latest"
   fi
-  URL="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" | grep -oE "https://[^\"]*/${ASSET//./\\.}" | head -n1 || true)"
-  if [[ -z "$URL" ]]; then
-    echo "Failed to locate ydotool prebuilt asset for $ARCH" >&2
-    return 1
-  fi
+  URL_COMBINED="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" | grep -oE "https://[^\"]*/${ASSET_COMBINED//./\\.}" | head -n1 || true)"
   TMPD="$(mktemp -d)"
   trap 'rm -rf "$TMPD"' EXIT
-  curl -fsSL -o "$TMPD/$ASSET" "$URL"
-  tar -C "$BIN_DIR" -xzf "$TMPD/$ASSET"
+  if [[ -n "$URL_COMBINED" ]]; then
+    curl -fsSL -o "$TMPD/$ASSET_COMBINED" "$URL_COMBINED"
+    tar -C "$BIN_DIR" -xzf "$TMPD/$ASSET_COMBINED"
+  else
+    URL_D="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" | grep -oE "https://[^\"]*/${ASSET_D_ONLY//./\\.}" | head -n1 || true)"
+    URL_C="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" | grep -oE "https://[^\"]*/${ASSET_C_ONLY//./\\.}" | head -n1 || true)"
+    if [[ -n "$URL_D" ]]; then
+      curl -fsSL -o "$TMPD/$ASSET_D_ONLY" "$URL_D"
+      tar -C "$BIN_DIR" -xzf "$TMPD/$ASSET_D_ONLY"
+    fi
+    if [[ -n "$URL_C" ]]; then
+      curl -fsSL -o "$TMPD/$ASSET_C_ONLY" "$URL_C"
+      tar -C "$BIN_DIR" -xzf "$TMPD/$ASSET_C_ONLY"
+    fi
+  fi
   if [[ -x "$BIN_DIR/ydotoold" ]]; then
     chmod +x "$BIN_DIR/ydotoold" "$BIN_DIR/ydotool" 2>/dev/null || true
+    # Ensure client is on PATH
+    mkdir -p "$HOME/.local/bin" 2>/dev/null || true
+    ln -sf "$BIN_DIR/ydotool" "$HOME/.local/bin/ydotool" 2>/dev/null || true
     echo "$BIN_DIR/ydotoold"
     return 0
   fi

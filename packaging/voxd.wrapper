@@ -30,8 +30,8 @@ if [[ ! -f "$CFG_FILE" ]]; then
   "$PY" -m voxd --setup || true
 fi
 
-# After setup, (Wayland) ensure ydotoold is enabled/started if available
-if [[ ${XDG_SESSION_TYPE:-} == wayland* ]] && command -v ydotool >/dev/null 2>&1; then
+# After setup, (Wayland) ensure ydotoold user service is enabled/started
+if [[ ${XDG_SESSION_TYPE:-} == wayland* ]]; then
   systemctl --user is-active --quiet ydotoold.service || systemctl --user enable --now ydotoold.service || true
 fi
 

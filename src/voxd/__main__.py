@@ -155,8 +155,10 @@ def main():
 
     if args.setup or args.setup_verbose:
         try:
+            if args.setup_verbose:
+                print("[setup] --setup-verbose is deprecated; --setup now prints detailed diagnostics by default.")
             from voxd.utils.setup_user import run_user_setup
-            run_user_setup(verbose=bool(args.setup_verbose))
+            run_user_setup(verbose=True)
             print("[setup] Per-user setup complete.")
         except Exception as e:
             print(f"[setup] Per-user setup encountered issues: {e}")
