@@ -31,7 +31,6 @@ resolve_ydotoold() {
   esac
   REPO="${VOXD_BIN_REPO:-jakovius/voxd-prebuilts}"
   TAG="${VOXD_BIN_TAG:-}"
-  ASSET_COMBINED="ydotool_linux_${ARCH}.tar.gz"
   ASSET_D_ONLY="ydotoold_linux_${ARCH}.tar.gz"
   ASSET_C_ONLY="ydotool_linux_${ARCH}.tar.gz"
   if [[ -n "$TAG" ]]; then
@@ -39,23 +38,19 @@ resolve_ydotoold() {
   else
     API="https://api.github.com/repos/${REPO}/releases/latest"
   fi
-  URL_COMBINED="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" | grep -oE "https://[^\"]*/${ASSET_COMBINED//./\\.}" | head -n1 || true)"
   TMPD="$(mktemp -d)"
   trap 'rm -rf "$TMPD"' EXIT
-  if [[ -n "$URL_COMBINED" ]]; then
-    curl -fsSL -o "$TMPD/$ASSET_COMBINED" "$URL_COMBINED"
-    tar -C "$BIN_DIR" -xzf "$TMPD/$ASSET_COMBINED"
-  else
-    URL_D="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" | grep -oE "https://[^\"]*/${ASSET_D_ONLY//./\\.}" | head -n1 || true)"
-    URL_C="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" | grep -oE "https://[^\"]*/${ASSET_C_ONLY//./\\.}" | head -n1 || true)"
-    if [[ -n "$URL_D" ]]; then
-      curl -fsSL -o "$TMPD/$ASSET_D_ONLY" "$URL_D"
-      tar -C "$BIN_DIR" -xzf "$TMPD/$ASSET_D_ONLY"
-    fi
-    if [[ -n "$URL_C" ]]; then
-      curl -fsSL -o "$TMPD/$ASSET_C_ONLY" "$URL_C"
-      tar -C "$BIN_DIR" -xzf "$TMPD/$ASSET_C_ONLY"
-    fi
+  # Always fetch daemon archive first (required)
+  URL_D="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" | grep -oE "https://[^\"]*/${ASSET_D_ONLY//./\\.}" | head -n1 || true)"
+  if [[ -n "$URL_D" ]]; then
+    curl -fsSL -o "$TMPD/$ASSET_D_ONLY" "$URL_D"
+    tar -C "$BIN_DIR" -xzf "$TMPD/$ASSET_D_ONLY"
+  fi
+  # Optionally fetch client archive (useful so CLI is available on PATH)
+  URL_C="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" | grep -oE "https://[^\"]*/${ASSET_C_ONLY//./\\.}" | head -n1 || true)"
+  if [[ -n "$URL_C" && ! -x "$BIN_DIR/ydotool" ]]; then
+    curl -fsSL -o "$TMPD/$ASSET_C_ONLY" "$URL_C"
+    tar -C "$BIN_DIR" -xzf "$TMPD/$ASSET_C_ONLY"
   fi
   if [[ -x "$BIN_DIR/ydotoold" ]]; then
     chmod +x "$BIN_DIR/ydotoold" "$BIN_DIR/ydotool" 2>/dev/null || true

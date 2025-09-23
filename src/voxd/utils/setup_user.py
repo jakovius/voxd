@@ -225,33 +225,24 @@ def _ensure_ydotool_prebuilt() -> str | None:
             arch = "arm64"
         else:
             return None
-        # Try combined archive first, then split daemon/client archives
-        combined = f"ydotool_linux_{arch}.tar.gz"
+        # Download daemon and client archives separately
         d_only = f"ydotoold_linux_{arch}.tar.gz"
         c_only = f"ydotool_linux_{arch}.tar.gz"
         repo = os.environ.get("VOXD_BIN_REPO", "jakovius/voxd-prebuilts")
         tag = os.environ.get("VOXD_BIN_TAG", None)
-        url_combined = _gh_release_asset_url(repo, combined, tag)
         with tempfile.TemporaryDirectory() as td:
-            if url_combined:
-                tar_path = Path(td) / combined
-                if not _download_with_progress(url_combined, tar_path, label="ydotool archive", timeout=60):
-                    return None
-                with tarfile.open(tar_path, "r:gz") as tf:
-                    tf.extractall(bin_dir)
-            else:
-                url_d = _gh_release_asset_url(repo, d_only, tag)
-                url_c = _gh_release_asset_url(repo, c_only, tag)
-                if url_d:
-                    tar_d = Path(td) / d_only
-                    if _download_with_progress(url_d, tar_d, label="ydotoold archive", timeout=60):
-                        with tarfile.open(tar_d, "r:gz") as tf:
-                            tf.extractall(bin_dir)
-                if url_c:
-                    tar_c = Path(td) / c_only
-                    if _download_with_progress(url_c, tar_c, label="ydotool archive", timeout=60):
-                        with tarfile.open(tar_c, "r:gz") as tf:
-                            tf.extractall(bin_dir)
+            url_d = _gh_release_asset_url(repo, d_only, tag)
+            url_c = _gh_release_asset_url(repo, c_only, tag)
+            if url_d:
+                tar_d = Path(td) / d_only
+                if _download_with_progress(url_d, tar_d, label="ydotoold archive", timeout=60):
+                    with tarfile.open(tar_d, "r:gz") as tf:
+                        tf.extractall(bin_dir)
+            if url_c:
+                tar_c = Path(td) / c_only
+                if _download_with_progress(url_c, tar_c, label="ydotool archive", timeout=60):
+                    with tarfile.open(tar_c, "r:gz") as tf:
+                        tf.extractall(bin_dir)
         try:
             ydbin.chmod(0o755)
             ycbin.chmod(0o755)
