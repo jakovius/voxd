@@ -99,8 +99,6 @@ overrides:
       - python-tqdm
       - python-pyqt6
       - python-pyqtgraph
-    optdepends:
-      - ydotool: Wayland typing support
 
 scripts:
   postinstall: packaging/postinstall.sh
