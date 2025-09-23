@@ -45,6 +45,7 @@ overrides:
       - xsel
       - wl-clipboard
       - xdotool
+      - python3-platformdirs
       - python3-venv
       - libportaudio2
       - python3-numpy
@@ -67,6 +68,7 @@ overrides:
       - xsel
       - wl-clipboard
       - xdotool
+      - python3-platformdirs
       - python3-virtualenv
       - portaudio
       - python3-numpy
@@ -89,6 +91,7 @@ overrides:
       - xsel
       - wl-clipboard
       - xdotool
+      - python-platformdirs
       - python-virtualenv
       - portaudio
       - python-numpy
