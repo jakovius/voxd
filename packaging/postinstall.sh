@@ -47,6 +47,20 @@ try:
 except Exception:
     raise SystemExit(1)
 PY
+    # Ensure PyQt6 (RPM/openSUSE may not provide python3-qt6)
+    "$VPY" - <<'PY' 2>/dev/null || "$VPY" -m pip install --disable-pip-version-check --no-input PyQt6 >/dev/null 2>&1 || true
+try:
+    import PyQt6  # type: ignore
+except Exception:
+    raise SystemExit(1)
+PY
+    # Ensure pyqtgraph (optional UI component used by Flux/Tuner)
+    "$VPY" - <<'PY' 2>/dev/null || "$VPY" -m pip install --disable-pip-version-check --no-input pyqtgraph >/dev/null 2>&1 || true
+try:
+    import pyqtgraph  # type: ignore
+except Exception:
+    raise SystemExit(1)
+PY
   fi
 fi
 

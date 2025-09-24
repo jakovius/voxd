@@ -61,7 +61,6 @@ overrides:
       - ydotool
   rpm:
     depends:
-      - ffmpeg
       - cmake
       - curl
       - xclip
@@ -77,11 +76,12 @@ overrides:
       - python3-psutil
       - python3-pyperclip
       - python3-tqdm
-      - python3-qt6
-      - python3-pyqtgraph
       # sounddevice installed via venv in postinstall
     suggests:
       - ydotool
+      - ffmpeg
+      - python3-qt6
+      - python3-pyqtgraph
   archlinux:
     depends:
       - ffmpeg

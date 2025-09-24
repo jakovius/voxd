@@ -57,6 +57,8 @@ resolve_ydotoold() {
     # Ensure client is on PATH
     mkdir -p "$HOME/.local/bin" 2>/dev/null || true
     ln -sf "$BIN_DIR/ydotool" "$HOME/.local/bin/ydotool" 2>/dev/null || true
+    # Optionally expose daemon on PATH as well for manual testing
+    ln -sf "$BIN_DIR/ydotoold" "$HOME/.local/bin/ydotoold" 2>/dev/null || true
     echo "$BIN_DIR/ydotoold"
     return 0
   fi

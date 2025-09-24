@@ -264,6 +264,19 @@ def _ensure_ydotool_prebuilt() -> str | None:
                     (local_bin / "ydotool").symlink_to(ycbin)
                 except Exception:
                     pass
+            # Optionally expose daemon on PATH for manual testing
+            if ydbin.exists():
+                try:
+                    (local_bin / "ydotoold").unlink(missing_ok=True)  # type: ignore[attr-defined]
+                except Exception:
+                    try:
+                        (local_bin / "ydotoold").unlink()
+                    except Exception:
+                        pass
+                try:
+                    (local_bin / "ydotoold").symlink_to(ydbin)
+                except Exception:
+                    pass
         except Exception:
             pass
         if ydbin.exists():
