@@ -15,6 +15,22 @@ else
   PY="$(command -v python3 || command -v python)"
 fi
 
+# Guard against too-old system Python (e.g., Leap 15.x ships 3.6)
+if [[ "$PY" != "$APPDIR/.venv/bin/python" ]]; then
+  ver="$($PY - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)"
+  case "$ver" in
+    3.9|3.10|3.11|3.12|3.13) : ;;
+    *)
+      echo "[voxd] System Python $ver is unsupported. Please reinstall using 'bash packaging/install_voxd.sh <rpm>' to provision a newer Python, or create a venv at $APPDIR/.venv." >&2
+      exit 1
+      ;;
+  esac
+fi
+
 # Ensure Python can import the embedded source tree
 export PYTHONPATH="$APPDIR/src${PYTHONPATH:+:$PYTHONPATH}"
 

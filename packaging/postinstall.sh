@@ -29,7 +29,37 @@ echo "voxd installed. Each user should run: voxd --setup"
 # Create a local virtualenv to ensure missing Python deps (e.g., sounddevice) are available
 # We inherit system site-packages to avoid duplicating distro Python libs
 APPDIR="/opt/voxd"
-PY="$(command -v python3 || command -v python || true)"
+
+# Pick a Python >= 3.9 if available; attempt RPM install on openSUSE if too old
+pick_python() {
+  for c in python3.12 python3.11 python3.10 python3.9 python3 python; do
+    if command -v "$c" >/dev/null 2>&1; then
+      ver="$($c - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)"
+      case "$ver" in
+        3.9|3.10|3.11|3.12|3.13) echo "$c"; return 0 ;;
+        *) ;; 
+      esac
+    fi
+  done
+  echo ""
+}
+
+PY="$(pick_python)"
+
+# If no suitable python found, on zypper try to install a newer one
+if [ -z "$PY" ] && command -v zypper >/dev/null 2>&1; then
+  for pkg in python311 python3.11 python310 python3.10 python39 python3.9; do
+    if sudo zypper --non-interactive --no-gpg-checks --allow-unsigned-rpm install -y "$pkg" >/dev/null 2>&1; then
+      break
+    fi
+  done
+  PY="$(pick_python)"
+fi
+
 if [ -n "$PY" ]; then
   if [ ! -x "$APPDIR/.venv/bin/python" ]; then
     "$PY" -m venv --system-site-packages "$APPDIR/.venv" >/dev/null 2>&1 || true
