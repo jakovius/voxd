@@ -4,7 +4,10 @@ import os
 from pathlib import Path
 import re
 from platformdirs import user_config_dir
-from importlib.resources import files
+try:
+    from importlib.resources import files
+except Exception:  # Python <3.9 (e.g., openSUSE Leap)
+    from importlib_resources import files  # type: ignore
 from voxd.paths import resolve_whisper_binary, resolve_model_path, DATA_DIR, resolve_llamacpp_server, LLAMACPP_MODELS_DIR  # <-- add this import
 
 DEFAULT_CONFIG = {
