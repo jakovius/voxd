@@ -2,6 +2,7 @@
 set -euo pipefail
 
 APPDIR=/opt/voxd
+USER_VENV="$HOME/.local/share/voxd/.venv"
 
 # Ensure ydotool picks up our user-scoped socket (matches our user service)
 export YDOTOOL_SOCKET="${YDOTOOL_SOCKET:-$HOME/.ydotool_socket}"
@@ -11,12 +12,14 @@ export PATH="$HOME/.local/bin:$PATH"
 
 if [[ -x "$APPDIR/.venv/bin/python" ]]; then
   PY="$APPDIR/.venv/bin/python"
+elif [[ -x "$USER_VENV/bin/python" ]]; then
+  PY="$USER_VENV/bin/python"
 else
   PY="$(command -v python3 || command -v python)"
 fi
 
 # Guard against too-old system Python (e.g., Leap 15.x ships 3.6)
-if [[ "$PY" != "$APPDIR/.venv/bin/python" ]]; then
+if [[ "$PY" != "$APPDIR/.venv/bin/python" && "$PY" != "$USER_VENV/bin/python" ]]; then
   ver="$($PY - <<'PY'
 import sys
 print(f"{sys.version_info.major}.{sys.version_info.minor}")
@@ -25,8 +28,40 @@ PY
   case "$ver" in
     3.9|3.10|3.11|3.12|3.13) : ;;
     *)
-      echo "[voxd] System Python $ver is unsupported. Please reinstall using 'bash packaging/install_voxd.sh <rpm>' to provision a newer Python, or create a venv at $APPDIR/.venv." >&2
-      exit 1
+      # Attempt to create a user-local venv with any newer Python found
+      pick_python() {
+        for c in python3.12 python3.11 python3.10 python3.9 python3; do
+          if command -v "$c" >/dev/null 2>&1; then
+            v="$($c - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)"
+            case "$v" in
+              3.9|3.10|3.11|3.12|3.13) echo "$c"; return 0 ;;
+              *) : ;;
+            esac
+          fi
+        done
+        echo ""
+      }
+      CAND="$(pick_python)"
+      if [[ -n "$CAND" ]]; then
+        mkdir -p "$(dirname "$USER_VENV")"
+        "$CAND" -m venv --system-site-packages "$USER_VENV" || true
+        if [[ -x "$USER_VENV/bin/python" ]]; then
+          PY="$USER_VENV/bin/python"
+          # Ensure required runtime deps are present in user venv
+          "$PY" -m pip install --disable-pip-version-check -q --upgrade pip || true
+          "$PY" -m pip install --disable-pip-version-check -q platformdirs importlib-resources PyQt6 pyqtgraph sounddevice psutil numpy requests pyyaml tqdm pyperclip || true
+        else
+          echo "[voxd] System Python $ver is unsupported and user venv creation failed. Use 'bash packaging/install_voxd.sh <rpm>' or create $APPDIR/.venv with Python >= 3.9." >&2
+          exit 1
+        fi
+      else
+        echo "[voxd] System Python $ver is unsupported and no newer Python was found. Use 'bash packaging/install_voxd.sh <rpm>' to provision a newer Python, or create $APPDIR/.venv with Python >= 3.9." >&2
+        exit 1
+      fi
       ;;
   esac
 fi
@@ -37,6 +72,9 @@ export PYTHONPATH="$APPDIR/src${PYTHONPATH:+:$PYTHONPATH}"
 # If the managed venv exists, prefer it entirely to guarantee deps
 if [[ -x "$APPDIR/.venv/bin/python" ]]; then
   PY="$APPDIR/.venv/bin/python"
+  export PYTHONPATH="$APPDIR/src${PYTHONPATH:+:$PYTHONPATH}"
+elif [[ -x "$USER_VENV/bin/python" ]]; then
+  PY="$USER_VENV/bin/python"
   export PYTHONPATH="$APPDIR/src${PYTHONPATH:+:$PYTHONPATH}"
 fi
 
