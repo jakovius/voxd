@@ -520,7 +520,7 @@ def run_user_setup(verbose: bool = False) -> None:
         user_unit = Path.home() / ".config/systemd/user/ydotoold.service"
         print("[setup:v] packaged unit present:", pkg_unit.exists())
         print("[setup:v] user unit path:", str(user_unit))
-        subprocess.run(["systemctl", "--user", "status", "ydotoold.service"], check=False)
+        subprocess.run(["systemctl", "--user", "--no-pager", "status", "ydotoold.service"], check=False)
         # Health checks
         yc = shutil.which("ydotool")
         if yc:
