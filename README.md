@@ -52,7 +52,7 @@ sudo dnf install -y ./voxd-*-x86_64.rpm
 
 - **openSUSE (.rpm)**
 ```bash
-sudo zypper --non-interactive install --force-resolution ./voxd-*-x86_64.rpm
+sudo zypper install --force-resolution ./voxd-*-x86_64.rpm
 ```
 
 - **Arch (.pkg.tar.zst)**
