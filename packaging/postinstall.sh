@@ -10,6 +10,17 @@ if [ -f "/etc/udev/rules.d/99-uinput.rules" ]; then
   udevadm trigger || true
 fi
 
+# Ensure uinput kernel module is loaded now and on boot (Wayland typing requires it)
+if ! lsmod 2>/dev/null | grep -q '^uinput\b'; then
+  modprobe uinput || true
+fi
+# Persist across reboots
+if [ ! -f "/etc/modules-load.d/uinput.conf" ]; then
+  echo uinput > /etc/modules-load.d/uinput.conf 2>/dev/null || true
+fi
+# Retrigger udev so the new rule takes effect immediately
+udevadm trigger /dev/uinput || true
+
 # If installed via sudo, add that user to 'input' group for ydotool permissions
 if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
   usermod -aG input "$SUDO_USER" 2>/dev/null || true
@@ -34,14 +45,14 @@ APPDIR="/opt/voxd"
 pick_python() {
   for c in python3.12 python3.11 python3.10 python3.9 python3 python; do
     if command -v "$c" >/dev/null 2>&1; then
-      ver="$($c - <<'PY'
+      ver="$("$c" - <<'PY'
 import sys
 print(f"{sys.version_info.major}.{sys.version_info.minor}")
 PY
 )"
       case "$ver" in
         3.9|3.10|3.11|3.12|3.13) echo "$c"; return 0 ;;
-        *) ;; 
+        *) ;;
       esac
     fi
   done
