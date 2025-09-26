@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "I am the fucking wrapper. Now you at least know if I am being run at all."
-
 # Optional debug tracing for troubleshooting wrapper path decisions
 if [[ -n "${VOXD_WRAPPER_DEBUG:-}" ]]; then
   set -x
