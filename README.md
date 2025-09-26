@@ -7,6 +7,7 @@ Hit a **global shortcut**, speak, and watch your words appear wherever the curso
 - Ubuntu 24.04
 - Ubuntu Sway Remix 25.04
 - Fedora 42
+- openSUSE, Leap 15.6
 - Pop!_OS 22
 - Mint 22
 - Arch 2025 / Hyprland.  
@@ -30,7 +31,42 @@ Hit a **global shortcut**, speak, and watch your words appear wherever the curso
 ## Installation
 
 Complete the 2 steps:
-### 1. Clone the repo & run the setup:  
+### 1. Install VOXD
+
+#### Preferred: Install from Release (recommended)
+Download the package for your distro and architecture from the latest release, then install with your package manager.
+
+Latest builds: [GitHub Releases (Latest)](https://github.com/jakovius/voxd/releases/latest)
+
+- **Ubuntu/Debian (.deb)**
+```bash
+# After downloading voxd_...amd64.deb (or arm64.deb)
+sudo apt update
+sudo apt install -y ./voxd_*_amd64.deb
+```
+
+- **Fedora (.rpm)**
+```bash
+sudo dnf install -y ./voxd-*-x86_64.rpm
+```
+
+- **openSUSE (.rpm)**
+```bash
+sudo zypper --non-interactive install --force-resolution ./voxd-*-x86_64.rpm
+```
+
+- **Arch (.pkg.tar.zst)**
+```bash
+sudo pacman -U ./voxd-*-x86_64.pkg.tar.zst
+```
+
+Alternatively, you can use the cross-distro helper after downloading a package file into the current directory:
+```bash
+curl -fsSL https://raw.githubusercontent.com/jakovius/voxd/main/packaging/install_voxd.sh -o install_voxd.sh
+bash install_voxd.sh
+```
+
+#### Alternative: Clone the repo & run the setup (for hacking):  
 
 Copy this code, paste into terminal (Ctrl+Shift+V), and execute:
 ```bash
@@ -269,7 +305,7 @@ If an API key is missing, the respective cloud-based AIPP provider will not work
 * VOXD – © 2025 Jakov Ivkovic – **MIT** license (see [`LICENSE`](LICENSE)).
 * Speech engine powered by [**ggml-org/whisper.cpp**](https://github.com/ggml-org/whisper.cpp) (MIT) and OpenAI Whisper models (MIT).
 * Auto-typing/pasting powered by [**ReimuNotMoe/ydotool**](https://github.com/ReimuNotMoe/ydotool) (AGPLv3).
-* Text post-processing powered by [**ggml-org/llama.cpp**](https://github.com/ggml-org/llama.cpp) (MIT)
+* Transcript post-processing powered by [**ggml-org/llama.cpp**](https://github.com/ggml-org/llama.cpp) (MIT)
 
 ---
 
@@ -295,16 +331,72 @@ rm -f  ~/.local/bin/llama-cli     # llama.cpp CLI symlink
 cd .. && rm -rf voxd
 ```
 
-### 2. pipx install
+### 2. Package install (deb/rpm/arch)
+If VOXD was installed via a native package:
+
+- **Ubuntu/Debian**
+```bash
+sudo apt remove voxd
+```
+
+- **Fedora**
+```bash
+sudo dnf remove -y voxd
+```
+
+- **openSUSE**
+```bash
+sudo zypper --non-interactive remove voxd
+```
+
+- **Arch**
+```bash
+sudo pacman -R voxd
+```
+
+Note: This removes system files (e.g., under `/opt/voxd` and `/usr/bin/voxd`). User-level data (models, config, logs) remain. See "Optional runtime clean-up" below to remove those.
+
+### 3. pipx install
 If voxd was installed through **pipx** (either directly or via the prompt at the end of `setup.sh`):
 
 ```bash
 pipx uninstall voxd
 ```
 
-### 3. Optional runtime clean-up
-These steps remove user-level state that VOXD (or its Wayland helper) may have created. They are **safe to skip** – do them only if you want a fully pristine system.
+### 4. Optional runtime clean-up
+These steps remove user-level state that VOXD (or its Wayland helper) may have created. They are **safe to skip** – do them only if you want a fully pristine system. Pick the subsection that matches how you installed VOXD.
 
+#### Package install – user-scoped leftovers (after removing the package)
+```bash
+# Stop any live processes
+pkill -f voxd         || true
+pkill -f ydotoold     || true
+pkill -f llama-server || true
+
+# Disable the user service (packaged unit lives under /usr/lib/systemd/user)
+systemctl --user disable --now ydotoold.service 2>/dev/null || true
+rm -f ~/.config/systemd/user/default.target.wants/ydotoold.service 2>/dev/null || true
+systemctl --user daemon-reload 2>/dev/null || true
+
+# Remove VOXD-managed prebuilts and symlinks for ydotool/ydotoold
+rm -f ~/.local/bin/ydotool ~/.local/bin/ydotoold
+rm -rf ~/.local/share/voxd/bin
+rm -f ~/.ydotool_socket
+
+# Remove VOXD user config & data (models, logs, settings)
+rm -rf ~/.config/voxd
+rm -rf ~/.local/share/voxd
+
+# Note: The package removal already deletes the udev rule at /etc/udev/rules.d/99-uinput.rules
+# Optional: revert uinput autoload that the package enabled (only if you don't need ydotool elsewhere)
+sudo rm -f /etc/modules-load.d/uinput.conf 2>/dev/null || true
+sudo modprobe -r uinput 2>/dev/null || true
+
+# Optionally remove yourself from the 'input' group (log out/in to take effect)
+sudo gpasswd -d "$USER" input 2>/dev/null || true
+```
+
+#### Repo-clone install – user-scoped leftovers
 ```bash
 # Stop any live processes
 pkill -f voxd         || true
@@ -333,7 +425,7 @@ sudo rm -f /etc/udev/rules.d/99-uinput.rules 2>/dev/null || true
 sudo gpasswd -d "$USER" input 2>/dev/null || true
 ```
 
-### 4. System packages
+### 5. System packages
 `setup.sh` installs broadly useful distro packages (ffmpeg, gcc, cmake, portaudio, …). Most users keep them. If you **really** want to roll back, remove them with your package manager, e.g.
 
 ```bash
