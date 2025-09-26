@@ -2,6 +2,9 @@ import sys
 import argparse
 import subprocess
 import os
+if sys.version_info < (3, 9):
+    print("[voxd] Python 3.9+ required. Please run the 'voxd' command (wrapper) so it can create/use a venv with a newer Python.")
+    sys.exit(1)
 from voxd.core.config import AppConfig
 
 from voxd.paths import CONFIG_FILE, resource_path
