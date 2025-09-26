@@ -72,8 +72,8 @@ case "$DISTRO" in
     elif command -v dnf >/dev/null 2>&1; then
       sudo dnf install -y "$PKG_PATH"
     elif command -v zypper >/dev/null 2>&1; then
-      # For local unsigned RPMs, allow install without GPG prompt
-      sudo zypper --non-interactive --no-gpg-checks --allow-unsigned-rpm install --force-resolution "$PKG_PATH"
+      # Install local RPM non-interactively
+      sudo zypper --non-interactive --no-gpg-checks install --force-resolution "$PKG_PATH"
     else
       err "No supported RPM package manager found."
       exit 1

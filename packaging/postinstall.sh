@@ -53,7 +53,7 @@ PY="$(pick_python)"
 # If no suitable python found, on zypper try to install a newer one
 if [ -z "$PY" ] && command -v zypper >/dev/null 2>&1; then
   for pkg in python311 python3.11 python310 python3.10 python39 python3.9; do
-    if sudo zypper --non-interactive --no-gpg-checks --allow-unsigned-rpm install -y "$pkg" >/dev/null 2>&1; then
+    if zypper --non-interactive --no-gpg-checks install -y "$pkg" >/dev/null 2>&1; then
       break
     fi
   done

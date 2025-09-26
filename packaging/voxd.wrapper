@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Optional debug tracing for troubleshooting wrapper path decisions
+if [[ -n "${VOXD_WRAPPER_DEBUG:-}" ]]; then
+  set -x
+  echo "[voxd.wrapper] APPDIR=$APPDIR USER_VENV=$USER_VENV PATH=$PATH YDOTOOL_SOCKET=$YDOTOOL_SOCKET"
+fi
+
 APPDIR=/opt/voxd
 USER_VENV="$HOME/.local/share/voxd/.venv"
 
