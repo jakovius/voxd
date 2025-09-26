@@ -68,8 +68,8 @@ if [ -n "$PY" ]; then
     VPY="$APPDIR/.venv/bin/python"
     # Upgrade pip quietly; then install minimal extras that may be missing from repos
     "$VPY" -m pip install --upgrade --disable-pip-version-check pip >/dev/null 2>&1 || true
-    # Ensure sounddevice (often missing in repos)
-    "$VPY" -m pip install --disable-pip-version-check --no-input sounddevice>=0.5 >/dev/null 2>&1 || true
+    # Ensure core runtime dependencies inside app venv (covers Leap mismatches)
+    "$VPY" -m pip install --disable-pip-version-check --no-input sounddevice>=0.5 psutil numpy requests pyyaml tqdm pyperclip >/dev/null 2>&1 || true
     # Ensure platformdirs (imported by voxd.core.config); install only if missing
     "$VPY" - <<'PY' 2>/dev/null || "$VPY" -m pip install --disable-pip-version-check --no-input platformdirs >/dev/null 2>&1 || true
 try:

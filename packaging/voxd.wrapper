@@ -1,27 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "I am the fucking wrapper. Now you at least know if I am being run at all."
+
 # Optional debug tracing for troubleshooting wrapper path decisions
 if [[ -n "${VOXD_WRAPPER_DEBUG:-}" ]]; then
   set -x
-  echo "[voxd.wrapper] APPDIR=$APPDIR USER_VENV=$USER_VENV PATH=$PATH YDOTOOL_SOCKET=$YDOTOOL_SOCKET"
 fi
+
+log() {
+  if [[ -n "${VOXD_WRAPPER_DEBUG:-}" ]]; then
+    echo "[voxd.wrapper] $*"
+  fi
+}
 
 APPDIR=/opt/voxd
 USER_VENV="$HOME/.local/share/voxd/.venv"
+log "APPDIR=$APPDIR USER_VENV=$USER_VENV"
 
 # Ensure ydotool picks up our user-scoped socket (matches our user service)
 export YDOTOOL_SOCKET="${YDOTOOL_SOCKET:-$HOME/.ydotool_socket}"
+log "YDOTOOL_SOCKET=$YDOTOOL_SOCKET"
 
 # Ensure user-local bin is on PATH so ~/.local/bin tools are found
 export PATH="$HOME/.local/bin:$PATH"
+log "PATH=$PATH"
 
+log "Checking for app venv python at $APPDIR/.venv/bin/python"
 if [[ -x "$APPDIR/.venv/bin/python" ]]; then
   PY="$APPDIR/.venv/bin/python"
+  log "Using app venv Python: $PY"
 elif [[ -x "$USER_VENV/bin/python" ]]; then
   PY="$USER_VENV/bin/python"
+  log "Using user venv Python: $PY"
 else
   PY="$(command -v python3 || command -v python)"
+  log "Using system Python candidate: $PY"
 fi
 
 # Guard against too-old system Python (e.g., Leap 15.x ships 3.6)
@@ -31,6 +45,7 @@ import sys
 print(f"{sys.version_info.major}.{sys.version_info.minor}")
 PY
 )"
+  log "System Python version: $ver"
   case "$ver" in
     3.9|3.10|3.11|3.12|3.13) : ;;
     *)
@@ -51,14 +66,19 @@ PY
         done
         echo ""
       }
+      log "Attempting to locate newer system Python (>=3.9)"
       CAND="$(pick_python)"
       if [[ -n "$CAND" ]]; then
+        log "Found newer interpreter: $CAND"
         mkdir -p "$(dirname "$USER_VENV")"
+        log "Creating user venv at $USER_VENV"
         "$CAND" -m venv --system-site-packages "$USER_VENV" || true
         if [[ -x "$USER_VENV/bin/python" ]]; then
           PY="$USER_VENV/bin/python"
           # Ensure required runtime deps are present in user venv
+          log "Upgrading pip in user venv"
           "$PY" -m pip install --disable-pip-version-check -q --upgrade pip || true
+          log "Installing runtime deps in user venv"
           "$PY" -m pip install --disable-pip-version-check -q platformdirs importlib-resources PyQt6 pyqtgraph sounddevice psutil numpy requests pyyaml tqdm pyperclip || true
         else
           echo "[voxd] System Python $ver is unsupported and user venv creation failed. Use 'bash packaging/install_voxd.sh <rpm>' or create $APPDIR/.venv with Python >= 3.9." >&2
@@ -74,27 +94,35 @@ fi
 
 # Ensure Python can import the embedded source tree
 export PYTHONPATH="$APPDIR/src${PYTHONPATH:+:$PYTHONPATH}"
+log "PYTHONPATH=$PYTHONPATH"
 
 # If the managed venv exists, prefer it entirely to guarantee deps
 if [[ -x "$APPDIR/.venv/bin/python" ]]; then
   PY="$APPDIR/.venv/bin/python"
   export PYTHONPATH="$APPDIR/src${PYTHONPATH:+:$PYTHONPATH}"
+  log "Preferring app venv Python: $PY"
 elif [[ -x "$USER_VENV/bin/python" ]]; then
   PY="$USER_VENV/bin/python"
   export PYTHONPATH="$APPDIR/src${PYTHONPATH:+:$PYTHONPATH}"
+  log "Preferring user venv Python: $PY"
 fi
+
+log "Final interpreter: $PY"
 
 # First-run per-user setup if config missing
 CFG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/voxd/config.yaml"
 if [[ ! -f "$CFG_FILE" ]]; then
+  log "First-run: running --setup"
   "$PY" -m voxd --setup || true
 fi
 
 # After setup, (Wayland) ensure ydotoold user service is enabled/started
 if [[ ${XDG_SESSION_TYPE:-} == wayland* ]]; then
+  log "Wayland session detected; ensuring ydotoold user service"
   systemctl --user is-active --quiet ydotoold.service || systemctl --user enable --now ydotoold.service || true
 fi
 
+log "Exec: $PY -m voxd $*"
 exec "$PY" -m voxd "$@"
 
 
