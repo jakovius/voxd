@@ -139,7 +139,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
                     final_text = get_final_text(tscript, cfg)  # type: ignore[arg-type]
                     clipboard.copy(final_text)
                     print(f"\n📝 ---> ")
-                    if cfg.simulate_typing:
+                    if cfg.typing:
                         typer.type(final_text)
                     print()
                     if cfg.aipp_enabled:
@@ -282,7 +282,7 @@ def main():
                         continue
                     final_text = get_final_text(tscript, cfg)  # type: ignore[arg-type]
                     clipboard.copy(final_text)
-                    if cfg.simulate_typing:
+                    if cfg.typing:
                         typer.type(final_text)
                     print(f"\n📝 ---> {final_text}")
                     if cfg.aipp_enabled:

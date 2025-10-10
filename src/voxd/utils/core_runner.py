@@ -32,7 +32,7 @@ def _print_disk_space_status(target_dir: Path, threshold_mb: int = 500):
         else:
             print("Disk storage availability: OK")
 
-def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=False, apply_aipp=False, logger=None):
+def run_core_process(cfg: AppConfig, *, preserve_audio=False, typing=False, apply_aipp=False, logger=None):
     verbo("[core_runner] Running core process...")
 
     recorder = AudioRecorder(
@@ -92,7 +92,7 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, simulate_typing=Fa
     clipboard.copy(tscript)
 
     # === Simulated Typing
-    if cfg.simulate_typing:
+    if cfg.typing:
         typer.type(tscript)
 
     # === Logging

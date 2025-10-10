@@ -445,7 +445,7 @@ class FluxRunner:
             # AIPP disabled in flux mode; get_final_text is a safe pass-through
             final_text = get_final_text(tscript, self.cfg)
             self.clipboard.copy(final_text)
-            if self.cfg.simulate_typing:
+            if self.cfg.typing:
                 self.typer.type(final_text)
             print(f"📝 ---> {final_text}")
             try:

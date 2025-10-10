@@ -2,7 +2,7 @@ log_enabled: true
 log_location: ''
 perf_collect: false
 perf_accuracy_rating_collect: true
-simulate_typing: true
+typing: true
 typing_delay: 1
 typing_start_delay: 0.15
 ctrl_v_paste: false  # Use Ctrl+V instead of default Ctrl+Shift+V

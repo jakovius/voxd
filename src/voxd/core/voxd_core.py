@@ -97,13 +97,13 @@ class CoreProcessThread(QThread):
 
         # Copy to clipboard unless typing is enabled with paste mode (delay <= 0)
         # to avoid double-copying to clipboard
-        typing_will_paste = (self.cfg.simulate_typing and 
+        typing_will_paste = (self.cfg.typing and 
                            self.cfg.typing_delay <= 0)
         
         if not typing_will_paste and final_text:
             clipboard.copy(final_text)
 
-        if self.cfg.simulate_typing and final_text:
+        if self.cfg.typing and final_text:
             self.status_changed.emit("Typing")
             try:
                 typer.type(final_text)

@@ -1,6 +1,7 @@
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QSizePolicy, QInputDialog, QGroupBox, QSystemTrayIcon
+    QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, 
+    QSizePolicy, QInputDialog, QGroupBox, QSystemTrayIcon, QMenu, QDialog, QTextEdit
 )
 from PyQt6.QtCore import Qt, QTimer, QFileSystemWatcher
 from PyQt6.QtGui import QIcon
@@ -8,8 +9,13 @@ from pathlib import Path
 
 from voxd.core.config import get_config, CONFIG_PATH
 from voxd.core.logger import SessionLogger
-from voxd.utils.ipc_server import start_ipc_server  # <-- Add this import
-from voxd.core.voxd_core import CoreProcessThread, show_options_dialog, _create_styled_checkbox
+from voxd.utils.ipc_server import start_ipc_server
+from voxd.core.voxd_core import (
+    CoreProcessThread, _create_styled_checkbox,
+    show_manage_prompts, session_log_dialog, show_performance_dialog
+)
+from voxd.core.model_manager import show_model_manager
+from voxd.gui.settings_dialog import SettingsDialog
 from voxd.utils.performance import update_last_perf_entry
 
 ASSETS_DIR = (Path(__file__).resolve().parent / ".." / "assets").resolve()
@@ -19,29 +25,31 @@ class VoxdApp(QWidget):
     def __init__(self):
         super().__init__()
         self.cfg = get_config()
-        self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_location)  # type: ignore[attr-defined]
+        self.logger = SessionLogger(self.cfg.log_enabled, self.cfg.log_location)
+
+        # Remove title bar - frameless window
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
 
         self.setWindowTitle("voxd")
-        self.setFixedWidth(230)
-        self.setMinimumHeight(180)
+        self.setFixedSize(340, 145) 
         self.setStyleSheet("background-color: #1e1e1e; color: white;")
 
-        self.status = "Record"
+        self.status = "Ready"
         self.last_transcript = ""
 
-        self.status_button = QPushButton("Record")
-        # Ensure stylesheet background paints reliably across styles
+        # Main Record button
+        self.status_button = QPushButton("Ready")
         try:
             self.status_button.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         except Exception:
             pass
-        self.status_button.setFixedSize(180, 45)
-        self._idle_btn_style = (
-            """
+        self.status_button.setFixedSize(150, 40)
+        self._idle_btn_style = """
             QPushButton {
                 background-color: #FF4500;
-                border-radius: 22px;
-                font-size: 14px;
+                border-radius: 20px;
+                font-size: 16px;
                 font-weight: bold;
                 color: white;
             }
@@ -49,11 +57,10 @@ class VoxdApp(QWidget):
                 background-color: #FF6347;
             }
             """
-        )
         self.status_button.setStyleSheet(self._idle_btn_style)
         self.status_button.clicked.connect(self.on_button_clicked)
 
-        # System tray icon & animations (so window can stay background)
+        # System tray icon & animations
         self.icon_idle = QIcon(str(ASSETS_DIR / "voxd-0.png"))
         self.icons_recording = [QIcon(str(ASSETS_DIR / f"voxd-{i}.png")) for i in range(1, 10)]
         self.icons_transcribing = [
@@ -67,119 +74,366 @@ class VoxdApp(QWidget):
         self._tray_frames = []
         self._tray_index = 0
 
-        # Small toggles row (AIPP / Trailing space)
-        self.toggle_container = QWidget()
-        toggles_layout = QHBoxLayout(self.toggle_container)
-        toggles_layout.setContentsMargins(0, 0, 0, 0)
-        toggles_layout.setSpacing(10)
+        # Help button (circular with ?) - custom style with larger font
+        self.help_button = QPushButton("?")
+        help_btn_style = """
+            QPushButton {
+                background-color: #444;
+                color: #1e1e1e;
+                border-radius: 16px;
+                font-size: 22px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #555;
+            }
+            QPushButton:pressed {
+                background-color: #666;
+            }
+        """
+        self.help_button.setFixedSize(32, 32)
+        self.help_button.setStyleSheet(help_btn_style)
+        self.help_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.help_button.clicked.connect(self.show_help_dialog)
+        
+        # Instruction label (for row 2)
+        self.instruction_label = QLabel("<b>Hit your hotkey</b> to rec/stop (leave this in background to type)")
+        self.instruction_label.setStyleSheet("color: gray; font-size: 8pt; font-style: italic; margin-top: 0px; margin-bottom: 0px;")
+        self.instruction_label.setWordWrap(True)
+        self.instruction_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.instruction_label.setContentsMargins(0, 0, 0, 0)
 
-        aipp_widget = _create_styled_checkbox("AIPP", self.cfg.data.get("aipp_enabled", False))
-        self.aipp_btn = aipp_widget.checkbox_button  # type: ignore[attr-defined]
-        def _on_aipp_toggled(state: bool):
-            self.cfg.data["aipp_enabled"] = bool(state)
-            try:
-                self.cfg.aipp_enabled = bool(state)  # type: ignore[attr-defined]
-            except Exception:
-                pass
-            self.cfg.save()
-        self.aipp_btn.toggled.connect(_on_aipp_toggled)
+        # Close button (circular with X) - custom style with larger font
+        self.close_button = QPushButton("×")
+        close_btn_style = """
+            QPushButton {
+                background-color: #444;
+                color: #1e1e1e;
+                border-radius: 16px;
+                font-size: 28px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #555;
+            }
+            QPushButton:pressed {
+                background-color: #666;
+            }
+        """
+        self.close_button.setFixedSize(32, 32)
+        self.close_button.setStyleSheet(close_btn_style)
+        self.close_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.close_button.clicked.connect(self.close_app)
 
-        trailing_widget = _create_styled_checkbox("Trailing space", self.cfg.data.get("append_trailing_space", True))
-        self.trailing_btn = trailing_widget.checkbox_button  # type: ignore[attr-defined]
-        def _on_trailing_toggled(state: bool):
-            self.cfg.data["append_trailing_space"] = bool(state)
-            try:
-                self.cfg.append_trailing_space = bool(state)  # type: ignore[attr-defined]
-            except Exception:
-                pass
-            self.cfg.save()
-        self.trailing_btn.toggled.connect(_on_trailing_toggled)
-
-        toggles_layout.addWidget(aipp_widget)
-        toggles_layout.addWidget(trailing_widget)
-        toggles_layout.addStretch(1)
-
-        # Watch config file for external changes and refresh toggle state
+        # Watch config file for external changes
         try:
             self._cfg_watcher = QFileSystemWatcher([str(CONFIG_PATH)])
             self._cfg_watcher.fileChanged.connect(self._on_cfg_file_changed)
         except Exception:
             self._cfg_watcher = None
 
-        # Transcript display wrapped in a group-box for padding & visual separation
-        self.transcript_label = QLabel("The transcript will be shown here.")
+        # Transcript display
+        self.transcript_label = QLabel("Transcript preview")
         self.transcript_label.setStyleSheet("color: darkgray; font-size: 9pt; font-style: italic;")
         self.transcript_label.setWordWrap(True)
-        from PyQt6.QtCore import Qt as _Qt
-        self.transcript_label.setTextInteractionFlags(_Qt.TextInteractionFlag.TextSelectableByMouse |
-                                                      _Qt.TextInteractionFlag.TextSelectableByKeyboard)
-        # Put the label inside a group-box so we get default margins/border
+        self.transcript_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse |
+            Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
         self.transcript_group = QGroupBox()
-        self.transcript_group.setStyleSheet("QGroupBox { border: 1px solid #333; border-radius: 6px; margin-top: 2px; }")
+        self.transcript_group.setStyleSheet(
+            "QGroupBox { border: 1px solid #333; border-radius: 6px; margin-top: 2px; }"
+        )
         group_layout = QVBoxLayout()
         group_layout.addWidget(self.transcript_label)
-        
         self.transcript_group.setLayout(group_layout)
-        # Set fixed size for the transcript group box
-        self.transcript_group.setFixedSize(210, 54)
-        self.transcript_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-
-        self.hotkey_notice = QLabel("<b>Hit your hotkey</b> to rec/stop<br>(leave this in background to type)")
-        self.hotkey_notice.setStyleSheet("color: gray; font-size: 8pt;")
-        self.hotkey_notice.setWordWrap(True)
-        self.hotkey_notice.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.transcript_group.setFixedHeight(38)
+        self.transcript_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.clipboard_notice = QLabel("")
         self.clipboard_notice.setStyleSheet("color: gray; font-size: 8pt;")
         self.clipboard_notice.setWordWrap(True)
-        self.clipboard_notice.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.clipboard_notice.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.clipboard_notice.setFixedHeight(10)
 
-        self.options_button = QPushButton("Options")
-        self.options_button.setFixedSize(135, 18)
-        self.options_button.setStyleSheet("""
+        # Options button with dropdown menu
+        self.options_btn = QPushButton("Options")
+        self.options_btn.setFixedSize(96, 32)  # 80% of main button width, 20% reduced height
+        self.options_btn.setStyleSheet("""
             QPushButton {
                 background-color: #444;
                 color: white;
-                border-radius: 5px;
+                border-radius: 16px;
+                font-size: 12px;
+                padding-left: 8px;
+                padding-right: 8px;
+            }
+            QPushButton:hover {
+                background-color: #555;
             }
         """)
-        self.options_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.options_button.clicked.connect(self.show_options)
+        self.options_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.options_btn.clicked.connect(self.show_options_menu)
 
         # Placeholder for background processing thread
-        self.runner_thread = None  # type: CoreProcessThread | None
+        self.runner_thread = None
 
         # Animation timer for status button
         self._anim_timer = QTimer(self)
         try:
-            # Use precise timer for smoother, reliable updates even when busy
             self._anim_timer.setTimerType(Qt.TimerType.PreciseTimer)
         except Exception:
             pass
         self._anim_timer.setInterval(33)  # ~30 FPS
         self._anim_timer.timeout.connect(self._on_anim_tick)
         self._anim_phase_ms = 0
-        self._anim_mode = "idle"  # idle | recording | processing
+        self._anim_mode = "idle"
 
         self.build_ui()
 
     def build_ui(self):
-        self.main_layout = QVBoxLayout()
-        # Top alignment, consistent spacing/margins
-        self.main_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-        # self.main_layout.setContentsMargins(6, 6, 6, 6)
-        # self.main_layout.setSpacing(12)
+        """Build 3-row layout."""
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(6, 6, 6, 6)
+        main_layout.setSpacing(3)
 
-        for widget in [self.status_button, self.hotkey_notice, self.toggle_container, self.transcript_group,
-                        self.clipboard_notice, self.options_button]:
-            self.main_layout.addWidget(widget, 0, Qt.AlignmentFlag.AlignHCenter)
+        # ═══════════════════════════════════════════════════════════════════
+        # ROW 1: Main button + Options button + Circular buttons
+        # ═══════════════════════════════════════════════════════════════════
+        row1 = QHBoxLayout()
+        row1.setSpacing(6)
+        row1.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        
+        # Main button
+        row1.addWidget(self.status_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        
+        # Options button
+        row1.addStretch(1)
+        row1.addWidget(self.options_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        
+        # Circular buttons
+        row1.addWidget(self.help_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        row1.addWidget(self.close_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        
+        main_layout.addLayout(row1)
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # ROW 2: Instruction label
+        # ═══════════════════════════════════════════════════════════════════
+        main_layout.addWidget(self.instruction_label)
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # ROW 3: Checkboxes (col 1) + Transcript/Clipboard (col 2)
+        # ═══════════════════════════════════════════════════════════════════
+        row3 = QHBoxLayout()
+        row3.setSpacing(6)
+        
+        # Column 1: Checkboxes (vertical) - compact version
+        col1 = QVBoxLayout()
+        col1.setSpacing(2)
+        col1.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        # Create compact checkboxes
+        def create_compact_checkbox(text: str, checked: bool):
+            btn = QPushButton()
+            btn.setCheckable(True)
+            btn.setChecked(checked)
+            btn.setFixedSize(16, 16)
+            
+            def _update():
+                if btn.isChecked():
+                    btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #E03D00;
+                            border: 2px solid #777;
+                            border-radius: 3px;
+                            color: white;
+                            font-weight: bold;
+                            font-size: 10px;
+                        }
+                    """)
+                    btn.setText("✓")
+                else:
+                    btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #555;
+                            border: 2px solid #777;
+                            border-radius: 3px;
+                            color: white;
+                        }
+                    """)
+                    btn.setText("")
+            
+            _update()
+            btn.toggled.connect(lambda _: _update())
+            
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(5)
+            layout.addWidget(btn)
+            label = QLabel(text)
+            label.setStyleSheet("font-size: 9pt;")
+            layout.addWidget(label)
+            container.checkbox_button = btn  # type: ignore[attr-defined]
+            container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            container.setMinimumWidth(85)  # Give enough space for longest label
+            return container
+        
+        typing_widget = create_compact_checkbox("Typing", self.cfg.data.get("typing", True))
+        self.typing_btn = typing_widget.checkbox_button  # type: ignore[attr-defined]
+        self.typing_btn.toggled.connect(lambda state: self._on_toggle("typing", state))
+        col1.addWidget(typing_widget)
+        
+        trailing_widget = create_compact_checkbox("Trail. space", self.cfg.data.get("append_trailing_space", True))
+        self.trailing_btn = trailing_widget.checkbox_button  # type: ignore[attr-defined]
+        self.trailing_btn.toggled.connect(lambda state: self._on_toggle("append_trailing_space", state))
+        col1.addWidget(trailing_widget)
 
-        self.setLayout(self.main_layout)
+        aipp_widget = create_compact_checkbox("AIPP", self.cfg.data.get("aipp_enabled", False))
+        self.aipp_btn = aipp_widget.checkbox_button  # type: ignore[attr-defined]
+        self.aipp_btn.toggled.connect(lambda state: self._on_toggle("aipp_enabled", state))
+        col1.addWidget(aipp_widget)
+        
+        row3.addLayout(col1, 0)  # 0 = minimum space, no stretch
+        
+        # Column 2: Transcript + Clipboard notice (vertical)
+        col2 = QVBoxLayout()
+        col2.setSpacing(3)
+        
+        # Transcript (expands to fill available width)
+        col2.addWidget(self.transcript_group)
+        
+        # Clipboard notice
+        col2.addWidget(self.clipboard_notice)
+        
+        row3.addLayout(col2, 1)  # 1 = stretch to fill remaining space
+        
+        main_layout.addLayout(row3)
+        
+        self.setLayout(main_layout)
+
+    def _on_toggle(self, key, state):
+        """Handle checkbox toggles."""
+        self.cfg.data[key] = bool(state)
+        if hasattr(self.cfg, key):
+            setattr(self.cfg, key, bool(state))
+        self.cfg.save()
+
+    def close_app(self):
+        """Close the application."""
+        self.close()
+        QApplication.quit()
+
+    def show_help_dialog(self):
+        """Show help instructions dialog."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("VOXD Help")
+        dialog.setMinimumWidth(450)
+        dialog.setStyleSheet("background-color: #2e2e2e; color: white;")
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Create help text
+        help_text = QLabel()
+        help_text.setWordWrap(True)
+        help_text.setTextFormat(Qt.TextFormat.RichText)
+        help_text.setText("""
+<h3 style='color: #FF4500; margin-bottom: 10px;'>Setup Global Hotkey</h3>
+<p style='margin-bottom: 15px;'>
+Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that runs the command:<br>
+<code style='background-color: #1e1e1e; padding: 4px 8px; border-radius: 3px; font-family: monospace;'>bash -c 'voxd --trigger-record'</code>
+</p>
+
+<h3 style='color: #FF4500; margin-top: 15px; margin-bottom: 10px;'>Dictation (Voice-Typing)</h3>
+<ol style='margin-left: 20px; line-height: 1.6;'>
+<li>Go to wherever you want to type and leave this app in the background</li>
+<li>Hit the hotkey -> speak -> press the hotkey again -> typing happens!</li>
+</ol>
+        """)
+        help_text.setStyleSheet("font-size: 10pt; line-height: 1.5;")
+        
+        layout.addWidget(help_text)
+        
+        # Close button
+        close_btn = QPushButton("Got it!")
+        close_btn.setFixedHeight(32)
+        close_btn.setFixedWidth(60)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FF4500;
+                color: white;
+                border-radius: 5px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #FF6347;
+            }
+        """)
+        close_btn.clicked.connect(dialog.accept)
+        layout.addWidget(close_btn, 0, Qt.AlignmentFlag.AlignCenter)
+        
+        dialog.exec()
+
+    def show_whisper_models(self):
+        show_model_manager(self)
+
+    def show_aipp_settings(self):
+        from voxd.core.voxd_core import show_aipp_dialog
+        show_aipp_dialog(self, self.cfg)
+        self._refresh_aipp_toggle_from_cfg()
+
+    def show_session_log(self):
+        session_log_dialog(self, self.logger)
+
+    def show_settings(self):
+        editor = SettingsDialog(self.cfg, parent=self)
+        editor.exec()
+
+    def show_performance(self):
+        show_performance_dialog(self, self.cfg)
+
+    def show_options_menu(self):
+        """Show dropdown menu with all options."""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #2e2e2e;
+                color: white;
+                border: 1px solid #555;
+            }
+            QMenu::item {
+                padding: 8px 20px;
+            }
+            QMenu::item:selected {
+                background-color: #444;
+            }
+        """)
+        
+        # Add menu actions for each option
+        whisper_action = menu.addAction("Whisper Models")
+        whisper_action.triggered.connect(self.show_whisper_models)
+        
+        aipp_action = menu.addAction("AI Post-Processing")
+        aipp_action.triggered.connect(self.show_aipp_settings)
+        
+        log_action = menu.addAction("Session Log")
+        log_action.triggered.connect(self.show_session_log)
+        
+        settings_action = menu.addAction("Settings")
+        settings_action.triggered.connect(self.show_settings)
+        
+        perf_action = menu.addAction("Performance")
+        perf_action.triggered.connect(self.show_performance)
+        
+        # Show menu below the Options button
+        menu.exec(self.options_btn.mapToGlobal(self.options_btn.rect().bottomLeft()))
 
     def set_status(self, text):
         self.status = text
         self.status_button.setText(text)
-        # Update animation mode based on state
         if text == "Recording":
             self._start_button_anim("recording")
         elif text in ("Transcribing", "Typing"):
@@ -187,9 +441,7 @@ class VoxdApp(QWidget):
         else:
             self._stop_button_anim()
             self.status_button.setStyleSheet(self._idle_btn_style)
-        # Force update the UI
         QApplication.processEvents()
-        # Update tray tooltip and animation
         try:
             self.tray.setToolTip(f"VOXD - {text}")
             if text == "Recording":
@@ -200,7 +452,6 @@ class VoxdApp(QWidget):
                 self._tray_stop_animation()
         except Exception:
             pass
-        # Only minimize when about to type to prevent intercepting keystrokes
         if text == "Typing":
             self.setWindowState(self.windowState() | Qt.WindowState.WindowMinimized)
 
@@ -222,18 +473,17 @@ class VoxdApp(QWidget):
         return f"rgb({r},{g},{b})"
 
     def _on_anim_tick(self):
-        # 500 ms full cycle → use sine for smooth in/out
         self._anim_phase_ms = (self._anim_phase_ms + self._anim_timer.interval()) % 500
         import math
         phase = (self._anim_phase_ms / 500.0) * 2 * math.pi
-        t = 0.5 * (1 + math.sin(phase))  # 0..1
+        t = 0.5 * (1 + math.sin(phase))
 
         if self._anim_mode == "recording":
-            base = (255, 69, 0)       # #FF4500 current orange
-            light = (255, 210, 180)   # lighter, higher-contrast orange
+            base = (255, 69, 0)
+            light = (255, 210, 180)
         elif self._anim_mode == "processing":
-            base = (0, 200, 83)       # bright green (#00C853)
-            light = (235, 255, 244)   # very pale green (#EBFFF4)
+            base = (0, 200, 83)
+            light = (235, 255, 244)
         else:
             return
 
@@ -241,7 +491,7 @@ class VoxdApp(QWidget):
         style = f"""
             QPushButton {{
                 background-color: {color};
-                border-radius: 22px;
+                border-radius: 20px;
                 font-size: 14px;
                 font-weight: bold;
                 color: white;
@@ -249,19 +499,14 @@ class VoxdApp(QWidget):
         """
         self.status_button.setStyleSheet(style)
         try:
-            # Force immediate repaint for visible feedback
             self.status_button.repaint()
         except Exception:
             pass
-        # Nudge a repaint in case the compositor throttles background widgets
         try:
             self.status_button.update()
         except Exception:
             pass
 
-    # ──────────────────────────────────────────────────────────────────
-    #  Tray animation helpers
-    # ------------------------------------------------------------------
     def _tray_start_animation(self, frames, total_period_ms: int):
         if not frames:
             return
@@ -294,16 +539,12 @@ class VoxdApp(QWidget):
 
     def on_button_clicked(self):
         if self.status == "Recording":
-            # Stop recording
             if self.runner_thread and self.runner_thread.isRunning():
                 self.runner_thread.stop_recording()
             return
-        # Ensure the VOXD window does **not** receive the keystrokes we
-        # are about to send with ydotool/xdotool.
-        self.clearFocus()            # drop keyboard-focus
+        self.clearFocus()
         if self.status in ("Transcribing", "Typing"):
             return
-        # Start recording
         self.set_status("Recording")
         self.clipboard_notice.setText("")
         self.runner_thread = CoreProcessThread(self.cfg, self.logger)
@@ -316,11 +557,9 @@ class VoxdApp(QWidget):
             self.last_transcript = tscript
             short = tscript[:80] + (" …" if len(tscript) > 80 else "")
             self.transcript_label.setText(short)
-            # Switch style to brighter color while keeping italics
             self.transcript_label.setStyleSheet("color: white; font-size: 10pt; font-style: italic;")
             
             self.clipboard_notice.setText("Copied to clipboard")
-            # Prompt user for accuracy rating (optional)
             if getattr(self.cfg, "perf_collect", False) and getattr(self.cfg, "perf_accuracy_rating_collect", False):
                 s, ok = QInputDialog.getText(
                     self,
@@ -333,18 +572,10 @@ class VoxdApp(QWidget):
                         update_last_perf_entry(val)
                     except ValueError:
                         pass
-        self.set_status("Record")
-        # Restore window after typing (optional; comment out if you prefer it
-        # to stay minimised)
+        self.set_status("Ready")
         self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
 
-    def show_options(self):
-        # Open Options (modal); when it closes, refresh AIPP toggle from config
-        show_options_dialog(self, self.logger, cfg=self.cfg)
-        self._refresh_aipp_toggle_from_cfg()
-
     def _refresh_aipp_toggle_from_cfg(self):
-        """Sync the AIPP checkbox button with the current config value."""
         try:
             desired = bool(self.cfg.data.get("aipp_enabled", False))
             if self.aipp_btn.isChecked() != desired:
@@ -353,18 +584,26 @@ class VoxdApp(QWidget):
             pass
 
     def _on_cfg_file_changed(self, path: str):
-        """Reload config on disk change and refresh dependent UI bits."""
         try:
-            # Re-add path in case editors replace the file atomically
             if hasattr(self, "_cfg_watcher") and self._cfg_watcher is not None:
                 files = set(self._cfg_watcher.files())
                 if path and path not in files:
                     self._cfg_watcher.addPath(path)
-            # Reload and sync UI
             self.cfg.load()
             self._refresh_aipp_toggle_from_cfg()
         except Exception:
             pass
+
+    # Enable dragging the frameless window
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, 'drag_position'):
+            self.move(event.globalPosition().toPoint() - self.drag_position)
+            event.accept()
 
 
 def main():
@@ -372,9 +611,7 @@ def main():
     gui = VoxdApp()
     gui.show()
 
-    # IPC server triggers the same as clicking the main button
     def on_ipc_trigger():
-        # Ensure GUI actions run on the main thread
         QTimer.singleShot(0, gui.on_button_clicked)
 
     start_ipc_server(on_ipc_trigger)

@@ -73,7 +73,7 @@ class SettingsDialog(QDialog):
         # ------------------------------------------------------------------
         form.addRow(self._section_label("General"), QLabel(""))
 
-        self._add_checkbox(form, "simulate_typing", "Simulate typing")
+        self._add_checkbox(form, "typing", "Enable typing")
         self._add_spin(form, "typing_delay", "Typing delay (ms)", 0, 1000)
         self._add_doublespin(form, "typing_start_delay", "Start delay (s)", 0, 5, step=0.05)
         self._add_checkbox(form, "ctrl_v_paste", "Use Ctrl+V paste")

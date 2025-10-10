@@ -15,7 +15,7 @@ DEFAULT_CONFIG = {
     "perf_accuracy_rating_collect": True,
     "log_enabled": True,
     "log_location": "",
-    "simulate_typing": True,
+    "typing": True,
     "typing_delay": 1,
     "typing_start_delay": 0.15,
     "ctrl_v_paste": False,  # Use Ctrl+V instead of default Ctrl+Shift+V
