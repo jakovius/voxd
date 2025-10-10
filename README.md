@@ -127,7 +127,7 @@ Otherwise:
 
 
 ### ... or from your app launcher:
-After running `./setup.sh`, desktop launchers are installed automatically. Open your application menu and launch:
+Desktop launchers are installed automatically. Open your application menu and launch:
 
 - VOXD (gui)
 - VOXD (tray)
@@ -173,7 +173,7 @@ Unknown keys are ignored.
 Your spoken words can be magically cleaned and rendered into e.g. neatly formated email, or straight away into a programing code!  
 
 VOXD can optionally post-process your transcripts using LOCAL (on-machine, **llama.cpp**, **Ollama**) or cloud LLMs (like **OpenAI, Anthropic, or xAI**).  
-For the local AIPP, just accept **llama.cpp** during the setup or/and **[install Ollama](https://ollama.ai)** and download a model that can be run on your machine, e.g. `ollama pull gemma3:latest`.   
+For the local AIPP, **llama.cpp** will be available out-of-the-box. You can also **[install Ollama](https://ollama.ai)** and download a model that can be run on your machine, e.g. `ollama pull gemma3:latest`.   
 You can enable, configure, and manage prompts directly from the GUI.
 
 ### Enable AIPP:
@@ -191,27 +191,6 @@ In GUI or TRAY mode, all relevant settings are in: "*AI Post-Processing*".
 - **xAI**  
 
 ---
-
-## 🦙 llama.cpp Integration (Local AI)
-
-VOXD includes **native llama.cpp support** for ultra-fast local AI processing without requiring Ollama. This gives you two llama.cpp modes:
-
-- **`llamacpp_server`** - Uses llama.cpp's built-in HTTP server (recommended)
-- **`llamacpp_direct`** - Direct Python bindings (fastest, but requires `llama-cpp-python`)
-
-### Quick Setup
-
-llama.cpp integration is **optional** during `setup.sh`. If you want to add it later:
-
-```bash
-# Re-run setup with llama.cpp option
-./setup.sh  # Will detect existing install and offer llama.cpp setup
-```
-
-- Clones and builds llama.cpp with optimal settings
-- Downloads a default model (`qwen2.5-3b-instruct-q4_k_m.gguf`, ~1.9GB)  
-- Installs Python bindings (`llama-cpp-python`) for direct mode
-- Configures VOXD to use llama.cpp providers
 
 ### AIPP Model Management
 
@@ -283,7 +262,7 @@ export XAI_API_KEY="..."
 ```
 
 **Note:**  
-If an API key is missing, the respective cloud-based AIPP provider will not work.
+If an API key is missing, the respective cloud-based AIPP provider will (surprise, surprise) not work.
 
 ---
 
