@@ -1,11 +1,13 @@
 # VOXD - Voice-Type on Linux 🗣️⌨️
 
-Running in background, provides fast **voice-to-text typing** in any Linux app, using **LOCAL** voice processing, with optional **LOCAL** AI text post-processing.  
-Hit a **global shortcut**, speak, and watch your words appear wherever the cursor lives.  
+Running in background, provides fast **voice-to-text typing** in any Linux app.  
+Using **LOCAL** voice processing, with optional **LOCAL** AI text post-processing.  
+Runs fine even on older CPUs. No GPU required.
+
+Hit your **hotkey shortcut** -> speak -> hotkey again -> watch your words appear wherever you put the cursor, even AI-rewritten as a poem or a C++ code.  
   
 **Tested & Works on:**
-- Ubuntu 24.04
-- Ubuntu Sway Remix 25.04
+- Ubuntu 24.04 and Ubuntu Sway Remix 25.04
 - Fedora 42
 - openSUSE, Leap 15.6
 - Pop!_OS 22
@@ -13,62 +15,68 @@ Hit a **global shortcut**, speak, and watch your words appear wherever the curso
 - Arch 2025 / Hyprland.  
 
 
-
 ## Highlights
 
 | Feature                          | Notes                                                                   |
 | -------------------------------- | ----------------------------------------------------------------------- |
-| **Whisper.cpp** backend          | Local, offline  ASR.   |
-| **Simulated typing**             | instantly types straight into any currently focused input window. Even on Wayland! (*ydotool*).                   |
+| **Whisper.cpp** backend          | Local, offline, fast  ASR.   |
+| **Simulated typing**             | instantly types straight into any currently focused input window. Even on Wayland! (*ydotool*).  |
 | **Clipboard**                    | Auto-copies into clipboard - ready for pasting        |
-| **Multiple UI** surfaces             | CLI, GUI (minimal PyQt6), TRAY (system tray), FLUX (triggered by voice activity detection) |
-| **Logging** & **performance**             | Session log plus opt-in local performance data (CSV).                          |
-| AI Post-Processing (**AIPP**)	     | Process transcripts via local or cloud LLMs. GUI prompt editor.         |
-
-  
-
+| **Multiple UI** surfaces         | CLI, GUI (minimal PyQt6), TRAY (system tray), FLUX (triggered by voice activity detection, beta) |
+| **Logging** & **performance**    | Session log plus your own optional local performance data (CSV).                          |
+| **AIPP**, AI Post-Processing	   | AI-rewriting via local or cloud LLMs. GUI prompt editor.         |  
+ 
 
 ## Setup
 
-Complete the 2 steps:
+Complete the 2 steps:  
 ### 1. Install VOXD
 
 #### Preferred: Install from Release (recommended)
 Download the package for your distro and architecture from the latest release, then install with your package manager.
 
-Latest builds: [GitHub Releases (Latest)](https://github.com/jakovius/voxd/releases/latest)
+Latest builds: [GitHub Releases (Latest)](https://github.com/jakovius/voxd/releases/latest)  
 
-- **Ubuntu/Debian (.deb)**
+#### **Ubuntu / Debian (.deb)**
+
 ```bash
-# After downloading voxd_...amd64.deb (or arm64.deb)
+# Update package lists and install the downloaded .deb package:
 sudo apt update
-sudo apt install -y ./voxd_*_amd64.deb
+sudo apt install -y ./voxd_*_amd64.deb    # or ./voxd_*_arm64.deb on ARM systems
 ```
 
-- **Fedora (.rpm)**
+---
+
+#### **Fedora (.rpm)**
+
 ```bash
-sudo dnf install -y ./voxd-*-x86_64.rpm
+# Update repositories and install the downloaded .rpm package:
+sudo dnf update -y
+sudo dnf install -y ./voxd-*-x86_64.rpm  # or the arm64 counterpart if on an ARM device
 ```
 
-- **openSUSE (.rpm)**
+---
+
+#### **openSUSE (.rpm)**
+
 ```bash
-sudo zypper install --force-resolution ./voxd-*-x86_64.rpm
+# Refresh repositories and install the downloaded .rpm package with dependency resolution:
+sudo zypper refresh
+sudo zypper install --force-resolution ./voxd-*-x86_64.rpm   # or the arm64 counterpart if on an ARM device
 ```
 
-- **Arch (.pkg.tar.zst)**
+---
+
+#### **Arch Linux (.pkg.tar.zst)**
+
 ```bash
-sudo pacman -U ./voxd-*-x86_64.pkg.tar.zst
+# Synchronize package databases and install the downloaded .pkg.tar.zst package:
+sudo pacman -Sy
+sudo pacman -U ./voxd-*-x86_64.pkg.tar.zst    # or the arm64 counterpart if on an ARM device
 ```
 
-Alternatively, you can use the cross-distro helper after downloading a package file into the current directory:
-```bash
-curl -fsSL https://raw.githubusercontent.com/jakovius/voxd/main/packaging/install_voxd.sh -o install_voxd.sh
-bash install_voxd.sh
-```
+#### Alternatively: Download the source or clone the repo, and run the setup (for hacking):  
 
-#### Alternative: Clone the repo & run the setup (for hacking):  
-
-Copy this code, paste into terminal (Ctrl+Shift+V), and execute:
 ```bash
 git clone https://github.com/jakovius/voxd.git
 
@@ -80,7 +88,7 @@ cd voxd && ./setup.sh
 Setup is non-interactive with minimal console output; a detailed setup log is saved in the repo directory (e.g. `2025-09-18-setup-log.txt`).
 
 **Reboot** the system!  
-(required to complete **ydotool** setup).  
+(unless on an X11 system; on most modern systems there is Wayland, so **ydotool** is required for typing and needs rebooting for user setup).  
 
 ### 2. **Setup a global hotkey** shortcut  in your system, for recording/stop:  
 a. Open your system keyboard-shortcuts panel:  
@@ -95,66 +103,49 @@ b. **The command** to assign to the shortcut hotkey (EXACTLY as given):
 c. Click **Add / Save**.  
 
 ### <span style="color: #FFD600;">READY! → Go type anywhere with your voice!</span>  
-Well, first run the app (see below) with a global `voxd` command.  
-*(If you have been hacking a little too much, and need fixing, re-run `setup.sh`)*
-
+Well, first run the app in terminal (see below) with a global `voxd` command.  
+The first run will do some initial setup (voice model, LLM model for AIPP, ydotool user setup).
 
 ---
 
 ## Usage
 
-### Launch VOXD via Terminal, in any mode:
+### Use the installed VOXD launchers (your app launcher) or launch via Terminal, in any mode:
 ```bash
-voxd        # CLI (interactive); 'h' shows commands inside CLI
-voxd --rh   # directly starts hotkey-controlled continuous recording in CLI
+voxd        # CLI (interactive); 'h' shows commands inside CLI. FIRST RUN: a necessary initial setup.
+voxd --rh   # directly starts hotkey-controlled continuous recording in Terminal
 voxd -h     # show top-level help and quick-actions
-voxd --gui  # friendly pill-button window
-voxd --tray # sits in the tray; perfect for continuous dictation
-voxd --flux # VAD (Voice Activity Detection), voice-triggered continuous dictation
+voxd --gui  # friendly GUI window--just leave it in the background to voice-type via your hotkey
+voxd --tray # sits in the tray; perfect for unobstructed dictation (hotkey-driven also)
+voxd --flux # VAD (Voice Activity Detection), voice-triggered continuous dictation (in beta)
 ```
 
-Now leave it running in the background, then go to any app where you want to voice-type and:
-
-If in --flux, **just speak**.  
-
-Otherwise:
+Leave VOXD running in the background -> go to any app where you want to voice-type and:  
 
 | Press hotkey …   | VOXD does …                                                |
 | ---------------- | ----------------------------------------------------------- |
 | **First press**  | start recording                                             |
-| **Second press** | stop ⇢ [transcribe ⇢ copy to clipboard] ⇢ types the output into any focused app |
+| **Second press** | stop ⇢ [transcribe ⇢ copy to clipboard] ⇢ types the output into any focused app |  
 
-
-
-### ... or from your app launcher:
-Desktop launchers are installed automatically. Open your application menu and launch:
-
-- VOXD (gui)
-- VOXD (tray)
-- VOXD (flux)
-
+Otherwise, if in --flux, **just speak**.
 
 ### 🎙️  Managing speech models
 
-VOXD needs a Whisper GGML model file.  
-Use the built-in model-manager to fetch the default (≈142 MB):
+VOXD needs a Whisper GGML model file. There is one default model readily setup in the app (base.en).  
+Use the built-in model-manager in GUI mode or via CLI mode in Terminal to fetch any other model.  
+The voice models are downloaded into ~/.local/share/voxd/models/ and VOXD app will
+automatically have them visible.
 
-```bash
-voxd-model install base.en     # or tiny.en / small / medium … see list below
-```
-That downloads into ~/.local/share/voxd/models/ and VOXD will
-automatically pick it up.
-
-Common commands:
+CLI model management examples:
 ```bash
 voxd-model list	# show models already on disk
-voxd-model install tiny.en  #	download another model ("fetch" can be also used as alias for "install")
+voxd-model install tiny.en  #	download another model
 voxd-model --no-check install base.en # download a model and skip SHA-1 verification
 voxd-model remove tiny.en	# delete a model
 voxd-model use tiny.en	# make that model the default (edits config.yaml)
 ```
 
-Some of the available keys (size MB):
+Some of the models for download (size MB):
 
 tiny.en 75 · tiny 142 · base.en 142 · base 142 ·
 small.en 466 · small 466 · medium.en 1500 · medium 1500 · large-v3 2900
@@ -165,15 +156,15 @@ small.en 466 · small 466 · medium.en 1500 · medium 1500 · large-v3 2900
 
 Available in GUI and TRAY modes ("Settings"), but directly here:
 `~/.config/voxd/config.yaml`
-Unknown keys are ignored.
 
 ---
 
 ## 🧠 AI Post-Processing (AIPP)
-Your spoken words can be magically cleaned and rendered into e.g. neatly formated email, or straight away into a programing code!  
+Your spoken words can be magically cleaned and rendered into e.g. neatly formated email, a poem, or straight away into a programing code!  
 
 VOXD can optionally post-process your transcripts using LOCAL (on-machine, **llama.cpp**, **Ollama**) or cloud LLMs (like **OpenAI, Anthropic, or xAI**).  
-For the local AIPP, **llama.cpp** will be available out-of-the-box. You can also **[install Ollama](https://ollama.ai)** and download a model that can be run on your machine, e.g. `ollama pull gemma3:latest`.   
+For the local AIPP, **llama.cpp** is available out-of-the-box, with a default model.  
+You can also **[install Ollama](https://ollama.ai)** and download a model that can be run on your machine, e.g. `ollama pull gemma3:latest`.   
 You can enable, configure, and manage prompts directly from the GUI.
 
 ### Enable AIPP:
@@ -184,7 +175,7 @@ In GUI or TRAY mode, all relevant settings are in: "*AI Post-Processing*".
 
 ## Supported providers:
 
-- **llama.cpp** (local, direct & server modes)
+- **llama.cpp** (local)
 - **Ollama** (local)  
 - **OpenAI**  
 - **Anthropic**  
