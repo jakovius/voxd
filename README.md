@@ -28,7 +28,7 @@ Hit a **global shortcut**, speak, and watch your words appear wherever the curso
   
 
 
-## Installation
+## Setup
 
 Complete the 2 steps:
 ### 1. Install VOXD
