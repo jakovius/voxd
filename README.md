@@ -29,7 +29,8 @@ Hit your **hotkey shortcut** -> speak -> hotkey again -> watch your words appear
 
 ## Setup
 
-Complete the 2 steps:  
+Complete the 2 steps: **Install VOXD** & **setup a hotkey**.  
+
 ### 1. Install VOXD
 
 #### Preferred: Install from Release (recommended)
@@ -259,6 +260,8 @@ If an API key is missing, the respective cloud-based AIPP provider will (surpris
 
 ## 🩺 Troubleshooting cheatsheet
 
+Note: As one may expect, the app is not completely immune to very noisy environments :) especially if you are not the best speaker out there.  
+
 | Symptom                            | Likely cause / fix                                                                                             |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | *Getting randomly [BLANK_AUDIO], no transcript, or very poor transcript*    | Most likely: too high mic volume (clipping & distortions) VOXD will try to set your microphone optimally (configurable), but anyway check if input volume is not > 45%.
@@ -281,27 +284,8 @@ If an API key is missing, the respective cloud-based AIPP provider will (surpris
 
 ## 🗑️  Removal / Uninstall
 
-### 1. Repo-clone install (`./setup.sh`)
-If you cloned this repository and ran `./setup.sh` inside it:
 
-```bash
-# From inside the repo folder
-# (1) leave the venv if it is currently active
-deactivate 2>/dev/null || true
-
-# (2) delete everything that the helper script created in-place
-rm -rf .venv              # Python virtual-env
-rm -rf whisper.cpp        # whisper.cpp sources + binaries
-rm -rf llama.cpp          # llama.cpp sources + binaries (if installed)
-rm -f  ~/.local/bin/whisper-cli   # symlink created by setup.sh
-rm -f  ~/.local/bin/llama-server  # llama.cpp server symlink
-rm -f  ~/.local/bin/llama-cli     # llama.cpp CLI symlink
-
-# (3) finally remove the repo folder itself
-cd .. && rm -rf voxd
-```
-
-### 2. Package install (deb/rpm/arch)
+### 1. Package install (deb/rpm/arch)
 If VOXD was installed via a native package:
 
 - **Ubuntu/Debian**
@@ -325,6 +309,28 @@ sudo pacman -R voxd
 ```
 
 Note: This removes system files (e.g., under `/opt/voxd` and `/usr/bin/voxd`). User-level data (models, config, logs) remain. See "Optional runtime clean-up" below to remove those.
+
+
+
+### 2. Repo-clone install (`./setup.sh`)
+If you cloned this repository and ran `./setup.sh` inside it:
+
+```bash
+# From inside the repo folder
+# (1) leave the venv if it is currently active
+deactivate 2>/dev/null || true
+
+# (2) delete everything that the helper script created in-place
+rm -rf .venv              # Python virtual-env
+rm -rf whisper.cpp        # whisper.cpp sources + binaries
+rm -rf llama.cpp          # llama.cpp sources + binaries (if installed)
+rm -f  ~/.local/bin/whisper-cli   # symlink created by setup.sh
+rm -f  ~/.local/bin/llama-server  # llama.cpp server symlink
+rm -f  ~/.local/bin/llama-cli     # llama.cpp CLI symlink
+
+# (3) finally remove the repo folder itself
+cd .. && rm -rf voxd
+```
 
 ### 3. pipx install
 If voxd was installed through **pipx** (either directly or via the prompt at the end of `setup.sh`):
