@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QInputDialog, QGroupBox, QSystemTrayIcon, QMenu, QDialog, QTextEdit
 )
 from PyQt6.QtCore import Qt, QTimer, QFileSystemWatcher
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QPainter, QColor, QPen
 from pathlib import Path
 
 from voxd.core.config import get_config, CONFIG_PATH
@@ -20,6 +20,9 @@ from voxd.utils.performance import update_last_perf_entry
 
 ASSETS_DIR = (Path(__file__).resolve().parent / ".." / "assets").resolve()
 
+# Design constants
+UI_GRAY_COLOR = "#3a3a3a"  # Primary gray color for UI elements
+
 
 class VoxdApp(QWidget):
     def __init__(self):
@@ -29,11 +32,16 @@ class VoxdApp(QWidget):
 
         # Remove title bar - frameless window
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
         self.setWindowTitle("voxd")
-        self.setFixedSize(340, 145) 
-        self.setStyleSheet("background-color: #1e1e1e; color: white;")
+        self.setFixedSize(340, 162)  # Adjusted for spacing after drag bar
+        self.setStyleSheet("""
+            QWidget {
+                color: white;
+            }
+        """)
+        self.setObjectName("VoxdMainWindow")
 
         self.status = "Ready"
         self.last_transcript = ""
@@ -76,49 +84,64 @@ class VoxdApp(QWidget):
 
         # Help button (circular with ?) - custom style with larger font
         self.help_button = QPushButton("?")
-        help_btn_style = """
-            QPushButton {
-                background-color: #444;
+        help_btn_style = f"""
+            QPushButton {{
+                background-color: {UI_GRAY_COLOR};
                 color: #1e1e1e;
                 border-radius: 16px;
                 font-size: 22px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
+                background-color: #4a4a4a;
+            }}
+            QPushButton:pressed {{
                 background-color: #555;
-            }
-            QPushButton:pressed {
-                background-color: #666;
-            }
+            }}
         """
         self.help_button.setFixedSize(32, 32)
         self.help_button.setStyleSheet(help_btn_style)
         self.help_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.help_button.clicked.connect(self.show_help_dialog)
         
+        # Drag handle bar for easy window movement
+        self.drag_bar = QLabel("voxd")
+        self.drag_bar.setFixedHeight(18)
+        self.drag_bar.setStyleSheet(f"""
+            background-color: {UI_GRAY_COLOR}; 
+            border-top-left-radius: 6px; 
+            border-top-right-radius: 6px;
+            color: #1e1e1e;
+            font-weight: bold;
+            font-size: 9pt;
+            padding-left: 8px;
+        """)
+        self.drag_bar.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.drag_bar.setCursor(Qt.CursorShape.SizeAllCursor)
+        
         # Instruction label (for row 2)
         self.instruction_label = QLabel("<b>Hit your hotkey</b> to rec/stop (leave this in background to type)")
-        self.instruction_label.setStyleSheet("color: gray; font-size: 8pt; font-style: italic; margin-top: 0px; margin-bottom: 0px;")
+        self.instruction_label.setStyleSheet("color: gray; font-size: 8pt; font-style: italic; margin-top: 0px; margin-bottom: 0px; padding-top: 0px; padding-bottom: 0px;")
         self.instruction_label.setWordWrap(True)
-        self.instruction_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.instruction_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.instruction_label.setContentsMargins(0, 0, 0, 0)
 
         # Close button (circular with X) - custom style with larger font
         self.close_button = QPushButton("×")
-        close_btn_style = """
-            QPushButton {
-                background-color: #444;
+        close_btn_style = f"""
+            QPushButton {{
+                background-color: {UI_GRAY_COLOR};
                 color: #1e1e1e;
                 border-radius: 16px;
                 font-size: 28px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
+                background-color: #4a4a4a;
+            }}
+            QPushButton:pressed {{
                 background-color: #555;
-            }
-            QPushButton:pressed {
-                background-color: #666;
-            }
+            }}
         """
         self.close_button.setFixedSize(32, 32)
         self.close_button.setStyleSheet(close_btn_style)
@@ -159,18 +182,18 @@ class VoxdApp(QWidget):
         # Options button with dropdown menu
         self.options_btn = QPushButton("Options")
         self.options_btn.setFixedSize(96, 32)  # 80% of main button width, 20% reduced height
-        self.options_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #444;
+        self.options_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {UI_GRAY_COLOR};
                 color: white;
                 border-radius: 16px;
                 font-size: 12px;
                 padding-left: 8px;
                 padding-right: 8px;
-            }
-            QPushButton:hover {
-                background-color: #555;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: #4a4a4a;
+            }}
         """)
         self.options_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.options_btn.clicked.connect(self.show_options_menu)
@@ -190,12 +213,26 @@ class VoxdApp(QWidget):
         self._anim_mode = "idle"
 
         self.build_ui()
+        
+        # Position window at lower-right corner of screen
+        screen = QApplication.primaryScreen()
+        if screen:
+            screen_geometry = screen.availableGeometry()
+            x = screen_geometry.width() - self.width() - 20  # 20px margin from right
+            y = screen_geometry.height() - self.height() - 20  # 20px margin from bottom
+            self.move(x, y)
 
     def build_ui(self):
         """Build 3-row layout."""
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(6, 6, 6, 6)
-        main_layout.setSpacing(3)
+        main_layout.setContentsMargins(0, 0, 0, 6)  # No margin at top for drag bar
+        main_layout.setSpacing(2)  # Compact spacing between rows
+        
+        # Add drag bar at the very top
+        main_layout.addWidget(self.drag_bar)
+        
+        # Add small spacing after drag bar
+        main_layout.addSpacing(4)
 
         # ═══════════════════════════════════════════════════════════════════
         # ROW 1: Main button + Options button + Circular buttons
@@ -203,6 +240,7 @@ class VoxdApp(QWidget):
         row1 = QHBoxLayout()
         row1.setSpacing(6)
         row1.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        row1.setContentsMargins(6, 0, 6, 0)  # Horizontal margins for content inside rounded border
         
         # Main button
         row1.addWidget(self.status_button, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -220,13 +258,19 @@ class VoxdApp(QWidget):
         # ═══════════════════════════════════════════════════════════════════
         # ROW 2: Instruction label
         # ═══════════════════════════════════════════════════════════════════
-        main_layout.addWidget(self.instruction_label)
+        # Direct add with minimal spacing
+        instruction_row = QHBoxLayout()
+        instruction_row.setContentsMargins(6, 0, 6, 0)
+        instruction_row.setSpacing(0)
+        instruction_row.addWidget(self.instruction_label)
+        main_layout.addLayout(instruction_row)
         
         # ═══════════════════════════════════════════════════════════════════
         # ROW 3: Checkboxes (col 1) + Transcript/Clipboard (col 2)
         # ═══════════════════════════════════════════════════════════════════
         row3 = QHBoxLayout()
         row3.setSpacing(6)
+        row3.setContentsMargins(6, 0, 6, 0)  # Horizontal margins for content inside rounded border
         
         # Column 1: Checkboxes (vertical) - compact version
         col1 = QVBoxLayout()
@@ -594,11 +638,28 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
         except Exception:
             pass
 
+    def paintEvent(self, event):
+        """Custom paint event to draw rounded background and border."""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw background with rounded corners
+        painter.setBrush(QColor("#1e1e1e"))
+        painter.setPen(QPen(QColor(UI_GRAY_COLOR), 2))
+        # Adjust rect to account for border width
+        rect = self.rect().adjusted(1, 1, -1, -1)
+        painter.drawRoundedRect(rect, 8, 8)
+    
     # Enable dragging the frameless window
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            event.accept()
+            # Check if click is on the drag bar or empty space
+            widget = self.childAt(event.pos())
+            if widget is self.drag_bar or widget is None:
+                self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+                event.accept()
+            else:
+                event.ignore()
 
     def mouseMoveEvent(self, event):
         if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, 'drag_position'):

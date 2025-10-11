@@ -58,22 +58,22 @@ sudo dnf install -y ./voxd-*-x86_64.rpm  # or the arm64 counterpart if on an ARM
 
 ---
 
-#### **openSUSE (.rpm)**
-
-```bash
-# Refresh repositories and install the downloaded .rpm package with dependency resolution:
-sudo zypper refresh
-sudo zypper install --force-resolution ./voxd-*-x86_64.rpm   # or the arm64 counterpart if on an ARM device
-```
-
----
-
 #### **Arch Linux (.pkg.tar.zst)**
 
 ```bash
 # Synchronize package databases and install the downloaded .pkg.tar.zst package:
 sudo pacman -Sy
 sudo pacman -U ./voxd-*-x86_64.pkg.tar.zst    # or the arm64 counterpart if on an ARM device
+```
+
+---
+
+#### **openSUSE (.rpm)**
+
+```bash
+# Refresh repositories and install the downloaded .rpm package with dependency resolution:
+sudo zypper refresh
+sudo zypper install --force-resolution ./voxd-*-x86_64.rpm   # or the arm64 counterpart if on an ARM device
 ```
 
 #### Alternatively: Download the source or clone the repo, and run the setup (for hacking):  
