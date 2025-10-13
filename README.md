@@ -4,7 +4,7 @@ Running in background, provides fast **voice-to-text typing** in any Linux app.
 Using **LOCAL** voice processing, with optional **LOCAL** AI text post-processing.  
 Runs fine even on older CPUs. No GPU required.
 
-Hit your **hotkey shortcut** -> speak -> hotkey again -> watch your words appear wherever you put the cursor, even AI-rewritten as a poem or a C++ code.  
+Hit your **hotkey shortcut** -> speak -> hotkey again -> watch your words appear wherever the cursor currently is, even AI-rewritten as a poem or a C++ code.  
   
 **Tested & Works on:**
 - Ubuntu 24.04 / GNOME
