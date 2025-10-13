@@ -103,9 +103,11 @@ b. **The command** to assign to the shortcut hotkey (EXACTLY as given):
 
 c. Click **Add / Save**.  
 
+First, run the app in terminal (see below) with a global `voxd` command.  
+The first run will do some initial setup (voice model, LLM model for AIPP, ydotool user setup).  
+
 ### <span style="color: #FFD600;">READY! → Go type anywhere with your voice!</span>  
-Well, first run the app in terminal (see below) with a global `voxd` command.  
-The first run will do some initial setup (voice model, LLM model for AIPP, ydotool user setup).
+
 
 ---
 
