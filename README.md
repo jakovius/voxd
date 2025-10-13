@@ -1,4 +1,4 @@
-# VOXD - Voice-Type on Linux 🗣️⌨️
+# VOXD - Voice-Type / dictation app for Linux 🗣️⌨️
 
 Running in background, provides fast **voice-to-text typing** in any Linux app.  
 Using **LOCAL** voice processing, with optional **LOCAL** AI text post-processing.  
