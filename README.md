@@ -7,12 +7,13 @@ Runs fine even on older CPUs. No GPU required.
 Hit your **hotkey shortcut** -> speak -> hotkey again -> watch your words appear wherever you put the cursor, even AI-rewritten as a poem or a C++ code.  
   
 **Tested & Works on:**
-- Ubuntu 24.04 and Ubuntu Sway Remix 25.04
-- Fedora 42
-- openSUSE, Leap 15.6
+- Ubuntu 24.04 / GNOME
+- Ubuntu 25.04 / Sway
+- Fedora 42 / KDE
+- Arch / Hyprland
 - Pop!_OS 22
-- Mint 22
-- Arch 2025 / Hyprland.  
+- Mint 22 / Cinnamon
+- openSUSE, Leap 15.6
 
 
 ## Highlights
@@ -21,10 +22,10 @@ Hit your **hotkey shortcut** -> speak -> hotkey again -> watch your words appear
 | -------------------------------- | ----------------------------------------------------------------------- |
 | **Whisper.cpp** backend          | Local, offline, fast  ASR.   |
 | **Simulated typing**             | instantly types straight into any currently focused input window. Even on Wayland! (*ydotool*).  |
-| **Clipboard**                    | Auto-copies into clipboard - ready for pasting        |
+| **Clipboard**                    | Auto-copies into clipboard - ready for pasting, if desired        |
+| **AIPP**, AI Post-Processing	   | AI-rewriting via local or cloud LLMs. GUI prompt editor.         |  
 | **Multiple UI** surfaces         | CLI, GUI (minimal PyQt6), TRAY (system tray), FLUX (triggered by voice activity detection, beta) |
 | **Logging** & **performance**    | Session log plus your own optional local performance data (CSV).                          |
-| **AIPP**, AI Post-Processing	   | AI-rewriting via local or cloud LLMs. GUI prompt editor.         |  
  
 
 ## Setup
