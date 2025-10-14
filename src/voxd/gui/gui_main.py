@@ -393,7 +393,7 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
 <h3 style='color: #FF4500; margin-top: 15px; margin-bottom: 10px;'>Dictation (Voice-Typing)</h3>
 <ol style='margin-left: 20px; line-height: 1.6;'>
 <li>Go to wherever you want to type and leave this app in the background</li>
-<li>Hit the hotkey -> speak -> press the hotkey again -> typing happens!</li>
+<li>Hit the hotkey -> speak -> press the hotkey again -> types what you said!</li>
 </ol>
         """)
         help_text.setStyleSheet("font-size: 10pt; line-height: 1.5;")
