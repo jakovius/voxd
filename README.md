@@ -316,24 +316,13 @@ Note: This removes system files (e.g., under `/opt/voxd` and `/usr/bin/voxd`). U
 
 
 ### 2. Repo-clone install (`./setup.sh`)
-If you cloned this repository and ran `./setup.sh` inside it:
+If you cloned this repository and ran `./setup.sh` inside it, just run the uninstall.sh script in the repo folder:
 
 ```bash
 # From inside the repo folder
-# (1) leave the venv if it is currently active
-deactivate 2>/dev/null || true
-
-# (2) delete everything that the helper script created in-place
-rm -rf .venv              # Python virtual-env
-rm -rf whisper.cpp        # whisper.cpp sources + binaries
-rm -rf llama.cpp          # llama.cpp sources + binaries (if installed)
-rm -f  ~/.local/bin/whisper-cli   # symlink created by setup.sh
-rm -f  ~/.local/bin/llama-server  # llama.cpp server symlink
-rm -f  ~/.local/bin/llama-cli     # llama.cpp CLI symlink
-
-# (3) finally remove the repo folder itself
-cd .. && rm -rf voxd
+./uninstall.sh
 ```
+
 
 ### 3. pipx install
 If voxd was installed through **pipx** (either directly or via the prompt at the end of `setup.sh`):
@@ -341,78 +330,6 @@ If voxd was installed through **pipx** (either directly or via the prompt at the
 ```bash
 pipx uninstall voxd
 ```
-
-### 4. Optional runtime clean-up
-These steps remove user-level state that VOXD (or its Wayland helper) may have created. They are **safe to skip** – do them only if you want a fully pristine system. Pick the subsection that matches how you installed VOXD.
-
-#### Package install – user-scoped leftovers (after removing the package)
-```bash
-# Stop any live processes
-pkill -f voxd         || true
-pkill -f ydotoold     || true
-pkill -f llama-server || true
-
-# Disable the user service (packaged unit lives under /usr/lib/systemd/user)
-systemctl --user disable --now ydotoold.service 2>/dev/null || true
-rm -f ~/.config/systemd/user/default.target.wants/ydotoold.service 2>/dev/null || true
-systemctl --user daemon-reload 2>/dev/null || true
-
-# Remove VOXD-managed prebuilts and symlinks for ydotool/ydotoold
-rm -f ~/.local/bin/ydotool ~/.local/bin/ydotoold
-rm -rf ~/.local/share/voxd/bin
-rm -f ~/.ydotool_socket
-
-# Remove VOXD user config & data (models, logs, settings)
-rm -rf ~/.config/voxd
-rm -rf ~/.local/share/voxd
-
-# Note: The package removal already deletes the udev rule at /etc/udev/rules.d/99-uinput.rules
-# Optional: revert uinput autoload that the package enabled (only if you don't need ydotool elsewhere)
-sudo rm -f /etc/modules-load.d/uinput.conf 2>/dev/null || true
-sudo modprobe -r uinput 2>/dev/null || true
-
-# Optionally remove yourself from the 'input' group (log out/in to take effect)
-sudo gpasswd -d "$USER" input 2>/dev/null || true
-```
-
-#### Repo-clone install – user-scoped leftovers
-```bash
-# Stop any live processes
-pkill -f voxd         || true
-pkill -f ydotoold     || true
-pkill -f llama-server || true  # Stop llama.cpp server if running
-
-# Systemd user service (only if you previously ran setup_ydotool.sh)
-systemctl --user stop    ydotoold.service   2>/dev/null || true
-systemctl --user disable ydotoold.service   2>/dev/null || true
-rm -f ~/.config/systemd/user/ydotoold.service
-
-# XDG config & cache
-rm -rf ~/.config/voxd      # settings file, absolute paths, etc.
-rm -rf ~/.local/share/voxd # models, logs, and all user data
-                               # (includes llamacpp_models/ directory)
-
-# Desktop launcher
-rm -f ~/.local/share/applications/voxd.desktop
-rm -f ~/.local/share/applications/voxd-*.desktop
-
-# Udev rule (Wayland only ‑ created for ydotool)
-sudo rm -f /etc/udev/rules.d/99-uinput.rules 2>/dev/null || true
-
-# Optionally remove yourself from the 'input' group again
-# (Only necessary if you added it just for ydotool)
-sudo gpasswd -d "$USER" input 2>/dev/null || true
-```
-
-### 5. System packages
-`setup.sh` installs broadly useful distro packages (ffmpeg, gcc, cmake, portaudio, …). Most users keep them. If you **really** want to roll back, remove them with your package manager, e.g.
-
-```bash
-# Debian / Ubuntu example
-sudo apt remove ffmpeg portaudio19-dev cmake
-```
-
-That's it – VOXD is now completely removed from your system.
 
 ---
 
