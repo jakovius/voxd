@@ -29,6 +29,9 @@ DEFAULT_CONFIG = {
     "audio_preproc_enabled": True,
     "audio_peak_dbfs": -3.0,
     "audio_clip_warn_threshold": 0.01,
+    # Audio device preferences
+    "audio_prefer_pulse": True,
+    "audio_input_device": "",
     # Mic autoset (best-effort; uses wpctl/pactl/amixer if present)
     "mic_autoset_enabled": True,
     "mic_autoset_level": 0.45,

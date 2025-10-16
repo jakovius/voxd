@@ -41,6 +41,14 @@ class AudioRecorder:
         if self.record_chunked:
             self._open_new_chunk()
 
+        # Prefer configured device or PulseAudio on Linux
+        try:
+            from voxd.core.config import AppConfig
+            cfg = AppConfig()
+            dev_pref = cfg.data.get("audio_input_device") or ("pulse" if cfg.data.get("audio_prefer_pulse", True) else None)
+        except Exception:
+            dev_pref = "pulse"
+
         def callback(indata, frames, time, status):
             if status:
                 verbo(f"[recorder] Warning: {status}")
@@ -61,22 +69,27 @@ class AudioRecorder:
             else:
                 self.recording.append(indata.copy())
 
-        # Try preferred sample rate; if it fails, fall back to device default
+        # Helper to open stream with optional device and samplerate
+        def _open(device, fs):
+            kw = {"samplerate": fs, "channels": self.channels, "callback": callback}
+            if device:
+                kw["device"] = device
+            return sd.InputStream(**kw)
+
+        # Try preferred sample rate on preferred device; then robust fallbacks
+        tried_pulse = False
         try:
-            self.stream = sd.InputStream(
-                samplerate=self.fs,
-                channels=self.channels,
-                callback=callback
-            )
+            self.stream = _open(dev_pref, self.fs)
             self.stream.start()
         except Exception as e:
             verr(f"[recorder] Opening stream at {self.fs} Hz failed ({e}); trying device default rate")
+            # Determine device default samplerate
             try:
-                dev = sd.default.device[0]
+                indev = dev_pref if dev_pref else (sd.default.device[0] if sd.default.device else None)
             except Exception:
-                dev = None
+                indev = None
             try:
-                info = sd.query_devices(dev, 'input')
+                info = sd.query_devices(indev, 'input') if indev is not None else sd.query_devices(kind='input')
                 fallback_fs = int(info.get('default_samplerate') or 48000)
             except Exception:
                 fallback_fs = 48000
@@ -88,11 +101,18 @@ class AudioRecorder:
                 except Exception:
                     pass
                 self._open_new_chunk()
-            self.stream = sd.InputStream(
-                samplerate=self.fs,
-                channels=self.channels,
-                callback=callback
-            )
+            # If not yet tried, attempt with pulse explicitly
+            if dev_pref != "pulse":
+                try:
+                    self.stream = _open("pulse", self.fs)
+                    self.stream.start()
+                    tried_pulse = True
+                    return
+                except Exception:
+                    tried_pulse = True
+                    pass
+            # Last resort: open without device hint
+            self.stream = _open(None, self.fs)
             self.stream.start()
 
     def stop_recording(self, preserve=False):

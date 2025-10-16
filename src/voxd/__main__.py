@@ -245,6 +245,40 @@ def main():
             else:
                 print("[Diagnose] ydotool: ❌ not installed")
         
+        # Audio device diagnostics
+        try:
+            import sounddevice as sd
+            print("[Diagnose] sounddevice default:", sd.default.device)
+            try:
+                inp = sd.query_devices(kind='input')
+                print(f"[Diagnose] default input: {inp.get('name')} @ {inp.get('default_samplerate')} Hz")
+            except Exception:
+                pass
+            # Enumerate devices
+            try:
+                devs = sd.query_devices()
+                print("[Diagnose] Available devices:")
+                for i, d in enumerate(devs):
+                    name = d.get('name', 'unknown')
+                    mi = d.get('max_input_channels', 0)
+                    sr = d.get('default_samplerate', None)
+                    print(f"  [{i}] {name} | in={mi} | default_sr={sr}")
+                # Pulse hint
+                names = [str(d.get('name','')).lower() for d in devs]
+                has_pulse = any('pulse' in n for n in names)
+                if not has_pulse:
+                    print("[Diagnose] Hint: No 'pulse' device detected.")
+                    if shutil.which('apt'):
+                        print("  Debian/Ubuntu: sudo apt install alsa-plugins pavucontrol (ensure pulseaudio or pipewire-pulse active)")
+                    elif shutil.which('dnf') or shutil.which('dnf5') or shutil.which('zypper'):
+                        print("  Fedora/openSUSE: sudo dnf install alsa-plugins-pulseaudio pavucontrol (ensure pipewire-pulseaudio active)")
+                    elif shutil.which('pacman'):
+                        print("  Arch: sudo pacman -S alsa-plugins pipewire-pulse pavucontrol")
+            except Exception:
+                pass
+        except Exception:
+            print("[Diagnose] sounddevice not available")
+
         sys.exit(0)
 
     # Optionally ensure mic is on and set to desired level (best-effort)

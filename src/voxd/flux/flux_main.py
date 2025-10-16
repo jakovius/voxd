@@ -460,8 +460,14 @@ class FluxRunner:
         self.cfg.data["aipp_enabled"] = False
         self.cfg.aipp_enabled = False
 
+        # Device preference (Pulse first unless configured otherwise)
         try:
-            dev = sd.default.device
+            dev_pref = self.cfg.data.get("audio_input_device") or ("pulse" if self.cfg.data.get("audio_prefer_pulse", True) else None)
+        except Exception:
+            dev_pref = "pulse"
+
+        try:
+            dev = dev_pref if dev_pref else sd.default.device
             indev = dev[0] if isinstance(dev, (list, tuple)) else dev
             dev_info = sd.query_devices(indev, kind='input') if indev is not None else sd.query_devices(kind='input')
             print(f"Flux mode: continuous VAD dictation @ {self.fs} Hz. Ctrl+C to stop.")
@@ -473,7 +479,7 @@ class FluxRunner:
             self.vad.begin_calibration(self.calib_sec, noise_spec_ema=float(self.cfg.data.get("flux_noise_spec_ema", 0.02)))
         self.worker.start()
         try:
-            with sd.InputStream(samplerate=self.fs, channels=1, dtype="float32", blocksize=self.N, callback=self._callback):
+            with sd.InputStream(samplerate=self.fs, channels=1, dtype="float32", blocksize=self.N, callback=self._callback, device=dev_pref if dev_pref else None):
                 # Optionally show monitor window
                 if self.monitor_enabled:
                     try:

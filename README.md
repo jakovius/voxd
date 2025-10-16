@@ -274,6 +274,23 @@ Note: As one may expect, the app is not completely immune to very noisy environm
 | *Mic not recording*                | Verify in system settings: **input device available**? / **active**? / **not muted**?                                        |
 | Clipboard empty                    | ensure `xclip` or `wl-copy`  present (re-run `setup.sh`).                                |
 
+### Audio troubleshooting
+
+- List devices: `python -m sounddevice` (check that a device named "pulse" exists on modern systems).
+- Prefer PulseAudio/PipeWire: set in `~/.config/voxd/config.yaml`:
+
+```yaml
+audio_prefer_pulse: true
+audio_input_device: "pulse"   # or a specific device name or index
+```
+
+- If no `pulse` device:
+  - Debian/Ubuntu: `sudo apt install alsa-plugins pavucontrol` (ensure `pulseaudio` or `pipewire-pulse` is active)
+  - Fedora/openSUSE: `sudo dnf install alsa-plugins-pulseaudio pavucontrol` (ensure `pipewire-pulseaudio` is active)
+  - Arch: `sudo pacman -S alsa-plugins pipewire-pulse pavucontrol`
+
+- If 16 kHz fails on ALSA: VOXD will retry with the device default rate and with `pulse` when available.
+
 ---
 
 ## 📜 License & Credits
