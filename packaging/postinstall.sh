@@ -37,26 +37,6 @@ fi
 
 echo "voxd installed. Each user should run: voxd --setup"
 
-# Audio tip: suggest Pulse/ALSA plugins if 'pulse' input is missing
-if command -v python >/dev/null 2>&1; then
-  if ! python - <<'PY' 2>/dev/null; then
-    exit 0
-  fi
-import sys
-try:
-    import sounddevice as sd  # type: ignore
-    names = [str(d.get('name','')).lower() for d in sd.query_devices()]
-    has_pulse = any('pulse' in n for n in names)
-    if not has_pulse:
-        print('[voxd] Tip: No "pulse" device detected. Install your distro\'s pulse shim and ALSA plugins:')
-        print('  - Debian/Ubuntu: sudo apt install alsa-plugins pavucontrol (ensure pulseaudio or pipewire-pulse active)')
-        print('  - Fedora/openSUSE: sudo dnf install alsa-plugins-pulseaudio pavucontrol (ensure pipewire-pulseaudio active)')
-        print('  - Arch: sudo pacman -S alsa-plugins pipewire-pulse pavucontrol')
-except Exception:
-    pass
-PY
-fi
-
 # Create a local virtualenv to ensure missing Python deps (e.g., sounddevice) are available
 # We inherit system site-packages to avoid duplicating distro Python libs
 APPDIR="/opt/voxd"
@@ -100,7 +80,7 @@ if [ -n "$PY" ]; then
     # Upgrade pip quietly; then install minimal extras that may be missing from repos
     "$VPY" -m pip install --upgrade --disable-pip-version-check pip >/dev/null 2>&1 || true
     # Ensure core runtime dependencies inside app venv (covers Leap mismatches)
-    "$VPY" -m pip install --disable-pip-version-check --no-input sounddevice>=0.5 psutil numpy requests pyyaml tqdm pyperclip >/dev/null 2>&1 || true
+    "$VPY" -m pip install --disable-pip-version-check --no-input "sounddevice>=0.5" psutil numpy requests pyyaml tqdm pyperclip >/dev/null 2>&1 || true
     # Ensure platformdirs (imported by voxd.core.config); install only if missing
     "$VPY" - <<'PY' 2>/dev/null || "$VPY" -m pip install --disable-pip-version-check --no-input platformdirs >/dev/null 2>&1 || true
 try:
@@ -130,6 +110,35 @@ except Exception:
     raise SystemExit(1)
 PY
   fi
+fi
+
+# Audio tip: suggest Pulse/ALSA plugins if 'pulse' input is missing
+# Prefer venv Python if available; else fall back to a system Python
+AUDIO_PY=""
+if [ -x "$APPDIR/.venv/bin/python" ]; then
+  AUDIO_PY="$APPDIR/.venv/bin/python"
+elif [ -n "${PY:-}" ]; then
+  AUDIO_PY="$PY"
+elif command -v python3 >/dev/null 2>&1; then
+  AUDIO_PY="python3"
+elif command -v python >/dev/null 2>&1; then
+  AUDIO_PY="python"
+fi
+if [ -n "$AUDIO_PY" ]; then
+  "$AUDIO_PY" - <<'PY' 2>/dev/null || true
+import sys
+try:
+    import sounddevice as sd  # type: ignore
+    names = [str(d.get('name','')).lower() for d in sd.query_devices()]
+    has_pulse = any('pulse' in n for n in names)
+    if not has_pulse:
+        print('[voxd] Tip: No "pulse" device detected. Install your distro\'s pulse shim and ALSA plugins:')
+        print('  - Debian/Ubuntu: sudo apt install alsa-plugins pavucontrol (ensure pulseaudio or pipewire-pulse active)')
+        print('  - Fedora/openSUSE: sudo dnf install alsa-plugins-pulseaudio pavucontrol (ensure pipewire-pulseaudio active)')
+        print('  - Arch: sudo pacman -S alsa-plugins pipewire-pulse pavucontrol')
+except Exception:
+    pass
+PY
 fi
 
 
