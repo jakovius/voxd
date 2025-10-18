@@ -80,14 +80,19 @@ overrides:
       - python3-pyperclip
       - python3-tqdm
       # sounddevice installed via venv in postinstall
+      # Note: On Fedora the ffmpeg package may require enabling RPM Fusion repository. 
+      # Note: On openSUSE the ffmpeg package (and other codecs) often come via the Packman repository. 
     suggests:
       - ydotool
       - ffmpeg
       - python3-qt6
       - python3-pyqtgraph
       - pavucontrol
-      - alsa-plugins-pulseaudio
+      # Fedora
+      - alsa-plugins-pipewire
       - pipewire-pulseaudio
+      # openSUSE
+      - alsa-plugins-pulse
   archlinux:
     depends:
       - ffmpeg

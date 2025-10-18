@@ -134,7 +134,8 @@ try:
     if not has_pulse:
         print('[voxd] Tip: No "pulse" device detected. Install your distro\'s pulse shim and ALSA plugins:')
         print('  - Debian/Ubuntu: sudo apt install alsa-plugins pavucontrol (ensure pulseaudio or pipewire-pulse active)')
-        print('  - Fedora/openSUSE: sudo dnf install alsa-plugins-pulseaudio pavucontrol (ensure pipewire-pulseaudio active)')
+        print('  - Fedora: sudo dnf install alsa-plugins-pipewire pavucontrol (ensure pipewire-pulseaudio active)')
+        print('  - openSUSE: sudo zypper install alsa-plugins-pulse pavucontrol (ensure pulse active)')
         print('  - Arch: sudo pacman -S alsa-plugins pipewire-pulse pavucontrol')
 except Exception:
     pass
