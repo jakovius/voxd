@@ -119,6 +119,10 @@ class VoxdApp(QWidget):
         self.drag_bar.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.drag_bar.setCursor(Qt.CursorShape.SizeAllCursor)
         
+        # Make drag bar forward mouse events to parent for dragging
+        self.drag_bar.mousePressEvent = lambda e: VoxdApp.mousePressEvent(self, e)
+        self.drag_bar.mouseMoveEvent = lambda e: VoxdApp.mouseMoveEvent(self, e)
+        
         # Instruction label (for row 2)
         self.instruction_label = QLabel("<b>Hit your hotkey</b> to rec/stop (leave this in background to type)")
         self.instruction_label.setStyleSheet("color: gray; font-size: 8pt; font-style: italic; margin-top: 0px; margin-bottom: 0px; padding-top: 0px; padding-bottom: 0px;")
@@ -653,13 +657,8 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
     # Enable dragging the frameless window
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # Check if click is on the drag bar or empty space
-            widget = self.childAt(event.pos())
-            if widget is self.drag_bar or widget is None:
-                self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-                event.accept()
-            else:
-                event.ignore()
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
 
     def mouseMoveEvent(self, event):
         if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, 'drag_position'):
