@@ -69,6 +69,14 @@ jobs:
       - name: Prepare dist dir
         run: mkdir -p dist
 
+      - name: Update pyproject.toml with release version
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+          echo "Updated pyproject.toml version to $VERSION"
+          grep "^version = " pyproject.toml
+
       - name: Build packages
         env:
           VERSION: ${{ steps.meta.outputs.version }}
