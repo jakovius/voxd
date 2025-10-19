@@ -15,6 +15,12 @@ contents:
   - src: ./src
     dst: /opt/voxd/src
 
+  # Ship pyproject.toml so runtime can read version when metadata/git are absent
+  - src: pyproject.toml
+    dst: /opt/voxd/pyproject.toml
+    file_info:
+      mode: 0644
+
   - src: packaging/voxd.wrapper
     dst: /usr/bin/voxd
     file_info:

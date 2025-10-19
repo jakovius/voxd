@@ -659,6 +659,25 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
     # Enable dragging the frameless window
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            # Prefer compositor/system move when available (Wayland/X11)
+            try:
+                win = self.windowHandle()
+                if win is not None:
+                    # startSystemMove returns True on success on supported platforms
+                    started = False
+                    try:
+                        started = bool(win.startSystemMove())
+                    except Exception:
+                        # Some PyQt6 builds expose startSystemMove without return value
+                        win.startSystemMove()
+                        started = True
+                    if started:
+                        event.accept()
+                        return
+            except Exception:
+                pass
+
+            # Fallback to manual dragging (mostly for X11)
             self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             self.is_dragging = True
             event.accept()

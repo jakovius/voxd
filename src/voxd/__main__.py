@@ -136,15 +136,20 @@ def _get_version() -> str:
         except Exception:
             pass
         
-        # Fallback 2: Parse from pyproject.toml
+        # Fallback 2: Parse from pyproject.toml (installed or repo root)
         try:
-            pyproject_path = resource_path("../../../pyproject.toml")
-            if pyproject_path.exists():
-                content = pyproject_path.read_text()
-                import re
-                match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
-                if match:
-                    return match.group(1)
+            from pathlib import Path
+            import re
+            candidates = [
+                Path("/opt/voxd/pyproject.toml"),
+                Path(__file__).parents[2] / "pyproject.toml",
+            ]
+            for pyproject_path in candidates:
+                if pyproject_path.exists():
+                    content = pyproject_path.read_text()
+                    match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
+                    if match:
+                        return match.group(1)
         except Exception:
             pass
         
