@@ -113,6 +113,43 @@ def _mic_autoset_if_enabled(cfg):
             pass
         return
 
+def _get_version() -> str:
+    """Get version from metadata, git tags, or pyproject.toml fallback."""
+    try:
+        return importlib.metadata.version("voxd")
+    except Exception:
+        # Fallback 1: Get from git tags (for dev/source installs)
+        try:
+            result = subprocess.run(
+                ["git", "describe", "--tags", "--abbrev=0"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                # Remove 'v' prefix if present (e.g., v1.3.1 -> 1.3.1)
+                if version.startswith('v'):
+                    version = version[1:]
+                return version
+        except Exception:
+            pass
+        
+        # Fallback 2: Parse from pyproject.toml
+        try:
+            pyproject_path = resource_path("../../../pyproject.toml")
+            if pyproject_path.exists():
+                content = pyproject_path.read_text()
+                import re
+                match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
+                if match:
+                    return match.group(1)
+        except Exception:
+            pass
+        
+        return "unknown"
+
 def main():
     parser = argparse.ArgumentParser(description="VOXD App Entry Point", add_help=False)
     # NOTE: we intentionally disable the automatic -h/--help. Sub-mode parsers
@@ -153,7 +190,7 @@ def main():
     args, unknown = parser.parse_known_args()
 
     if args.version:
-        print(importlib.metadata.version("voxd"))
+        print(_get_version())
         sys.exit(0)
 
     if args.setup or args.setup_verbose:
@@ -182,7 +219,7 @@ def main():
             parser.print_help()
             # Show installed version
             try:
-                print(f"\nVOXD version: {importlib.metadata.version('voxd')}")
+                print(f"\nVOXD version: {_get_version()}")
             except Exception:
                 pass
             # Also show CLI quick actions help for convenience
