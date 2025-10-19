@@ -119,9 +119,11 @@ class VoxdApp(QWidget):
         self.drag_bar.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.drag_bar.setCursor(Qt.CursorShape.SizeAllCursor)
         
-        # Make drag bar forward mouse events to parent for dragging
-        self.drag_bar.mousePressEvent = lambda e: VoxdApp.mousePressEvent(self, e)
-        self.drag_bar.mouseMoveEvent = lambda e: VoxdApp.mouseMoveEvent(self, e)
+        # Make drag bar transparent to mouse events so parent can handle dragging
+        self.drag_bar.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        
+        # Enable mouse tracking for smooth dragging
+        self.setMouseTracking(True)
         
         # Instruction label (for row 2)
         self.instruction_label = QLabel("<b>Hit your hotkey</b> to rec/stop (leave this in background to type)")
@@ -658,11 +660,18 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            self.is_dragging = True
             event.accept()
 
     def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, 'drag_position'):
-            self.move(event.globalPosition().toPoint() - self.drag_position)
+        if hasattr(self, 'is_dragging') and self.is_dragging and event.buttons() == Qt.MouseButton.LeftButton:
+            if hasattr(self, 'drag_position'):
+                self.move(event.globalPosition().toPoint() - self.drag_position)
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.is_dragging = False
             event.accept()
 
 
