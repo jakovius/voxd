@@ -453,9 +453,12 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
                 background-color: #2e2e2e;
                 color: white;
                 border: 1px solid #555;
+                border-radius: 8px;
+                padding: 4px;              /* inset items from rounded edge */
             }
             QMenu::item {
-                padding: 8px 20px;
+                padding: 6px 14px;
+                border-radius: 6px;        /* rounded item highlight */
             }
             QMenu::item:selected {
                 background-color: #444;
