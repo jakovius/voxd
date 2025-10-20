@@ -449,10 +449,11 @@ def _setup_llamacpp_user_components() -> None:
 def _install_desktop_launchers() -> None:
     # Copy icon
     try:
-        from importlib.resources import files
-    except Exception:
-        from importlib_resources import files  # type: ignore
-        icon_src = files("voxd.assets").joinpath("voxd-0.png")
+        try:
+            from importlib.resources import files
+        except Exception:
+            from importlib_resources import files  # type: ignore
+        icon_src = files("voxd").joinpath("assets", "voxd-1.png")
         icon_bytes = icon_src.read_bytes()  # type: ignore[attr-defined]
         icon_dir_256 = Path.home() / ".local/share/icons/hicolor/256x256/apps"
         icon_dir_64 = Path.home() / ".local/share/icons/hicolor/64x64/apps"

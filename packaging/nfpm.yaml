@@ -5,7 +5,7 @@ release: "1"
 section: utils
 priority: optional
 license: MIT
-maintainer: "VOXD Maintainers <you@example.com>"
+maintainer: "Jakov Ivkovic <jakov.iv@proton.me>"
 homepage: "https://github.com/jakovius/voxd"
 description: "VOXD - voice typing on Linux (CLI/GUI/Tray/Flux)"
 vendor: "VOXD"
