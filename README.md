@@ -1,13 +1,13 @@
 # VOXD - Voice-Type / dictation app for Linux 🗣️⌨️
 <div align="center">
-  <img src="src/voxd/assets/voxd-1.png" alt="VOXD logo" width="50%" />
+  <img src="src/voxd/assets/voxd-1.png" alt="VOXD logo" width="128" />
 </div>
 
 Running in background, provides fast **voice-to-text typing** in any Linux app.  
-Using <span style="color:#FFD600">**LOCAL**</span> (offline) voice processing, with optional <span style="color:#FFD600">**LOCAL**</span> (offline) AI text post-processing.  
+Using <span style="color:#FF4500">**LOCAL** (offline)</span> voice processing, with optional <span style="color:#FF4500">**LOCAL**</span> (offline) AI text post-processing.  
 Runs fine even on older CPUs. No GPU required.
 
-Hit your <span style="color:#FFD600">**hotkey shortcut**</span> -> speak -> hotkey again -> watch your words appear wherever the cursor currently is, even AI-rewritten as a poem or a C++ code.  
+Hit your <span style="color:#FF4500">**hotkey shortcut**</span> -> speak -> hotkey again -> watch your words appear wherever the cursor currently is, even AI-rewritten as a poem or a C++ code.  
   
 **Tested & Works on:**
 - Ubuntu 24.04 / GNOME
@@ -35,7 +35,7 @@ Hit your <span style="color:#FFD600">**hotkey shortcut**</span> -> speak -> hotk
 
 ## Setup
 
-Complete the 2 steps: <span style="color:#FFD600">**Install VOXD**</span> & <span style="color:#FFD600">**setup a hotkey**</span>.  
+Complete the 2 steps: <span style="color:#FF4500">**Install VOXD**</span> & <span style="color:#FF4500">**setup a hotkey**</span>.  
 
 ### 1. Install VOXD
 
@@ -113,7 +113,7 @@ First, run the app in terminal via just
 `voxd` or `voxd --setup` command.  
 The first run will do some initial setup (voice model, LLM model for AIPP, ydotool user setup).  
 
-### <span style="color:#FFD600">READY! → Go type anywhere with your voice!</span>  
+### <span style="color:#FF4500">READY! → Go type anywhere with your voice!</span>  
 
 
 ---
