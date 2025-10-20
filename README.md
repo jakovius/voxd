@@ -1,17 +1,21 @@
 # VOXD - Voice-Type / dictation app for Linux 🗣️⌨️
+<div align="center">
+  <img src="src/voxd/assets/voxd-1.png" alt="VOXD logo" width="50%" />
+</div>
 
 Running in background, provides fast **voice-to-text typing** in any Linux app.  
-Using **LOCAL** voice processing, with optional **LOCAL** AI text post-processing.  
+Using <span style="color:#FFD600">**LOCAL**</span> (offline) voice processing, with optional <span style="color:#FFD600">**LOCAL**</span> (offline) AI text post-processing.  
 Runs fine even on older CPUs. No GPU required.
 
-Hit your **hotkey shortcut** -> speak -> hotkey again -> watch your words appear wherever the cursor currently is, even AI-rewritten as a poem or a C++ code.  
+Hit your <span style="color:#FFD600">**hotkey shortcut**</span> -> speak -> hotkey again -> watch your words appear wherever the cursor currently is, even AI-rewritten as a poem or a C++ code.  
   
 **Tested & Works on:**
 - Ubuntu 24.04 / GNOME
 - Ubuntu 25.04 / Sway
 - Fedora 42 / KDE
 - Arch / Hyprland
-- Pop!_OS 22
+- Omarchy 3.0
+- Pop!_OS 22 / COSMIC
 - Mint 22 / Cinnamon
 - openSUSE, Leap 15.6
 
@@ -27,10 +31,11 @@ Hit your **hotkey shortcut** -> speak -> hotkey again -> watch your words appear
 | **Multiple UI** surfaces         | CLI, GUI (minimal PyQt6), TRAY (system tray), FLUX (triggered by voice activity detection, beta) |
 | **Logging** & **performance**    | Session log plus your own optional local performance data (CSV).                          |
  
+  
 
 ## Setup
 
-Complete the 2 steps: **Install VOXD** & **setup a hotkey**.  
+Complete the 2 steps: <span style="color:#FFD600">**Install VOXD**</span> & <span style="color:#FFD600">**setup a hotkey**</span>.  
 
 ### 1. Install VOXD
 
@@ -104,10 +109,11 @@ b. **The command** to assign to the shortcut hotkey (EXACTLY as given):
 
 c. Click **Add / Save**.  
 
-First, run the app in terminal (see below) with a global `voxd` command.  
+First, run the app in terminal via just  
+`voxd` or `voxd --setup` command.  
 The first run will do some initial setup (voice model, LLM model for AIPP, ydotool user setup).  
 
-### <span style="color: #FFD600;">READY! → Go type anywhere with your voice!</span>  
+### <span style="color:#FFD600">READY! → Go type anywhere with your voice!</span>  
 
 
 ---
@@ -336,7 +342,7 @@ audio_input_device: "pulse"   # or a specific device name or index
 
 ## 📜 License & Credits
 
-* VOXD – © 2025 Jakov Ivkovic – **MIT** license (see [`LICENSE`](LICENSE)).
+* VOXD – © 2025 Jakov Ivkovic – **MIT** license (see [`LICENSE`](LICENSE)). Logo and brand assets: see [`ASSETS_LICENSE`](ASSETS_LICENSE). Trademarks: see [`TRADEMARKS.md`](TRADEMARKS.md).
 * Speech engine powered by [**ggml-org/whisper.cpp**](https://github.com/ggml-org/whisper.cpp) (MIT) and OpenAI Whisper models (MIT).
 * Auto-typing/pasting powered by [**ReimuNotMoe/ydotool**](https://github.com/ReimuNotMoe/ydotool) (AGPLv3).
 * Transcript post-processing powered by [**ggml-org/llama.cpp**](https://github.com/ggml-org/llama.cpp) (MIT)
