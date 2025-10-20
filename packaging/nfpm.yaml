@@ -36,6 +36,11 @@ contents:
     file_info:
       mode: 0644
 
+  - src: packaging/voxd-tray.service
+    dst: /usr/lib/systemd/user/voxd-tray.service
+    file_info:
+      mode: 0644
+
   - src: packaging/voxd-ydotoold
     dst: /usr/bin/voxd-ydotoold
     file_info:

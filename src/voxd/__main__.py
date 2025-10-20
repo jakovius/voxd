@@ -2,6 +2,7 @@ import sys
 import argparse
 import subprocess
 import os
+from pathlib import Path
 if sys.version_info < (3, 9):
     print("[voxd] Python 3.9+ required. Please run the 'voxd' command (wrapper) so it can create/use a venv with a newer Python.")
     sys.exit(1)
@@ -155,6 +156,154 @@ def _get_version() -> str:
         
         return "unknown"
 
+def _parse_bool(s: str) -> bool:
+    v = (s or "").strip().lower()
+    if v in {"1", "true", "on", "yes", "y"}:
+        return True
+    if v in {"0", "false", "off", "no", "n"}:
+        return False
+    raise ValueError(f"expected true/false, got: {s}")
+
+def _systemd_user_available() -> bool:
+    try:
+        # Fast probe; returns 0 and prints version if systemd is available for user
+        r = subprocess.run(["systemctl", "--user", "--version"], capture_output=True)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+def _ensure_voxd_tray_unit() -> None:
+    """Ensure a voxd-tray.service user unit exists (packaged or per-user fallback)."""
+    try:
+        pkg_unit = Path("/usr/lib/systemd/user/voxd-tray.service")
+        if pkg_unit.exists():
+            return
+        user_dir = Path.home() / ".config/systemd/user"
+        try:
+            user_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        unit_path = user_dir / "voxd-tray.service"
+        if not unit_path.exists():
+            unit_path.write_text(
+                "[Unit]\n"
+                "Description=VOXD tray mode (user)\n"
+                "After=default.target\n\n"
+                "[Service]\n"
+                "Type=simple\n"
+                "ExecStart=/usr/bin/voxd --tray\n"
+                "Restart=on-failure\n"
+                "RestartSec=2s\n"
+                "Environment=YDOTOOL_SOCKET=%h/.ydotool_socket\n\n"
+                "[Install]\n"
+                "WantedBy=default.target\n"
+            )
+    except Exception:
+        pass
+
+def _xdg_autostart_path() -> Path:
+    return Path.home() / ".config" / "autostart" / "voxd-tray.desktop"
+
+def _ensure_xdg_entry() -> bool:
+    try:
+        p = _xdg_autostart_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if not p.exists():
+            p.write_text(
+                "[Desktop Entry]\n"
+                "Type=Application\n"
+                "Name=VOXD (tray)\n"
+                "Exec=voxd --tray\n"
+                "X-GNOME-Autostart-enabled=true\n"
+                "Hidden=false\n"
+            )
+        return True
+    except Exception:
+        return False
+
+def _remove_xdg_entry() -> bool:
+    try:
+        p = _xdg_autostart_path()
+        if p.exists():
+            p.unlink()
+        return True
+    except Exception:
+        return False
+
+def _handle_autostart(arg_value: str) -> int:
+    """Set autostart true/false; idempotently enable/disable user service or XDG fallback and report status."""
+    desired = _parse_bool(arg_value)
+    # Persist to config
+    cfg = AppConfig()
+    cfg.data["autostart"] = desired
+    try:
+        setattr(cfg, "autostart", desired)
+    except Exception:
+        pass
+    try:
+        cfg.save()
+    except Exception:
+        pass
+
+    used_systemd = False
+    enabled = False
+    active = False
+
+    # Try systemd --user first
+    if _systemd_user_available():
+        used_systemd = True
+        _ensure_voxd_tray_unit()
+        try:
+            subprocess.run(["systemctl", "--user", "daemon-reload"], check=False, capture_output=True)
+        except Exception:
+            pass
+
+        def _is_enabled() -> bool:
+            try:
+                r = subprocess.run(["systemctl", "--user", "is-enabled", "voxd-tray.service"],
+                                   check=False, capture_output=True)
+                return r.returncode == 0
+            except Exception:
+                return False
+
+        def _is_active() -> bool:
+            try:
+                r = subprocess.run(["systemctl", "--user", "is-active", "voxd-tray.service"],
+                                   check=False, capture_output=True)
+                return r.returncode == 0
+            except Exception:
+                return False
+
+        if desired:
+            subprocess.run(["systemctl", "--user", "enable", "--now", "voxd-tray.service"], check=False)
+        else:
+            subprocess.run(["systemctl", "--user", "disable", "--now", "voxd-tray.service"], check=False)
+
+        enabled = _is_enabled()
+        active = _is_active()
+
+        # If enabling failed in a way that suggests no user bus, fall back to XDG
+        if desired and not (enabled or active):
+            used_systemd = False
+
+    # XDG fallback
+    if not used_systemd:
+        if desired:
+            xdg_ok = _ensure_xdg_entry()
+            print(f"[autostart] enabled (xdg={xdg_ok})")
+            return 0 if xdg_ok else 1
+        else:
+            xdg_ok = _remove_xdg_entry()
+            print(f"[autostart] disabled (xdg={xdg_ok})")
+            return 0 if xdg_ok else 1
+
+    # Systemd path: concise status
+    if desired:
+        print(f"[autostart] enabled (enabled={enabled}, active={active})")
+    else:
+        print(f"[autostart] disabled (enabled={enabled}, active={active})")
+    return 0
+
 def main():
     parser = argparse.ArgumentParser(description="VOXD App Entry Point", add_help=False)
     # NOTE: we intentionally disable the automatic -h/--help. Sub-mode parsers
@@ -183,6 +332,11 @@ def main():
         help="Print version and exit"
     )
     parser.add_argument(
+        "--autostart",
+        metavar="BOOL",
+        help="Enable or disable VOXD user autostart (tray on login): true|false"
+    )
+    parser.add_argument(
         "--trigger-record",
         action="store_true",
         help="(Internal) signal the running VOXD App to start recording - use for system-wide HOTKEY setup"
@@ -197,6 +351,14 @@ def main():
     if args.version:
         print(_get_version())
         sys.exit(0)
+
+    if args.autostart is not None:
+        try:
+            rc = _handle_autostart(args.autostart)
+            sys.exit(rc)
+        except Exception as e:
+            print(f"[autostart] error: {e}")
+            sys.exit(1)
 
     if args.setup or args.setup_verbose:
         try:
@@ -232,6 +394,11 @@ def main():
                 from voxd.cli.cli_main import build_parser as _build_cli_parser
                 print("\n[CLI quick actions] You can use these directly; they run in CLI mode:\n")
                 print(_build_cli_parser().format_help())
+            except Exception:
+                pass
+            # Autostart hint
+            try:
+                print("\n[Autostart] Enable VOXD tray on login: voxd --autostart true")
             except Exception:
                 pass
             sys.exit(0)

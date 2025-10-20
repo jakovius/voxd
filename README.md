@@ -133,6 +133,13 @@ Leave VOXD running in the background -> go to any app where you want to voice-ty
 
 Otherwise, if in --flux, **just speak**.
 
+### Autostart (tray on login)
+
+- Enable: `voxd --autostart true`
+- Disable: `voxd --autostart false`
+
+This launches `voxd --tray` automatically after user login using systemd user services when available; otherwise it falls back to an XDG Autostart entry (`~/.config/autostart/voxd-tray.desktop`).
+
 ### 🎙️  Managing speech models
 
 VOXD needs a Whisper GGML model file. There is one default model readily setup in the app (base.en).  
@@ -149,10 +156,44 @@ voxd-model remove tiny.en	# delete a model
 voxd-model use tiny.en	# make that model the default (edits config.yaml)
 ```
 
-Some of the models for download (size MB):
+Models for download (size MB):
 
-tiny.en 75 · tiny 142 · base.en 142 · base 142 ·
-small.en 466 · small 466 · medium.en 1500 · medium 1500 · large-v3 2900
+| Model | Size (MB) | Filename |
+|-------|----------:|----------|
+| tiny | 75 | ggml-tiny.bin |
+| tiny-q5_1 | 31 | ggml-tiny-q5_1.bin |
+| tiny-q8_0 | 42 | ggml-tiny-q8_0.bin |
+| tiny.en | 75 | ggml-tiny.en.bin |
+| tiny.en-q5_1 | 31 | ggml-tiny.en-q5_1.bin |
+| tiny.en-q8_0 | 42 | ggml-tiny.en-q8_0.bin |
+| base | 142 | ggml-base.bin |
+| base-q5_1 | 57 | ggml-base-q5_1.bin |
+| base-q8_0 | 78 | ggml-base-q8_0.bin |
+| base.en | 142 | ggml-base.en.bin |
+| base.en-q5_1 | 57 | ggml-base.en-q5_1.bin |
+| base.en-q8_0 | 78 | ggml-base.en-q8_0.bin |
+| small | 466 | ggml-small.bin |
+| small-q5_1 | 181 | ggml-small-q5_1.bin |
+| small-q8_0 | 252 | ggml-small-q8_0.bin |
+| small.en | 466 | ggml-small.en.bin |
+| small.en-q5_1 | 181 | ggml-small.en-q5_1.bin |
+| small.en-q8_0 | 252 | ggml-small.en-q8_0.bin |
+| small.en-tdrz | 465 | ggml-small.en-tdrz.bin |
+| medium | 1500 | ggml-medium.bin |
+| medium-q5_0 | 514 | ggml-medium-q5_0.bin |
+| medium-q8_0 | 785 | ggml-medium-q8_0.bin |
+| medium.en | 1500 | ggml-medium.en.bin |
+| medium.en-q5_0 | 514 | ggml-medium.en-q5_0.bin |
+| medium.en-q8_0 | 785 | ggml-medium.en-q8_0.bin |
+| large-v1 | 2900 | ggml-large-v1.bin |
+| large-v2 | 2900 | ggml-large-v2.bin |
+| large-v2-q5_0 | 1100 | ggml-large-v2-q5_0.bin |
+| large-v2-q8_0 | 1500 | ggml-large-v2-q8_0.bin |
+| large-v3 | 2900 | ggml-large-v3.bin |
+| large-v3-q5_0 | 1100 | ggml-large-v3-q5_0.bin |
+| large-v3-turbo | 1500 | ggml-large-v3-turbo.bin |
+| large-v3-turbo-q5_0 | 547 | ggml-large-v3-turbo-q5_0.bin |
+| large-v3-turbo-q8_0 | 834 | ggml-large-v3-turbo-q8_0.bin |
 
 ---
 
