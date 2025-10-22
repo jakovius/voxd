@@ -22,6 +22,7 @@ mic_autoset_enabled: true
 mic_autoset_level: 0.45
 whisper_binary: whisper.cpp/build/bin/whisper-cli
 whisper_model_path: whisper.cpp/models/ggml-base.en.bin
+language: en
 
 # --- Flux (VAD-driven continuous dictation) ---------------------------------
 flux_min_silence_ms: 500     # pause to finalize an utterance

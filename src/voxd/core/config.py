@@ -9,6 +9,7 @@ try:
 except Exception:  # Python <3.9 (e.g., openSUSE Leap)
     from importlib_resources import files  # type: ignore
 from voxd.paths import resolve_whisper_binary, resolve_model_path, DATA_DIR, resolve_llamacpp_server, LLAMACPP_MODELS_DIR  # <-- add this import
+from voxd.utils.languages import ISO_639_1, normalize_lang_code, is_valid_lang
 
 DEFAULT_CONFIG = {
     "perf_collect": False,
@@ -38,6 +39,7 @@ DEFAULT_CONFIG = {
     "mic_autoset_level": 0.45,
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
     "whisper_model_path": "whisper.cpp/models/ggml-base.en.bin",
+    "language": "en",
 
     # --- Flux (VAD-driven continuous dictation) ------------------------------
     # Defaults are conservative and CPU-light; Flux VAD is built-in
@@ -180,6 +182,19 @@ class AppConfig:
             self.data["llamacpp_server_timeout"] = 30
             updated = True
 
+        # Normalize and validate language
+        try:
+            lang = normalize_lang_code(self.data.get("language", "en"))
+            if not is_valid_lang(lang):
+                print(f"[config] Invalid language '{self.data.get('language')}', falling back to 'en'")
+                lang = "en"
+            if self.data.get("language") != lang:
+                self.data["language"] = lang
+                updated = True
+        except Exception:
+            self.data["language"] = "en"
+            updated = True
+
         # Assign config values to attributes
         for k, v in self.data.items():
             setattr(self, k, v)
@@ -242,6 +257,15 @@ class AppConfig:
                 print("  ⚠️ llama-server not found but llamacpp_server provider selected")
             if not status["default_model_available"]:
                 print("  ⚠️ Default llama.cpp model not found")
+
+        # Warn if non-English language is set but an English-only (*.en) model is configured
+        try:
+            if self.data.get("language") != "en":
+                mp = str(self.data.get("whisper_model_path", "")).lower()
+                if mp.endswith(".en.bin"):
+                    print("  ⚠️ Non-English language selected but an English-only (*.en) model is configured. Use a multilingual model (e.g., base/small/medium/large-v3).")
+        except Exception:
+            pass
 
         print("\n[config] Validation complete.")
 

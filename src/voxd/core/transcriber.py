@@ -4,10 +4,11 @@ from pathlib import Path
 import re
 from voxd.utils.libw import verbo, verr
 from voxd.paths import find_whisper_cli, find_base_model
+from voxd.utils.languages import normalize_lang_code, is_valid_lang
 
 
 class WhisperTranscriber:
-    def __init__(self, model_path, binary_path, delete_input=True):
+    def __init__(self, model_path, binary_path, delete_input=True, language: str | None = None):
         # --- Model path: try config, else auto-discover ---
         if model_path and Path(model_path).is_file():
             self.model_path = model_path
@@ -27,6 +28,21 @@ class WhisperTranscriber:
         from voxd.paths import OUTPUT_DIR
         self.output_dir = OUTPUT_DIR
 
+        # Language (default en)
+        lang = normalize_lang_code(language or "en")
+        if not is_valid_lang(lang):
+            verr(f"[transcriber] Invalid language '{language}', using 'en'")
+            lang = "en"
+        self.language = lang
+
+        # Warn if likely mismatch with an English-only model
+        try:
+            mp = str(self.model_path).lower()
+            if self.language != "en" and mp.endswith(".en.bin"):
+                verr("[transcriber] Non-English language selected but an English-only (*.en) model is configured.")
+        except Exception:
+            pass
+
     def transcribe(self, audio_path):
         audio_file = Path(audio_path)
         if not audio_file.exists():
@@ -44,6 +60,7 @@ class WhisperTranscriber:
             self.binary_path,
             "-m", self.model_path,
             "-f", str(audio_file),
+            "-l", self.language,
             "-of", str(self.output_dir / audio_file.stem),
             "-otxt"  # <-- THIS is necessary to actually generate the .txt file
         ]

@@ -94,6 +94,10 @@ class VoxdTrayApp(QObject):
 
         # Add the new flat actions right away
         self.menu.addAction(self.session_log_action)
+        # Language
+        lang_action = QAction("Language")
+        lang_action.triggered.connect(lambda _=False: __import__("voxd.core.voxd_core").core.voxd_core.show_language_dialog(None, self.cfg))
+        self.menu.addAction(lang_action)
         self.menu.addAction(self.settings_action)
         self.menu.addAction(self.performance_action)
         self.menu.addAction(self.quit_action)
@@ -240,6 +244,10 @@ class VoxdTrayApp(QObject):
 
         # Top-level helpers
         self.menu.addAction(self.session_log_action)
+        # Language
+        lang_action = QAction("Language")
+        lang_action.triggered.connect(lambda _=False: __import__("voxd.core.voxd_core").core.voxd_core.show_language_dialog(None, self.cfg))
+        self.menu.addAction(lang_action)
         self.menu.addAction(self.settings_action)
         self.menu.addAction(self.performance_action)
         self.menu.addAction(self.quit_action)

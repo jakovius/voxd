@@ -435,6 +435,10 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
         show_aipp_dialog(self, self.cfg)
         self._refresh_aipp_toggle_from_cfg()
 
+    def show_language_dialog(self):
+        from voxd.core.voxd_core import show_language_dialog as _show_lang
+        _show_lang(self, self.cfg)
+
     def show_session_log(self):
         session_log_dialog(self, self.logger)
 
@@ -468,6 +472,10 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
         # Add menu actions for each option
         whisper_action = menu.addAction("Whisper Models")
         whisper_action.triggered.connect(self.show_whisper_models)
+        
+        # Language selector
+        lang_action = menu.addAction("Language")
+        lang_action.triggered.connect(self.show_language_dialog)
         
         aipp_action = menu.addAction("AI Post-Processing")
         aipp_action.triggered.connect(self.show_aipp_settings)

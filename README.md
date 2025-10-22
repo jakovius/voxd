@@ -10,14 +10,14 @@ Runs fine even on older CPUs. No GPU required.
 Hit your <span style="color:#FF4500">**hotkey shortcut**</span> -> speak -> hotkey again -> watch your words appear wherever the cursor currently is, even AI-rewritten as a poem or a C++ code.  
   
 **Tested & Works on:**
+- Arch / Hyprland
+- Omarchy 3.0
 - Ubuntu 24.04 / GNOME
 - Ubuntu 25.04 / Sway
 - Fedora 42 / KDE
-- Arch / Hyprland
-- Omarchy 3.0
 - Pop!_OS 22 / COSMIC
 - Mint 22 / Cinnamon
-- openSUSE, Leap 15.6
+- openSUSE / Leap 15.6
 
 
 ## Highlights
@@ -26,20 +26,23 @@ Hit your <span style="color:#FF4500">**hotkey shortcut**</span> -> speak -> hotk
 | -------------------------------- | ----------------------------------------------------------------------- |
 | **Whisper.cpp** backend          | Local, offline, fast  ASR.   |
 | **Simulated typing**             | instantly types straight into any currently focused input window. Even on Wayland! (*ydotool*).  |
-| **Clipboard**                    | Auto-copies into clipboard - ready for pasting, if desired        |
-| **AIPP**, AI Post-Processing	   | AI-rewriting via local or cloud LLMs. GUI prompt editor.         |  
+| **Clipboard**                    | Auto-copies into clipboard - ready for pasting, if desired              |
+| **Languages**                    | 99+ languages. Provides default language config and session language override          |
+| **AIPP**, AI Post-Processing	   | AI-rewriting via local or cloud LLMs. GUI prompt editor.                |  
 | **Multiple UI** surfaces         | CLI, GUI (minimal PyQt6), TRAY (system tray), FLUX (triggered by voice activity detection, beta) |
-| **Logging** & **performance**    | Session log plus your own optional local performance data (CSV).                          |
+| **Logging** & **performance**    | Session log plus your own optional local performance data (CSV).        |
  
   
 
 ## Setup
 
-Complete the 2 steps: <span style="color:#FF4500">**Install VOXD**</span> & <span style="color:#FF4500">**setup a hotkey**</span>.  
+Complete the 2 steps:  
+1. <span style="color:#FF4500">**Install VOXD**</span>
+2. <span style="color:#FF4500">**setup a hotkey**</span>.  
 
 ### 1. Install VOXD
 
-#### Preferred: Install from Release (recommended)
+#### Install from Release (recommended)
 Download the package for your distro and architecture from the latest release, then install with your package manager.
 
 Latest builds: [GitHub Releases (Latest)](https://github.com/jakovius/voxd/releases/latest)  
@@ -82,7 +85,7 @@ sudo zypper refresh
 sudo zypper install --force-resolution ./voxd-*-x86_64.rpm   # or the arm64 counterpart if on an ARM device
 ```
 
-#### Alternatively: Download the source or clone the repo, and run the setup (for hacking):  
+#### Alternatively: Download the source or clone the repo, and run the setup:  
 
 ```bash
 git clone https://github.com/jakovius/voxd.git
@@ -132,19 +135,41 @@ voxd --flux # VAD (Voice Activity Detection), voice-triggered continuous dictati
 
 Leave VOXD running in the background -> go to any app where you want to voice-type and:  
 
-| Press hotkey …   | VOXD does …                                                |
+| Press hotkey …   | VOXD does …                                                 |
 | ---------------- | ----------------------------------------------------------- |
 | **First press**  | start recording                                             |
 | **Second press** | stop ⇢ [transcribe ⇢ copy to clipboard] ⇢ types the output into any focused app |  
 
-Otherwise, if in --flux, **just speak**.
+Otherwise, if in --flux (beta), **just speak**.
 
-### Autostart (tray on login)
+### Autostart 
+For practical reasons (always ready to type & low system footprint), it is advised to enable voxd user daemon:
 
 - Enable: `voxd --autostart true`
 - Disable: `voxd --autostart false`
 
 This launches `voxd --tray` automatically after user login using systemd user services when available; otherwise it falls back to an XDG Autostart entry (`~/.config/autostart/voxd-tray.desktop`).
+
+### Languages
+
+- **Supported codes**: ISO 639-1 (e.g., `en`, `es`, `de`, `sv`) and `auto` (auto-detect, not advised).
+- **Default**: `en`. You can override per run or persist it.
+- **Change via CLI (session-only)**, examples:
+```bash
+voxd --gui  --lang auto
+voxd --tray --lang es
+voxd --flux --lang de
+voxd --rh   --lang sv
+```
+- **Persist via CLI**: `voxd --cfg` opens the config file for editing. Set:
+```yaml
+# ~/.config/voxd/config.yaml
+language: sv  # or 'auto', 'es', etc.
+```
+- **Change via GUI/Tray (persisted)**: Menu → **Language**. Saved to `~/.config/voxd/config.yaml` as `language`.
+- **Model note**: For non‑English languages, use a multilingual Whisper model (not `*.en.bin`). Install/switch via GUI “Whisper Models” or `voxd-model` (e.g., `ggml-base.bin`, `small`, `medium`, `large-v3`).
+- **Tip**: `auto` works well, but setting the exact language can improve accuracy. If you pick a non‑English language while using an English‑only model, VOXD will warn and transcription quality may drop.
+
 
 ### 🎙️  Managing speech models
 

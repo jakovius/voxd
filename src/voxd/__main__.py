@@ -346,6 +346,12 @@ def main():
         action="store_true",
         help="Print configuration and hotkey status"
     )
+    parser.add_argument(
+        "-l",
+        "--lang",
+        dest="lang",
+        help="Transcription language (ISO 639-1, e.g. 'en', 'sv', or 'auto' for detection)"
+    )
     args, unknown = parser.parse_known_args()
 
     if args.version:
@@ -413,6 +419,19 @@ def main():
         sys.exit(0)
 
     cfg = AppConfig()
+    # Session-only override for language
+    if args.lang:
+        try:
+            from voxd.utils.languages import normalize_lang_code, is_valid_lang
+            code = normalize_lang_code(args.lang)
+            if not is_valid_lang(code):
+                print(f"[voxd] Invalid language '{args.lang}'. Expected ISO 639-1 or 'auto'.")
+                sys.exit(2)
+            cfg.data["language"] = code
+            setattr(cfg, "language", code)
+        except Exception as e:
+            print(f"[voxd] Failed to apply language override: {e}")
+            sys.exit(2)
     if args.gui:
         mode = "gui"
     elif args.tray:
@@ -494,11 +513,12 @@ def main():
     _mic_autoset_if_enabled(cfg)
 
     print()
-    _print_boxed(f"Launching VOXD app in '{ORANGE}{mode}{RESET}' mode…")
+    _print_boxed(f"VOXD app, in '{ORANGE}{mode}{RESET}' mode.")
     # show shortcut hint
     print(f"""Note:
 - create a global {ORANGE}HOTKEY{RESET} shortcut (in your system) that runs {ORANGE}`bash -c 'voxd --trigger-record'`{RESET} (e.g. Super+Z)"
-- directly start voice-typing by running {ORANGE}'voxd --rh'{RESET} in terminal.
+- start hotkey-triggered voice-typing by running in terminal {ORANGE}'voxd --rh'{RESET}, or {ORANGE}'voxd --gui'{RESET}, or {ORANGE}'voxd --tray'{RESET}.
+- advised: have VOXD always ready in the background, by enabling autostart: {ORANGE}`voxd --autostart true`{RESET}.
 - transcripts ALWAYS picked up into clipboard.
 """)
 

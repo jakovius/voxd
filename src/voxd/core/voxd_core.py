@@ -10,6 +10,7 @@ import yaml
 from voxd.core.aipp import get_final_text
 from voxd.core.model_manager import show_model_manager
 from voxd.core.transcriber import WhisperTranscriber  # type: ignore
+from voxd.utils.languages import search_languages, code_to_name, normalize_lang_code, is_valid_lang
 
 class CoreProcessThread(QThread):
     finished = pyqtSignal(str)
@@ -41,6 +42,7 @@ class CoreProcessThread(QThread):
             transcriber = WhisperTranscriber(
                 model_path=self.cfg.whisper_model_path,
                 binary_path=self.cfg.whisper_binary,
+                language=getattr(self.cfg, "language", "en"),
             )
         except FileNotFoundError:
             # Try to build on the fly (GUI prompt)
@@ -52,6 +54,7 @@ class CoreProcessThread(QThread):
             transcriber = WhisperTranscriber(
                 model_path=self.cfg.whisper_model_path,
                 binary_path=self.cfg.whisper_binary,
+                language=getattr(self.cfg, "language", "en"),
             )
         typer = SimulatedTyper(delay=self.cfg.typing_delay, start_delay=self.cfg.typing_start_delay, cfg=self.cfg)
         clipboard = ClipboardManager()
@@ -554,6 +557,62 @@ def show_performance_dialog(parent, cfg):
 
     dlg.setLayout(vbox)
     dlg.exec()
+
+# ----------------------------------------------------------------------------
+#   Language selector dialog (shared between GUI & tray)
+# ----------------------------------------------------------------------------
+
+def show_language_dialog(parent, cfg, modal=True):
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Language")
+    dlg.setMinimumWidth(320)
+    layout = QVBoxLayout(dlg)
+
+    search = QLineEdit()
+    search.setPlaceholderText("Search languages…")
+    layout.addWidget(search)
+
+    combo = QComboBox()
+    combo.setEditable(False)
+    layout.addWidget(combo)
+
+    def _reload(q: str = ""):
+        items = search_languages(q)
+        combo.clear()
+        for code, name in items:
+            combo.addItem(f"{name} ({code})", userData=code)
+        cur = normalize_lang_code(cfg.data.get("language", "en"))
+        idx = next((i for i in range(combo.count()) if combo.itemData(i) == cur), -1)
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
+
+    _reload("")
+    search.textChanged.connect(_reload)
+
+    btns = QDialogButtonBox()
+    set_btn = btns.addButton("Set language", QDialogButtonBox.ButtonRole.AcceptRole)
+    cancel_btn = btns.addButton(QDialogButtonBox.StandardButton.Cancel)
+    layout.addWidget(btns)
+
+    def _apply():
+        code = combo.currentData()
+        code = normalize_lang_code(code or "")
+        if not is_valid_lang(code):
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(dlg, "Invalid", f"Invalid language: {code}")
+            return
+        cfg.data["language"] = code
+        cfg.language = code  # type: ignore[attr-defined]
+        cfg.save()
+        dlg.accept()
+
+    set_btn.clicked.connect(_apply)
+    cancel_btn.clicked.connect(dlg.reject)
+
+    if modal:
+        dlg.exec()
+    else:
+        dlg.show()
+    return dlg
 
 # ----------------------------------------------------------------------------
 #   AIPP settings dialog (extracted from Options)

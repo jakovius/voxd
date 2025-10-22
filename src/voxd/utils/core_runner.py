@@ -39,7 +39,12 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, typing=False, appl
         record_chunked=getattr(cfg, "record_chunked", True),
         chunk_seconds=int(getattr(cfg, "record_chunk_seconds", 300))
     )
-    transcriber = WhisperTranscriber(cfg.whisper_model_path, cfg.whisper_binary, delete_input=not preserve_audio)
+    transcriber = WhisperTranscriber(
+        cfg.whisper_model_path,
+        cfg.whisper_binary,
+        delete_input=not preserve_audio,
+        language=cfg.data.get("language", "en"),
+    )
     clipboard = ClipboardManager()
     typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
     if logger is None:

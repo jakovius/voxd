@@ -77,7 +77,12 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
                 chunk_seconds=int(getattr(cfg, "record_chunk_seconds", 300))
             )
             preserve = bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False))
-            transcriber = WhisperTranscriber(cfg.whisper_model_path, cfg.whisper_binary, delete_input=not preserve)
+            transcriber = WhisperTranscriber(
+                cfg.whisper_model_path,
+                cfg.whisper_binary,
+                delete_input=not preserve,
+                language=cfg.data.get("language", "en"),
+            )
             clipboard = ClipboardManager()
             typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
 
@@ -112,7 +117,12 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
                 chunk_seconds=int(getattr(cfg, "record_chunk_seconds", 300))
             )
             preserve = bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False))
-            transcriber = WhisperTranscriber(cfg.whisper_model_path, cfg.whisper_binary, delete_input=not preserve)
+            transcriber = WhisperTranscriber(
+                cfg.whisper_model_path,
+                cfg.whisper_binary,
+                delete_input=not preserve,
+                language=cfg.data.get("language", "en"),
+            )
             clipboard = ClipboardManager()
             typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
 
@@ -262,7 +272,12 @@ def main():
                 print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit")
             recorder = AudioRecorder()
             preserve = bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False))
-            transcriber = WhisperTranscriber(cfg.whisper_model_path, cfg.whisper_binary, delete_input=not preserve)
+            transcriber = WhisperTranscriber(
+                cfg.whisper_model_path,
+                cfg.whisper_binary,
+                delete_input=not preserve,
+                language=cfg.data.get("language", "en"),
+            )
             clipboard = ClipboardManager()
             typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
             try:
@@ -296,7 +311,12 @@ def main():
             return
 
         if args.transcribe:
-            transcriber = WhisperTranscriber(cfg.whisper_model_path, cfg.whisper_binary, delete_input=False)
+            transcriber = WhisperTranscriber(
+                cfg.whisper_model_path,
+                cfg.whisper_binary,
+                delete_input=False,
+                language=cfg.data.get("language", "en"),
+            )
             tfile = args.transcribe
             if not Path(tfile).exists():
                 print(f"[cli] File not found: {tfile}")
