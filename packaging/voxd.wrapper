@@ -44,10 +44,12 @@ print(f"{sys.version_info.major}.{sys.version_info.minor}")
 PY
 )"
   log "System Python version: $ver"
-  case "$ver" in
-    3.9|3.10|3.11|3.12|3.13) : ;;
-    *)
-      # Attempt to create a user-local venv with any newer Python found
+  # Check if version is >= 3.9
+  IFS='.' read -r major minor <<< "$ver"
+  if [[ "$major" -gt 3 ]] || [[ "$major" -eq 3 && "$minor" -ge 9 ]]; then
+    : # version is acceptable
+  else
+    # Attempt to create a user-local venv with any newer Python found
       pick_python() {
         for c in python3.12 python3.11 python3.10 python3.9 python3; do
           if command -v "$c" >/dev/null 2>&1; then
@@ -56,10 +58,12 @@ import sys
 print(f"{sys.version_info.major}.{sys.version_info.minor}")
 PY
 )"
-            case "$v" in
-              3.9|3.10|3.11|3.12|3.13) echo "$c"; return 0 ;;
-              *) : ;;
-            esac
+            # Check if version is >= 3.9
+            IFS='.' read -r v_major v_minor <<< "$v"
+            if [[ "$v_major" -gt 3 ]] || [[ "$v_major" -eq 3 && "$v_minor" -ge 9 ]]; then
+              echo "$c"
+              return 0
+            fi
           fi
         done
         echo ""
@@ -86,8 +90,7 @@ PY
         echo "[voxd] System Python $ver is unsupported and no newer Python was found. Use 'bash packaging/install_voxd.sh <rpm>' to provision a newer Python, or create $APPDIR/.venv with Python >= 3.9." >&2
         exit 1
       fi
-      ;;
-  esac
+  fi
 fi
 
 # Ensure Python can import the embedded source tree
