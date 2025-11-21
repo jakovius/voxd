@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "voxd"
-version = "mr.batman"  # bump manually on releases
+version = "0.1.0"
 description = "Voice-typing helper powered by whisper.cpp"
 authors = [{ name = "Jakov", email = "jakov.iv@proton.me" }]
 requires-python = ">=3.9"
