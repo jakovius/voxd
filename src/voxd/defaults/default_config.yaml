@@ -5,6 +5,8 @@ perf_accuracy_rating_collect: true
 typing: true
 typing_delay: 1
 typing_start_delay: 0.15
+typing_chunk_size: 250  # Characters per chunk (prevents ydotool 285-char truncation)
+typing_inter_chunk_delay: 0.05  # Seconds between chunks (0.05 = 50ms)
 ctrl_v_paste: false  # Use Ctrl+V instead of default Ctrl+Shift+V
 append_trailing_space: true
 verbosity: false

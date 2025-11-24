@@ -277,16 +277,68 @@ class SimulatedTyper:
         except Exception:
             t = t
 
-        verbo(f"[typer] Typing transcript using {self.tool}...")
+        # Get chunk size from config (default: 250 to avoid ydotool's 285-char truncation)
+        chunk_size = 250
+        inter_chunk_delay = 0.05  # 50ms default
+        try:
+            if self.cfg:
+                chunk_size = int(self.cfg.data.get("typing_chunk_size", 250))
+                inter_chunk_delay = float(self.cfg.data.get("typing_inter_chunk_delay", 0.05))
+        except (ValueError, TypeError):
+            pass  # Use defaults if config values are invalid
+
         tool_name = os.path.basename(self.tool) if self.tool else ""
-        if tool_name == "ydotool" and self.tool:
-            self._run_tool([self.tool, "type", "-d", self.delay_str, t])
-        elif tool_name == "xdotool" and self.tool:
-            self._run_tool([self.tool, "type", "--delay", self.delay_str, t])
+
+        # Check if text needs chunking (prevents ydotool truncation at 285 chars)
+        if len(t) > chunk_size:
+            verbo(f"[typer] Typing {len(t)} characters using chunked method ({len(t) // chunk_size + 1} chunks)...")
+            self._type_chunked(t, chunk_size, inter_chunk_delay, tool_name)
         else:
-            print("[typer] ⚠️ No valid typing tool found.")
-            return
+            verbo(f"[typer] Typing transcript using {self.tool}...")
+            if tool_name == "ydotool" and self.tool:
+                self._run_tool([self.tool, "type", "-d", self.delay_str, t])
+            elif tool_name == "xdotool" and self.tool:
+                self._run_tool([self.tool, "type", "--delay", self.delay_str, t])
+            else:
+                print("[typer] ⚠️ No valid typing tool found.")
+                return
         self.flush_stdin() # Flush pending input before any new prompt
+
+    def _type_chunked(self, text, chunk_size, inter_chunk_delay, tool_name):
+        """
+        Type long text by splitting into chunks to avoid ydotool's 285-character truncation.
+
+        Args:
+            text: The full text to type
+            chunk_size: Maximum characters per chunk
+            inter_chunk_delay: Seconds to wait between chunks
+            tool_name: Name of the typing tool (ydotool/xdotool)
+        """
+        position = 0
+        chunk_count = (len(text) + chunk_size - 1) // chunk_size  # Ceiling division
+
+        while position < len(text):
+            chunk = text[position:position + chunk_size]
+            chunk_num = (position // chunk_size) + 1
+
+            verbo(f"[typer] Chunk {chunk_num}/{chunk_count}: {len(chunk)} characters")
+
+            # Type this chunk
+            if tool_name == "ydotool" and self.tool:
+                self._run_tool([self.tool, "type", "-d", self.delay_str, chunk])
+            elif tool_name == "xdotool" and self.tool:
+                self._run_tool([self.tool, "type", "--delay", self.delay_str, chunk])
+            else:
+                print(f"[typer] ⚠️ No valid typing tool found for chunk {chunk_num}.")
+                return
+
+            position += chunk_size
+
+            # Add delay between chunks (except after the last chunk)
+            if position < len(text) and inter_chunk_delay > 0:
+                time.sleep(inter_chunk_delay)
+
+        verbo(f"[typer] Chunked typing completed: {len(text)} characters in {chunk_count} chunks")
 
     # ------------------------------------------------------------------
     # Helper: fast clipboard paste

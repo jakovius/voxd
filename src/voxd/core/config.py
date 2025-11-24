@@ -19,6 +19,8 @@ DEFAULT_CONFIG = {
     "typing": True,
     "typing_delay": 1,
     "typing_start_delay": 0.15,
+    "typing_chunk_size": 250,  # Characters per chunk for long text (prevents ydotool truncation at 285)
+    "typing_inter_chunk_delay": 0.05,  # Seconds between chunks (0.05 = 50ms)
     "ctrl_v_paste": False,  # Use Ctrl+V instead of default Ctrl+Shift+V
     "append_trailing_space": True,
     "verbosity": False,
