@@ -131,6 +131,15 @@ class SettingsDialog(QDialog):
         aipp_enabled.toggled.connect(_toggle_aipp_widgets)
 
         # ------------------------------------------------------------------
+        #  Llama.cpp paths
+        # ------------------------------------------------------------------
+        form.addRow(self._section_label("Llama.cpp paths"), QLabel(""))
+
+        self._add_filepicker(form, "llamacpp_server_path", "Browse", filter="Executable (*)")
+        self._add_filepicker(form, "llamacpp_cli_path", "Browse", filter="Executable (*)")
+        self._add_filepicker(form, "llamacpp_default_model", "Browse", filter="*.gguf")
+
+        # ------------------------------------------------------------------
         #  Whisper binary & model path helpers
         # ------------------------------------------------------------------
         form.addRow(self._section_label("Whisper‬ paths"), QLabel(""))
