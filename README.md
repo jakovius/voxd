@@ -299,6 +299,10 @@ VOXD automatically discovers all `.gguf` files in the models directory on startu
 Edit `~/.config/voxd/config.yaml`:
 
 ```yaml
+# Typing behavior (for long transcriptions)
+typing_chunk_size: 250  # Characters per chunk (prevents ydotool truncation at 285 chars)
+typing_inter_chunk_delay: 0.05  # Seconds between chunks (0.05 = 50ms)
+
 # llama.cpp settings
 llamacpp_server_path: "llama.cpp/build/bin/llama-server"
 llamacpp_server_url: "http://localhost:8080"
@@ -308,6 +312,29 @@ llamacpp_server_timeout: 30
 aipp_selected_models:
   llamacpp_server: "qwen2.5-3b-instruct-q4_k_m"
 ```
+
+#### Typing Long Text
+
+VOXD automatically handles long transcriptions (>285 characters) by chunking text into smaller segments. This prevents `ydotool`'s command-line argument length limitation from truncating your dictation.
+
+**Configuration options:**
+- `typing_chunk_size`: Maximum characters per chunk (default: 250)
+  - Keeps chunks safely below ydotool's 285-character truncation limit
+  - Reduce if you experience truncation issues (e.g., to 200)
+  - Increase for faster typing of long text (but stay below 280)
+
+- `typing_inter_chunk_delay`: Delay between chunks in seconds (default: 0.05)
+  - Adjust if chunks appear to merge incorrectly
+  - Increase for more reliable typing on slower systems
+  - Decrease for faster typing (minimum: 0.01)
+
+**Example for very long dictations (500+ characters):**
+```yaml
+typing_chunk_size: 250
+typing_inter_chunk_delay: 0.05
+```
+
+This configuration works transparently - no user intervention needed. Short text (<250 chars) uses the fast, non-chunked method automatically.
 
 ---
 
