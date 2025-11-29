@@ -61,6 +61,52 @@ class ModelManager(QDialog):
         self.setWindowTitle("Manage Whisper Models")
         self.setMinimumWidth(600)
 
+        # Explicit dark styling to match other dialogs
+        self.setStyleSheet("""
+            QDialog, QWidget {
+                background-color: #2e2e2e;
+                color: white;
+            }
+            QTableWidget {
+                background-color: #2e2e2e;
+                color: white;
+                gridline-color: #555;
+            }
+            QTableWidget::item {
+                background-color: #2e2e2e;
+                color: white;
+            }
+            QTableWidget::item:selected {
+                background-color: #E03D00;
+            }
+            QHeaderView::section {
+                background-color: #3e3e3e;
+                color: white;
+                border: 1px solid #555;
+                padding: 4px;
+            }
+            QPushButton {
+                background-color: #555;
+                color: white;
+                border: 1px solid #666;
+                border-radius: 3px;
+                padding: 4px 10px;
+            }
+            QPushButton:hover {
+                background-color: #666;
+            }
+            QProgressBar {
+                background-color: #3e3e3e;
+                border: 1px solid #555;
+                border-radius: 3px;
+                text-align: center;
+                color: white;
+            }
+            QProgressBar::chunk {
+                background-color: #E03D00;
+            }
+        """)
+
         layout = QVBoxLayout(self)
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Name", "Size", "Status", "Action"])

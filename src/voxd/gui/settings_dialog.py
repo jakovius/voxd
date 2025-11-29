@@ -44,6 +44,46 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.cfg = cfg
+
+        # Explicit dark styling to match other dialogs
+        self.setStyleSheet("""
+            QDialog, QWidget {
+                background-color: #2e2e2e;
+                color: white;
+            }
+            QLabel {
+                color: white;
+                background-color: transparent;
+            }
+            QScrollArea {
+                background-color: #2e2e2e;
+                border: none;
+            }
+            QSpinBox, QDoubleSpinBox, QComboBox, QLineEdit {
+                background-color: #3e3e3e;
+                color: white;
+                border: 1px solid #555;
+                border-radius: 3px;
+                padding: 2px 5px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #3e3e3e;
+                color: white;
+                selection-background-color: #E03D00;
+            }
+            QDialogButtonBox QPushButton {
+                background-color: #555;
+                color: white;
+                border: 1px solid #666;
+                border-radius: 3px;
+                padding: 5px 15px;
+                min-width: 70px;
+            }
+            QDialogButtonBox QPushButton:hover {
+                background-color: #666;
+            }
+        """)
+
         # Let the dialog size adapt naturally to its contents;
         # scroll-area will provide overflow protection.
 
