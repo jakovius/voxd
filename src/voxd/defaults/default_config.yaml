@@ -7,6 +7,7 @@ typing_delay: 1
 typing_start_delay: 0.15
 ctrl_v_paste: false  # Use Ctrl+V instead of default Ctrl+Shift+V
 append_trailing_space: true
+copy_to_clipboard: true
 verbosity: false
 autostart: false
 record_chunked: true

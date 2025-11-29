@@ -98,12 +98,13 @@ class CoreProcessThread(QThread):
         except Exception:
             pass  # logging failures should never crash the thread
 
-        # Copy to clipboard unless typing is enabled with paste mode (delay <= 0)
-        # to avoid double-copying to clipboard
-        typing_will_paste = (self.cfg.typing and 
+        # Copy to clipboard if enabled, unless typing is enabled with paste mode
+        # (delay <= 0) to avoid double-copying to clipboard
+        typing_will_paste = (self.cfg.typing and
                            self.cfg.typing_delay <= 0)
-        
-        if not typing_will_paste and final_text:
+        copy_enabled = self.cfg.data.get("copy_to_clipboard", True)
+
+        if copy_enabled and not typing_will_paste and final_text:
             clipboard.copy(final_text)
 
         if self.cfg.typing and final_text:

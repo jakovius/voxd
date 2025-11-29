@@ -26,7 +26,7 @@ Hit your <span style="color:#FF4500">**hotkey shortcut**</span> -> speak -> hotk
 | -------------------------------- | ----------------------------------------------------------------------- |
 | **Whisper.cpp** backend          | Local, offline, fast  ASR.   |
 | **Simulated typing**             | instantly types straight into any currently focused input window. Even on Wayland! (*ydotool*).  |
-| **Clipboard**                    | Auto-copies into clipboard - ready for pasting, if desired              |
+| **Clipboard**                    | Optionally copies to clipboard (enabled by default) - ready for pasting, if desired              |
 | **Languages**                    | 99+ languages. Provides default language config and session language override          |
 | **AIPP**, AI Post-Processing	   | AI-rewriting via local or cloud LLMs. GUI prompt editor.                |  
 | **Multiple UI** surfaces         | CLI, GUI (minimal PyQt6), TRAY (system tray), FLUX (triggered by voice activity detection, beta) |
@@ -138,7 +138,7 @@ Leave VOXD running in the background -> go to any app where you want to voice-ty
 | Press hotkey …   | VOXD does …                                                 |
 | ---------------- | ----------------------------------------------------------- |
 | **First press**  | start recording                                             |
-| **Second press** | stop ⇢ [transcribe ⇢ copy to clipboard] ⇢ types the output into any focused app |  
+| **Second press** | stop ⇢ transcribe ⇢ types the output into any focused app (and copies to clipboard if enabled) |  
 
 Otherwise, if in --flux (beta), **just speak**.
 

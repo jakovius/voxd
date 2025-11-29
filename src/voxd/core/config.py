@@ -21,6 +21,7 @@ DEFAULT_CONFIG = {
     "typing_start_delay": 0.15,
     "ctrl_v_paste": False,  # Use Ctrl+V instead of default Ctrl+Shift+V
     "append_trailing_space": True,
+    "copy_to_clipboard": True,
     "verbosity": False,
     "autostart": False,
     "save_recordings": False,
