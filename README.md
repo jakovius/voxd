@@ -320,6 +320,7 @@ For example, add these lines to your `.bashrc`, `.zshrc`, or equivalent shell pr
 ```sh
 # For OpenAI
 export OPENAI_API_KEY="sk-..."
+export OPENAI_API_BASE="https://provider.example.com/v1" # Optional: Use a custom OpenAI-compatible endpoint
 
 # For Anthropic
 export ANTHROPIC_API_KEY="..."
