@@ -62,7 +62,8 @@ def run_ollama_aipp(prompt: str, model: str = "llama3.2:latest") -> str:
 
 
 def run_openai_aipp(prompt: str, model: str = "gpt-3.5-turbo") -> str:
-    url = "https://api.openai.com/v1/chat/completions"
+    base_url = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+    url = f"{base_url}/chat/completions"
     headers = {
         "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY', '')}",
         "Content-Type": "application/json"
