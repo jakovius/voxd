@@ -98,6 +98,8 @@ cd voxd && ./setup.sh
 
 Setup is non-interactive with minimal console output; a detailed setup log is saved in the repo directory (e.g. `2025-09-18-setup-log.txt`).
 
+**Note:** The setup script automatically detects and uses the highest available Python 3.x version (3.9 or newer) on your system. If you have Python 3.14, 3.13, or any newer version installed, it will be used automatically.
+
 **Reboot** the system!  
 (unless on an X11 system; on most modern systems there is Wayland, so **ydotool** is required for typing and needs rebooting for user setup).  
 

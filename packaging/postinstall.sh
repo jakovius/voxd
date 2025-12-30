@@ -41,29 +41,62 @@ echo "voxd installed. Each user should run: voxd --setup"
 # We inherit system site-packages to avoid duplicating distro Python libs
 APPDIR="/opt/voxd"
 
-# Pick a Python >= 3.9 if available; attempt RPM install on openSUSE if too old
+# Pick the highest available Python 3.x version (>=3.9)
+# Attempt RPM install on openSUSE if too old
 pick_python() {
-  for c in python3.12 python3.11 python3.10 python3.9 python3 python; do
+  best_cmd=""
+  best_ver=""
+  # Check common python3.x commands (3.9 to 3.20) and python3/python
+  # Build candidate list
+  i=20
+  while [ "$i" -ge 9 ]; do
+    if command -v "python3.$i" >/dev/null 2>&1; then
+      ver="$(python3.$i - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)" 2>/dev/null || { i=$((i - 1)); continue; }
+      # Check if version is >= 3.9
+      IFS='.' read -r major minor <<EOF
+$ver
+EOF
+      if [ "$major" -gt 3 ] || ([ "$major" -eq 3 ] && [ "$minor" -ge 9 ]); then
+        # Compare versions: if no best yet, or this is newer
+        if [ -z "$best_ver" ] || [ "$(printf '%s\n' "$best_ver" "$ver" | sort -V | tail -1)" = "$ver" ]; then
+          best_cmd="python3.$i"
+          best_ver="$ver"
+        fi
+      fi
+    fi
+    i=$((i - 1))
+  done
+  # Also check python3 and python
+  for c in python3 python; do
     if command -v "$c" >/dev/null 2>&1; then
       ver="$("$c" - <<'PY'
 import sys
 print(f"{sys.version_info.major}.{sys.version_info.minor}")
 PY
-)"
-      case "$ver" in
-        3.9|3.10|3.11|3.12|3.13) echo "$c"; return 0 ;;
-        *) ;;
-      esac
+)" 2>/dev/null || continue
+      IFS='.' read -r major minor <<EOF
+$ver
+EOF
+      if [ "$major" -gt 3 ] || ([ "$major" -eq 3 ] && [ "$minor" -ge 9 ]); then
+        if [ -z "$best_ver" ] || [ "$(printf '%s\n' "$best_ver" "$ver" | sort -V | tail -1)" = "$ver" ]; then
+          best_cmd="$c"
+          best_ver="$ver"
+        fi
+      fi
     fi
   done
-  echo ""
+  [ -n "$best_cmd" ] && echo "$best_cmd"
 }
 
 PY="$(pick_python)"
 
 # If no suitable python found, on zypper try to install a newer one
 if [ -z "$PY" ] && command -v zypper >/dev/null 2>&1; then
-  for pkg in python311 python3.11 python310 python3.10 python39 python3.9; do
+  for pkg in python314 python3.14 python313 python3.13 python311 python3.11 python310 python3.10 python39 python3.9; do
     if zypper --non-interactive --no-gpg-checks install -y "$pkg" >/dev/null 2>&1; then
       break
     fi

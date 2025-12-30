@@ -50,23 +50,35 @@ PY
     : # version is acceptable
   else
     # Attempt to create a user-local venv with any newer Python found
+      # Pick the highest available Python 3.x version (>=3.9)
       pick_python() {
-        for c in python3.12 python3.11 python3.10 python3.9 python3; do
+        local best_cmd="" best_ver=""
+        # Check common python3.x commands (3.9 to 3.20) and python3/python
+        local candidates=()
+        for i in {20..9}; do
+          candidates+=("python3.$i")
+        done
+        candidates+=("python3" "python")
+        
+        for c in "${candidates[@]}"; do
           if command -v "$c" >/dev/null 2>&1; then
-            v="$($c - <<'PY'
+            v="$("$c" - <<'PY'
 import sys
 print(f"{sys.version_info.major}.{sys.version_info.minor}")
 PY
-)"
+)" 2>/dev/null || continue
             # Check if version is >= 3.9
             IFS='.' read -r v_major v_minor <<< "$v"
             if [[ "$v_major" -gt 3 ]] || [[ "$v_major" -eq 3 && "$v_minor" -ge 9 ]]; then
-              echo "$c"
-              return 0
+              # Compare versions: if no best yet, or this is newer
+              if [[ -z "$best_ver" ]] || [[ "$(printf '%s\n' "$best_ver" "$v" | sort -V | tail -1)" == "$v" ]]; then
+                best_cmd="$c"
+                best_ver="$v"
+              fi
             fi
           fi
         done
-        echo ""
+        [[ -n "$best_cmd" ]] && echo "$best_cmd"
       }
       log "Attempting to locate newer system Python (>=3.9)"
       CAND="$(pick_python)"
