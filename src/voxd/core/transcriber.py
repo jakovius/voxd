@@ -48,10 +48,6 @@ class WhisperTranscriber:
         if not audio_file.exists():
             raise FileNotFoundError(f"[transcriber] Audio file not found: {audio_file}")
 
-        verbo(f"[transcriber] Using binary: {self.binary_path}")
-        verbo(f"[transcriber] Using model: {self.model_path}")
-        verbo("[transcriber] Starting transcription...")
-
         # Output prefix (no extension!)
         output_prefix = self.output_dir / audio_file.stem
         output_txt = output_prefix.with_suffix(".txt")

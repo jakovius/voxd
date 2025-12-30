@@ -352,6 +352,12 @@ def main():
         dest="lang",
         help="Transcription language (ISO 639-1, e.g. 'en', 'sv', or 'auto' for detection)"
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging (shows detailed debug output)"
+    )
     args, unknown = parser.parse_known_args()
 
     if args.version:
@@ -419,6 +425,13 @@ def main():
         sys.exit(0)
 
     cfg = AppConfig()
+    # Session-only override for verbosity
+    if args.verbose:
+        cfg.data["verbosity"] = True
+        setattr(cfg, "verbosity", True)
+        import os
+        os.environ["VOXD_VERBOSE"] = "1"
+
     # Session-only override for language
     if args.lang:
         try:

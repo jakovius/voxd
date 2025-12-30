@@ -118,6 +118,35 @@ def stub_pyperclip(monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def stub_psutil(monkeypatch):
+    """Provide a minimal stub for psutil module so imports succeed."""
+    import types
+
+    if "psutil" in sys.modules:
+        del sys.modules["psutil"]
+    if "_psutil_linux" in sys.modules:
+        del sys.modules["_psutil_linux"]
+    if "_pslinux" in sys.modules:
+        del sys.modules["_pslinux"]
+
+    psutil = types.ModuleType("psutil")
+    class _VirtualMemory:
+        def __init__(self):
+            self.total = 8 * 1024 * 1024 * 1024
+    class _CpuFreq:
+        def __init__(self):
+            self.max = 3000.0
+    def virtual_memory():
+        return _VirtualMemory()
+    def cpu_freq():
+        return _CpuFreq()
+    psutil.virtual_memory = virtual_memory
+    psutil.cpu_freq = cpu_freq
+    monkeypatch.setitem(sys.modules, "psutil", psutil)
+    yield
+
+
 @pytest.fixture
 def fake_whisper_run(monkeypatch, tmp_path):
     """Patch whisper subprocess.run to simulate success and create expected .txt output."""

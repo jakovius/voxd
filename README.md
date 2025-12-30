@@ -25,7 +25,8 @@ Hit your <span style="color:#FF4500">**hotkey shortcut**</span> -> speak -> hotk
 | Feature                          | Notes                                                                   |
 | -------------------------------- | ----------------------------------------------------------------------- |
 | **Whisper.cpp** backend          | Local, offline, fast  ASR.   |
-| **Simulated typing**             | instantly types straight into any currently focused input window. Even on Wayland! (*ydotool*).  |
+| **Streaming transcription**      | Real-time incremental typing as you speak. Text appears word-by-word, not after recording stops. |
+| **Simulated typing**             | Instantly types straight into any currently focused input window. Even on Wayland! (*ydotool*).  |
 | **Clipboard**                    | Auto-copies into clipboard - ready for pasting, if desired              |
 | **Languages**                    | 99+ languages. Provides default language config and session language override          |
 | **AIPP**, AI Post-Processing	   | AI-rewriting via local or cloud LLMs. GUI prompt editor.                |  
@@ -138,9 +139,25 @@ Leave VOXD running in the background -> go to any app where you want to voice-ty
 | Press hotkey …   | VOXD does …                                                 |
 | ---------------- | ----------------------------------------------------------- |
 | **First press**  | start recording                                             |
-| **Second press** | stop ⇢ [transcribe ⇢ copy to clipboard] ⇢ types the output into any focused app |  
+| **Second press** | stop ⇢ [finalize transcription ⇢ copy to clipboard] ⇢ types any remaining output into any focused app |  
 
-Otherwise, if in --flux (beta), **just speak**.
+### 🎙️ Streaming Mode (Default)
+
+VOXD uses **streaming transcription** by default, which means:
+
+- **Real-time typing**: Text appears incrementally as you speak, not after you stop recording
+- **Chunk-based processing**: Audio is processed in overlapping chunks (default: 3 seconds) for continuous transcription
+- **Incremental updates**: Text is typed word-by-word or phrase-by-phrase as it's transcribed (typically every 2 seconds or 3 words)
+- **Seamless experience**: You see your words appear in real-time, making it feel like natural voice-typing
+
+**How it works:**
+1. Press hotkey to start → VOXD begins recording and transcribing
+2. As you speak → Text appears incrementally in your focused application
+3. Press hotkey again → Finalizes any remaining transcription and copies to clipboard
+
+This streaming behavior is enabled by default in CLI (`voxd`), GUI (`voxd --gui`), and Tray (`voxd --tray`) modes. The old "record-then-transcribe" behavior is no longer used.
+
+**Note:** If in `--flux` mode (beta), **just speak** - no hotkey needed, voice activity detection triggers recording automatically.
 
 ### Autostart 
 For practical reasons (always ready to type & low system footprint), it is advised to enable voxd user daemon:
@@ -307,6 +324,15 @@ llamacpp_server_timeout: 30
 # Selected models per provider (automatically updated by VOXD)
 aipp_selected_models:
   llamacpp_server: "qwen2.5-3b-instruct-q4_k_m"
+
+# Streaming transcription settings (default: enabled)
+streaming_enabled: true              # Enable/disable streaming mode
+streaming_chunk_seconds: 3.0         # Audio chunk size in seconds (default: 3.0)
+streaming_overlap_seconds: 0.5      # Overlap between chunks in seconds (default: 0.5)
+streaming_emit_interval_seconds: 2.0 # Minimum time between text updates (default: 2.0)
+streaming_emit_word_count: 3         # Minimum words before emitting text (default: 3)
+streaming_typing_delay: 0.01         # Delay between typed characters in streaming mode (default: 0.01)
+streaming_min_chars_to_type: 3      # Minimum characters before typing incremental text (default: 3)
 ```
 
 ---

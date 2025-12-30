@@ -21,6 +21,13 @@ DEFAULT_CONFIG = {
     "typing_start_delay": 0.15,
     "ctrl_v_paste": False,  # Use Ctrl+V instead of default Ctrl+Shift+V
     "append_trailing_space": True,
+    # Streaming transcription mode
+    "streaming_enabled": True,
+    "streaming_chunk_seconds": 3.0,
+    "streaming_overlap_seconds": 0.5,
+    "streaming_emit_interval_seconds": 2.0,
+    "streaming_emit_word_count": 3,
+    "streaming_typing_delay": 0.01,
     "verbosity": False,
     "autostart": False,
     "save_recordings": False,

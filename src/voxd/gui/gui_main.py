@@ -1,4 +1,5 @@
 import sys
+import math
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, 
     QSizePolicy, QInputDialog, QGroupBox, QSystemTrayIcon, QMenu, QDialog, QTextEdit
@@ -14,6 +15,7 @@ from voxd.core.voxd_core import (
     CoreProcessThread, _create_styled_checkbox,
     show_manage_prompts, session_log_dialog, show_performance_dialog
 )
+from voxd.core.streaming_core import StreamingCoreProcessThread
 from voxd.core.model_manager import show_model_manager
 from voxd.gui.settings_dialog import SettingsDialog
 from voxd.utils.performance import update_last_perf_entry
@@ -535,7 +537,6 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
 
     def _on_anim_tick(self):
         self._anim_phase_ms = (self._anim_phase_ms + self._anim_timer.interval()) % 500
-        import math
         phase = (self._anim_phase_ms / 500.0) * 2 * math.pi
         t = 0.5 * (1 + math.sin(phase))
 
@@ -608,7 +609,10 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
             return
         self.set_status("Recording")
         self.clipboard_notice.setText("")
-        self.runner_thread = CoreProcessThread(self.cfg, self.logger)
+        if self.cfg.data.get("streaming_enabled", True):
+            self.runner_thread = StreamingCoreProcessThread(self.cfg, self.logger)
+        else:
+            self.runner_thread = CoreProcessThread(self.cfg, self.logger)
         self.runner_thread.status_changed.connect(self.set_status)
         self.runner_thread.finished.connect(self.on_transcript_ready)
         self.runner_thread.start()

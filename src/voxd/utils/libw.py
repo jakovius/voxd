@@ -57,17 +57,20 @@ def verbo(what_string: str, *args, **kwargs):
 
     The string is formatted with ``str.format(*args, **kwargs)`` exactly like
     ``print`` would do.
+
+    Checks both config verbosity flag and VOXD_VERBOSE environment variable.
     """
 
     cfg = _app_cfg()
-    if getattr(cfg, "verbosity", False):
+    verbose = getattr(cfg, "verbosity", False) or os.getenv("VOXD_VERBOSE") == "1"
+    if verbose:
         msg = what_string.format(*args, **kwargs)
         if _color_enabled():
             if msg.startswith("[recorder]"):
                 msg = f"{ORANGE}{msg}{RESET}"
             elif msg.startswith("[logger]") or msg.startswith("[aipp]"):
                 msg = f"{GREEN}{msg}{RESET}"
-        print(msg)
+        print(msg, flush=True)
 
 def verr(what_string: str, *args, **kwargs):
     """Unconditional error print, colored red when TTY.
