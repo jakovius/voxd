@@ -172,6 +172,31 @@ def _systemd_user_available() -> bool:
     except Exception:
         return False
 
+def _find_voxd_executable() -> str:
+    """Find the voxd executable path, checking PATH and common locations.
+    
+    Returns the path to voxd executable, or 'voxd' if not found (relying on PATH).
+    """
+    # First, try to find voxd in PATH
+    voxd_path = shutil.which("voxd")
+    if voxd_path:
+        return voxd_path
+    
+    # Fall back to common installation locations
+    home = Path.home()
+    candidates = [
+        home / ".local/bin/voxd",
+        Path("/usr/local/bin/voxd"),
+        Path("/usr/bin/voxd"),
+    ]
+    
+    for candidate in candidates:
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    
+    # If nothing found, return 'voxd' and let systemd use PATH
+    return "voxd"
+
 def _ensure_voxd_tray_unit() -> None:
     """Ensure a voxd-tray.service user unit exists (packaged or per-user fallback)."""
     try:
@@ -184,6 +209,8 @@ def _ensure_voxd_tray_unit() -> None:
         except Exception:
             pass
         unit_path = user_dir / "voxd-tray.service"
+        voxd_exec = _find_voxd_executable()
+        
         if not unit_path.exists():
             unit_path.write_text(
                 "[Unit]\n"
@@ -191,13 +218,19 @@ def _ensure_voxd_tray_unit() -> None:
                 "After=default.target\n\n"
                 "[Service]\n"
                 "Type=simple\n"
-                "ExecStart=/usr/bin/voxd --tray\n"
+                f"ExecStart={voxd_exec} --tray\n"
                 "Restart=on-failure\n"
                 "RestartSec=2s\n"
                 "Environment=YDOTOOL_SOCKET=%h/.ydotool_socket\n\n"
                 "[Install]\n"
                 "WantedBy=default.target\n"
             )
+        else:
+            # Update existing file if it has the hardcoded /usr/bin/voxd path
+            content = unit_path.read_text()
+            if "ExecStart=/usr/bin/voxd --tray" in content and voxd_exec != "/usr/bin/voxd":
+                content = content.replace("ExecStart=/usr/bin/voxd --tray", f"ExecStart={voxd_exec} --tray")
+                unit_path.write_text(content)
     except Exception:
         pass
 
