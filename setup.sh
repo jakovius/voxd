@@ -523,10 +523,47 @@ fi
 spinner_stop 0
 
 # ──────────────────  4. python venv & deps  ─────────────────────────────────––
+# Pick the highest available Python 3.x version (>=3.9)
+pick_python() {
+  local best_cmd="" best_ver=""
+  # Check common python3.x commands (3.9 to 3.20) and python3/python
+  local candidates=()
+  for i in {20..9}; do
+    candidates+=("python3.$i")
+  done
+  candidates+=("python3" "python")
+
+  for c in "${candidates[@]}"; do
+    if command -v "$c" >/dev/null 2>&1; then
+      ver="$("$c" - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)" 2>/dev/null || continue
+      # Check if version is >= 3.9
+      IFS='.' read -r major minor <<< "$ver"
+      if [[ "$major" -gt 3 ]] || [[ "$major" -eq 3 && "$minor" -ge 9 ]]; then
+        # Compare versions: if no best yet, or this is newer
+        if [[ -z "$best_ver" ]] || [[ "$(printf '%s\n' "$best_ver" "$ver" | sort -V | tail -1)" == "$ver" ]]; then
+          best_cmd="$c"
+          best_ver="$ver"
+        fi
+      fi
+    fi
+  done
+  [[ -n "$best_cmd" ]] && echo "$best_cmd"
+}
+
 spinner_start "Setting up Python env and installing VOXD"
+PYTHON_CMD="$(pick_python)"
+if [[ -z "$PYTHON_CMD" ]]; then
+  die "No suitable Python (>=3.9) found. Please install Python 3.9 or newer."
+fi
+msg "Using Python: $PYTHON_CMD"
+
 if [[ ! -d .venv ]]; then
-  msg "Creating virtualenv (.venv)…"
-  python3 -m venv .venv
+  msg "Creating virtualenv (.venv) with $PYTHON_CMD…"
+  "$PYTHON_CMD" -m venv .venv
 else
   msg "Using existing virtualenv (.venv)"
 fi
@@ -556,7 +593,9 @@ fi
 pip install -e .
 
 # Fix editable install .pth file if it's empty (hatchling bug workaround)
-PTH_FILE=".venv/lib/python3.12/site-packages/_voxd.pth"
+# Dynamically determine Python version for PTH file path
+PY_VERSION="$($PY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+PTH_FILE=".venv/lib/python${PY_VERSION}/site-packages/_voxd.pth"
 if [[ -f "$PTH_FILE" && ! -s "$PTH_FILE" ]]; then
   echo "$PWD/src" > "$PTH_FILE"
   msg "Fixed editable install .pth file"

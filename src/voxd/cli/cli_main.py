@@ -13,6 +13,7 @@ from voxd.core.config import AppConfig
 from voxd.core.logger import SessionLogger
 from voxd.core.transcriber import WhisperTranscriber  # type: ignore
 from voxd.core.aipp import get_final_text
+from voxd.core.streaming_transcriber import StreamingWhisperTranscriber
 from voxd.utils.core_runner import AudioRecorder, ClipboardManager, SimulatedTyper
 from voxd.utils.ipc_server import start_ipc_server
 from voxd.utils.libw import verbo, verr, YELLOW, RED, RESET, ORANGE
@@ -111,56 +112,134 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
                 print(f"{ORANGE}Continuous mode | hotkey to rec/stop | Ctrl+C to exit\n*** You can now go to ANY other app to VOICE-TYPE - leave this active in the background ***{RESET}")
             else:
                 print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit\n*** You can now go to ANY other app to VOICE-TYPE - leave this active in the background ***")
-            # Create reusable instances outside the loop
-            recorder = AudioRecorder(
-                record_chunked=getattr(cfg, "record_chunked", True),
-                chunk_seconds=int(getattr(cfg, "record_chunk_seconds", 300))
-            )
+            
             preserve = bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False))
-            transcriber = WhisperTranscriber(
-                cfg.whisper_model_path,
-                cfg.whisper_binary,
-                delete_input=not preserve,
-                language=cfg.data.get("language", "en"),
-            )
             clipboard = ClipboardManager()
-            typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
-
-            try:
-                while True:
-                    verbo("\n[cli] Awaiting hotkey to start recording...")
-                    hotkey_event.clear()
-                    hotkey_event.wait()
-
-                    recorder.start_recording()
-                    print("Recording...")
-                    hotkey_event.clear()
-                    hotkey_event.wait()
-                    verbo("[cli] Hotkey received: stopping recording.")
-
-                    rec_path = recorder.stop_recording(preserve=preserve)
-                    verbo("[recorder] Stopping recording...")
-
-                    tscript, orig_tscript = transcriber.transcribe(rec_path)
-                    if not tscript:
-                        print("[core_runner] No transcript returned.")
-                        continue
-
-                    final_text = get_final_text(tscript, cfg)  # type: ignore[arg-type]
-                    clipboard.copy(final_text)
-                    print(f"\n📝 ---> ")
+            typer = SimulatedTyper(
+                delay=cfg.data.get("streaming_typing_delay", 0.01) if cfg.data.get("streaming_enabled", True) else cfg.typing_delay,
+                start_delay=cfg.typing_start_delay
+            )
+            
+            use_streaming = cfg.data.get("streaming_enabled", True)
+            
+            if use_streaming:
+                recorder = AudioRecorder()
+                transcriber = StreamingWhisperTranscriber(
+                    model_path=cfg.whisper_model_path,
+                    binary_path=cfg.whisper_binary,
+                    language=cfg.data.get("language", "en"),
+                    chunk_seconds=cfg.data.get("streaming_chunk_seconds", 3.0),
+                    overlap_seconds=cfg.data.get("streaming_overlap_seconds", 0.5),
+                )
+                accumulated_text = ""
+                last_typed_text = ""
+                
+                def on_partial_text(text: str):
+                    nonlocal accumulated_text, last_typed_text
+                    if not text or not text.strip():
+                        return
+                    min_chars = cfg.data.get("streaming_min_chars_to_type", 3)
+                    if len(text) < min_chars:
+                        return
+                    new_accumulated = accumulated_text + " " + text if accumulated_text else text
                     if cfg.typing:
-                        typer.type(final_text)
-                    print()
-                    if cfg.aipp_enabled:
-                        logger.log_entry(f"[original] {tscript}")
-                        if final_text != tscript:
-                            logger.log_entry(f"[aipp] {final_text}")
-                    else:
-                        logger.log_entry(final_text)
-
-            except KeyboardInterrupt:
-                print("\n[cli] Exiting continuous recording mode...")
+                        try:
+                            typer.type_incremental(last_typed_text, new_accumulated)
+                            last_typed_text = new_accumulated
+                        except Exception as e:
+                            verr(f"[cli] Incremental typing failed: {e}")
+                    accumulated_text = new_accumulated
+                
+                transcriber.on_partial_text = on_partial_text
+                
+                try:
+                    while True:
+                        verbo("\n[cli] Awaiting hotkey to start recording...")
+                        hotkey_event.clear()
+                        hotkey_event.wait()
+                        
+                        print("Recording...")
+                        accumulated_text = ""
+                        last_typed_text = ""
+                        
+                        def on_audio_chunk(audio_data):
+                            transcriber.add_audio_chunk(audio_data)
+                        
+                        recorder.start_streaming_recording(on_audio_chunk, chunk_seconds=cfg.data.get("streaming_chunk_seconds", 2.0))
+                        transcriber.start(samplerate=recorder.fs, channels=recorder.channels)
+                        
+                        hotkey_event.clear()
+                        hotkey_event.wait()
+                        verbo("[cli] Hotkey received: stopping recording.")
+                        
+                        recorder.stop_recording(preserve=preserve)
+                        transcriber.stop()
+                        final_text = transcriber.finalize()
+                        
+                        if not final_text:
+                            print("[cli] No transcript returned.")
+                            continue
+                        
+                        processed_text = get_final_text(final_text, cfg)
+                        clipboard.copy(processed_text)
+                        print(f"\n📝 ---> {processed_text}")
+                        if cfg.aipp_enabled:
+                            logger.log_entry(f"[original] {final_text}")
+                            if processed_text != final_text:
+                                logger.log_entry(f"[aipp] {processed_text}")
+                        else:
+                            logger.log_entry(processed_text)
+                except KeyboardInterrupt:
+                    print("\n[cli] Exiting continuous recording mode...")
+                    if recorder.is_recording:
+                        recorder.stop_recording(preserve=preserve)
+                    transcriber.stop()
+            else:
+                recorder = AudioRecorder(
+                    record_chunked=getattr(cfg, "record_chunked", True),
+                    chunk_seconds=int(getattr(cfg, "record_chunk_seconds", 300))
+                )
+                transcriber = WhisperTranscriber(
+                    cfg.whisper_model_path,
+                    cfg.whisper_binary,
+                    delete_input=not preserve,
+                    language=cfg.data.get("language", "en"),
+                )
+                
+                try:
+                    while True:
+                        verbo("\n[cli] Awaiting hotkey to start recording...")
+                        hotkey_event.clear()
+                        hotkey_event.wait()
+                        
+                        recorder.start_recording()
+                        print("Recording...")
+                        hotkey_event.clear()
+                        hotkey_event.wait()
+                        verbo("[cli] Hotkey received: stopping recording.")
+                        
+                        rec_path = recorder.stop_recording(preserve=preserve)
+                        verbo("[recorder] Stopping recording...")
+                        
+                        tscript, orig_tscript = transcriber.transcribe(rec_path)
+                        if not tscript:
+                            print("[core_runner] No transcript returned.")
+                            continue
+                        
+                        final_text = get_final_text(tscript, cfg)
+                        clipboard.copy(final_text)
+                        print(f"\n📝 ---> ")
+                        if cfg.typing:
+                            typer.type(final_text)
+                        print()
+                        if cfg.aipp_enabled:
+                            logger.log_entry(f"[original] {tscript}")
+                            if final_text != tscript:
+                                logger.log_entry(f"[aipp] {final_text}")
+                        else:
+                            logger.log_entry(final_text)
+                except KeyboardInterrupt:
+                    print("\n[cli] Exiting continuous recording mode...")
 
         elif cmd == "l":
             logger.show()
@@ -187,6 +266,7 @@ def cli_main(cfg: AppConfig, logger: SessionLogger, args: argparse.Namespace):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="voxd", description="VOXD CLI Mode")
     parser.add_argument("--save-audio", action="store_true", help="Preserve audio recordings. If used alone, sets it persistently.")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging (shows detailed debug output)")
     # --- Quick action flags (non-interactive shortcuts) ---
     qa = parser.add_argument_group("Quick actions")
     qa.add_argument("--record", action="store_true", help="Record to ~/.local/share/voxd/recordings and exit (no transcription)")
@@ -207,6 +287,14 @@ def main():
     args = parser.parse_args()
 
     cfg = cast(Any, AppConfig())
+
+    # Session-only override for verbosity
+    if args.verbose:
+        cfg.data["verbosity"] = True
+        setattr(cfg, "verbosity", True)
+        import os
+        os.environ["VOXD_VERBOSE"] = "1"
+
     # Ensure whisper-cli exists (auto-build if missing)
     ensure_whisper_cli("cli")
     logger = SessionLogger(cfg.log_enabled, cfg.log_location)
@@ -270,44 +358,124 @@ def main():
                 print(f"{ORANGE}Continuous mode | hotkey to rec/stop | Ctrl+C to exit{RESET}")
             else:
                 print("Continuous mode | hotkey to rec/stop | Ctrl+C to exit")
-            recorder = AudioRecorder()
+            
             preserve = bool(args.save_audio) or bool(getattr(cfg, "save_recordings", False))
-            transcriber = WhisperTranscriber(
-                cfg.whisper_model_path,
-                cfg.whisper_binary,
-                delete_input=not preserve,
-                language=cfg.data.get("language", "en"),
-            )
             clipboard = ClipboardManager()
-            typer = SimulatedTyper(delay=cfg.typing_delay, start_delay=cfg.typing_start_delay)
-            try:
-                while True:
-                    verbo("\n[cli] Awaiting hotkey to start recording...")
-                    hotkey_event.clear()
-                    hotkey_event.wait()
-                    recorder.start_recording()
-                    print("Recording...")
-                    hotkey_event.clear()
-                    hotkey_event.wait()
-                    verbo("[cli] Hotkey received: stopping recording.")
-                    rec_path = recorder.stop_recording(preserve=preserve)
-                    tscript, _ = transcriber.transcribe(rec_path)
-                    if not tscript:
-                        print("[cli] No transcript returned.")
-                        continue
-                    final_text = get_final_text(tscript, cfg)  # type: ignore[arg-type]
-                    clipboard.copy(final_text)
+            typer = SimulatedTyper(
+                delay=cfg.data.get("streaming_typing_delay", 0.01) if cfg.data.get("streaming_enabled", True) else cfg.typing_delay,
+                start_delay=cfg.typing_start_delay
+            )
+            
+            use_streaming = cfg.data.get("streaming_enabled", True)
+            
+            if use_streaming:
+                recorder = AudioRecorder()
+                transcriber = StreamingWhisperTranscriber(
+                    model_path=cfg.whisper_model_path,
+                    binary_path=cfg.whisper_binary,
+                    language=cfg.data.get("language", "en"),
+                    chunk_seconds=cfg.data.get("streaming_chunk_seconds", 3.0),
+                    overlap_seconds=cfg.data.get("streaming_overlap_seconds", 0.5),
+                )
+                accumulated_text = ""
+                last_typed_text = ""
+                
+                def on_partial_text(text: str):
+                    nonlocal accumulated_text, last_typed_text
+                    if not text or not text.strip():
+                        return
+                    min_chars = cfg.data.get("streaming_min_chars_to_type", 3)
+                    if len(text) < min_chars:
+                        return
+                    new_accumulated = accumulated_text + " " + text if accumulated_text else text
                     if cfg.typing:
-                        typer.type(final_text)
-                    print(f"\n📝 ---> {final_text}")
-                    if cfg.aipp_enabled:
-                        logger.log_entry(f"[original] {tscript}")
-                        if final_text != tscript:
-                            logger.log_entry(f"[aipp] {final_text}")
-                    else:
-                        logger.log_entry(final_text)
-            except KeyboardInterrupt:
-                print("\n[cli] Exiting continuous recording mode...")
+                        try:
+                            typer.type_incremental(last_typed_text, new_accumulated)
+                            last_typed_text = new_accumulated
+                        except Exception as e:
+                            verr(f"[cli] Incremental typing failed: {e}")
+                    accumulated_text = new_accumulated
+                
+                transcriber.on_partial_text = on_partial_text
+                
+                try:
+                    while True:
+                        verbo("\n[cli] Awaiting hotkey to start recording...")
+                        hotkey_event.clear()
+                        hotkey_event.wait()
+                        
+                        print("Recording...")
+                        accumulated_text = ""
+                        last_typed_text = ""
+                        
+                        def on_audio_chunk(audio_data):
+                            transcriber.add_audio_chunk(audio_data)
+                        
+                        recorder.start_streaming_recording(on_audio_chunk, chunk_seconds=cfg.data.get("streaming_chunk_seconds", 2.0))
+                        transcriber.start(samplerate=recorder.fs, channels=recorder.channels)
+                        
+                        hotkey_event.clear()
+                        hotkey_event.wait()
+                        verbo("[cli] Hotkey received: stopping recording.")
+                        
+                        recorder.stop_recording(preserve=preserve)
+                        transcriber.stop()
+                        final_text = transcriber.finalize()
+                        
+                        if not final_text:
+                            print("[cli] No transcript returned.")
+                            continue
+                        
+                        processed_text = get_final_text(final_text, cfg)
+                        clipboard.copy(processed_text)
+                        print(f"\n📝 ---> {processed_text}")
+                        if cfg.aipp_enabled:
+                            logger.log_entry(f"[original] {final_text}")
+                            if processed_text != final_text:
+                                logger.log_entry(f"[aipp] {processed_text}")
+                        else:
+                            logger.log_entry(processed_text)
+                except KeyboardInterrupt:
+                    print("\n[cli] Exiting continuous recording mode...")
+                    if recorder.is_recording:
+                        recorder.stop_recording(preserve=preserve)
+                    transcriber.stop()
+            else:
+                recorder = AudioRecorder()
+                transcriber = WhisperTranscriber(
+                    cfg.whisper_model_path,
+                    cfg.whisper_binary,
+                    delete_input=not preserve,
+                    language=cfg.data.get("language", "en"),
+                )
+                try:
+                    while True:
+                        verbo("\n[cli] Awaiting hotkey to start recording...")
+                        hotkey_event.clear()
+                        hotkey_event.wait()
+                        recorder.start_recording()
+                        print("Recording...")
+                        hotkey_event.clear()
+                        hotkey_event.wait()
+                        verbo("[cli] Hotkey received: stopping recording.")
+                        rec_path = recorder.stop_recording(preserve=preserve)
+                        tscript, _ = transcriber.transcribe(rec_path)
+                        if not tscript:
+                            print("[cli] No transcript returned.")
+                            continue
+                        final_text = get_final_text(tscript, cfg)
+                        clipboard.copy(final_text)
+                        if cfg.typing:
+                            typer.type(final_text)
+                        print(f"\n📝 ---> {final_text}")
+                        if cfg.aipp_enabled:
+                            logger.log_entry(f"[original] {tscript}")
+                            if final_text != tscript:
+                                logger.log_entry(f"[aipp] {final_text}")
+                        else:
+                            logger.log_entry(final_text)
+                except KeyboardInterrupt:
+                    print("\n[cli] Exiting continuous recording mode...")
             return
 
         if args.transcribe:

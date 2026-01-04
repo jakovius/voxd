@@ -18,6 +18,7 @@ from voxd.core.voxd_core import (
     session_log_dialog,
     show_performance_dialog,
 )
+from voxd.core.streaming_core import StreamingCoreProcessThread
 from voxd.core.model_manager import show_model_manager  # NEW
 from voxd.utils.performance import update_last_perf_entry
 from voxd.gui.settings_dialog import SettingsDialog
@@ -132,7 +133,10 @@ class VoxdTrayApp(QObject):
         if self.status in ("Transcribing", "Typing"):
             return
         self.set_status("Recording")
-        self.thread = CoreProcessThread(self.cfg, self.logger)
+        if self.cfg.data.get("streaming_enabled", True):
+            self.thread = StreamingCoreProcessThread(self.cfg, self.logger)
+        else:
+            self.thread = CoreProcessThread(self.cfg, self.logger)
         self.thread.status_changed.connect(self.set_status, Qt.ConnectionType.QueuedConnection)
         self.thread.finished.connect(self.on_transcript_ready)
         self.thread.start()

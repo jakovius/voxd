@@ -288,6 +288,90 @@ class SimulatedTyper:
             return
         self.flush_stdin() # Flush pending input before any new prompt
 
+    def type_incremental(self, previous_text: str, new_text: str):
+        """Type only the new text that wasn't in previous_text (append-only approach).
+        
+        This method calculates the suffix to append and types only that, avoiding
+        scary text replacements by never deleting existing text.
+        """
+        if not self.enabled:
+            print("[typer] ⚠️ Typing disabled - required tool not available.")
+            return
+        
+        if not new_text:
+            return
+        
+        previous_text = previous_text or ""
+        new_text = new_text.rstrip()
+        
+        if new_text.startswith(previous_text):
+            suffix = new_text[len(previous_text):]
+            if not suffix:
+                return
+            # Preserve leading space if it exists (needed for proper sentence spacing)
+            if suffix.startswith(" "):
+                # Keep the space
+                pass
+            else:
+                # Remove any other leading whitespace but preserve intentional spaces
+                suffix = suffix.lstrip()
+        else:
+            # For non-matching text, preserve leading space if present
+            if new_text.startswith(" "):
+                suffix = new_text
+            else:
+                suffix = new_text.lstrip()
+        
+        if not suffix:
+            return
+        
+        if self.delay_ms <= 0 or not self.tool:
+            return
+        
+        verbo(f"[typer] Typing incremental text: '{suffix[:20]}...' using {self.tool}...")
+        tool_name = os.path.basename(self.tool) if self.tool else ""
+        if tool_name == "ydotool" and self.tool:
+            self._run_tool([self.tool, "type", "-d", self.delay_str, suffix])
+        elif tool_name == "xdotool" and self.tool:
+            self._run_tool([self.tool, "type", "--delay", self.delay_str, suffix])
+        else:
+            print("[typer] ⚠️ No valid typing tool found for incremental typing.")
+            return
+    
+    def type_rewrite(self, text: str, previous_length: int):
+        """Rewrite text by deleting previous characters and typing new text.
+        
+        Args:
+            text: The new text to type
+            previous_length: Number of characters to delete before typing new text
+        """
+        if not self.enabled:
+            print("[typer] ⚠️ Typing disabled - required tool not available.")
+            return
+        
+        if not text:
+            return
+        
+        if self.delay_ms <= 0 or not self.tool:
+            return
+        
+        verbo(f"[typer] Rewriting text: deleting {previous_length} chars, typing '{text[:20]}...' using {self.tool}...")
+        tool_name = os.path.basename(self.tool) if self.tool else ""
+        
+        if tool_name == "ydotool" and self.tool:
+            if previous_length > 0:
+                for _ in range(previous_length):
+                    self._run_tool([self.tool, "key", "14:1", "14:0"])
+            self._run_tool([self.tool, "type", "-d", self.delay_str, text])
+        elif tool_name == "xdotool" and self.tool:
+            if previous_length > 0:
+                for _ in range(previous_length):
+                    self._run_tool([self.tool, "key", "BackSpace"])
+            self._run_tool([self.tool, "type", "--delay", self.delay_str, text])
+        else:
+            print("[typer] ⚠️ No valid typing tool found for rewrite.")
+            return
+
     # ------------------------------------------------------------------
     # Helper: fast clipboard paste
     # ------------------------------------------------------------------

@@ -5,11 +5,12 @@ from datetime import datetime
 from pathlib import Path
 import tempfile
 from voxd.utils.libw import verbo, verr
+from voxd.core.config import AppConfig
+from voxd.paths import RECORDINGS_DIR
 
 
 class AudioRecorder:
     def __init__(self, samplerate=16000, channels=1, *, record_chunked: bool | None = None, chunk_seconds: int | None = None):
-        from voxd.core.config import AppConfig
         cfg = AppConfig()
         self.fs = samplerate
         self.channels = channels
@@ -43,7 +44,6 @@ class AudioRecorder:
 
         # Prefer configured device or PulseAudio on Linux
         try:
-            from voxd.core.config import AppConfig
             cfg = AppConfig()
             dev_pref = cfg.data.get("audio_input_device") or ("pulse" if cfg.data.get("audio_prefer_pulse", True) else None)
         except Exception:
@@ -77,7 +77,6 @@ class AudioRecorder:
             return sd.InputStream(**kw)
 
         # Try preferred sample rate on preferred device; then robust fallbacks
-        tried_pulse = False
         try:
             self.stream = _open(dev_pref, self.fs)
             self.stream.start()
@@ -106,10 +105,8 @@ class AudioRecorder:
                 try:
                     self.stream = _open("pulse", self.fs)
                     self.stream.start()
-                    tried_pulse = True
                     return
                 except Exception:
-                    tried_pulse = True
                     pass
             # Last resort: open without device hint
             self.stream = _open(None, self.fs)
@@ -120,9 +117,13 @@ class AudioRecorder:
             return None
 
         verbo("[recorder] Stopping recording...")
-        self.stream.stop()
-        self.stream.close()
+        if hasattr(self, 'stream') and self.stream is not None:
+            self.stream.stop()
+            self.stream.close()
         self.is_recording = False
+
+        if hasattr(self, 'streaming_buffer'):
+            self.streaming_buffer = []
 
         if self.record_chunked and self._chunk_wave is not None:
             try:
@@ -132,8 +133,6 @@ class AudioRecorder:
             self._chunk_wave = None
 
         audio_data = None if self.record_chunked else np.concatenate(self.recording, axis=0)
-
-        from voxd.paths import RECORDINGS_DIR
         if preserve:
             rec_dir = RECORDINGS_DIR
             rec_dir.mkdir(exist_ok=True)
@@ -192,7 +191,7 @@ class AudioRecorder:
         except Exception as e:
             verr(f"[recorder] Failed to stitch chunks: {e}")
             raise
-            
+
     def get_last_temp_file(self):
         return self.last_temp_file
 
@@ -200,3 +199,73 @@ class AudioRecorder:
         if self.last_temp_file and self.last_temp_file.exists():
             verbo(f"[recorder] Cleaning up temporary file {self.last_temp_file}")
             self.last_temp_file.unlink()
+
+    def start_streaming_recording(self, callback, chunk_seconds: float = 3.0):
+        """Start streaming recording that emits audio chunks via callback.
+
+        Args:
+            callback: Callable[[np.ndarray], None] - called with each audio chunk
+            chunk_seconds: Size of each chunk in seconds
+        """
+        verbo("[recorder] Starting streaming recording...")
+        self.is_recording = True
+        self.streaming_callback = callback
+        self.streaming_chunk_frames = int(chunk_seconds * self.fs)
+        self.streaming_buffer = []
+
+        try:
+            cfg = AppConfig()
+            dev_pref = cfg.data.get("audio_input_device") or ("pulse" if cfg.data.get("audio_prefer_pulse", True) else None)
+        except Exception:
+            dev_pref = "pulse"
+
+        # FYI: `frames` and `time` parameters are required by sounddevice.
+        def streaming_callback(indata, frames, time, status):
+            if status:
+                verbo(f"[recorder] Warning: {status}")
+            if not self.is_recording:
+                return
+
+            self.streaming_buffer.append(indata.copy())
+            total_frames = sum(len(chunk) for chunk in self.streaming_buffer)
+
+            if total_frames >= self.streaming_chunk_frames:
+                chunk = np.concatenate(self.streaming_buffer, axis=0)
+                self.streaming_buffer = []
+                try:
+                    verbo(f"[recorder] Emitting chunk of {len(chunk)} frames")
+                    self.streaming_callback(chunk)
+                except Exception as e:
+                    verr(f"[recorder] Streaming callback error: {e}")
+
+        def _open(device, fs):
+            kw = {"samplerate": fs, "channels": self.channels, "callback": streaming_callback}
+            if device:
+                kw["device"] = device
+            return sd.InputStream(**kw)
+
+        try:
+            self.stream = _open(dev_pref, self.fs)
+            self.stream.start()
+        except Exception as e:
+            verr(f"[recorder] Opening stream at {self.fs} Hz failed ({e}); trying device default rate")
+            try:
+                indev = dev_pref if dev_pref else (sd.default.device[0] if sd.default.device else None)
+            except Exception:
+                indev = None
+            try:
+                info = sd.query_devices(indev, 'input') if indev is not None else sd.query_devices(kind='input')
+                fallback_fs = int(info.get('default_samplerate') or 48000)
+            except Exception:
+                fallback_fs = 48000
+            self.fs = fallback_fs
+            self.streaming_chunk_frames = int(chunk_seconds * self.fs)
+            if dev_pref != "pulse":
+                try:
+                    self.stream = _open("pulse", self.fs)
+                    self.stream.start()
+                    return
+                except Exception:
+                    pass
+            self.stream = _open(None, self.fs)
+            self.stream.start()
