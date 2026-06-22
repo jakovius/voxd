@@ -153,6 +153,15 @@ class SettingsDialog(QDialog):
 
         self._add_filepicker(form, "whisper_binary", "Browse", filter="Executable (*)")
         self._add_filepicker(form, "whisper_model_path", "Browse", filter="*.bin")
+        self._add_checkbox(form, "whisper_gpu_enabled", "Use GPU when available")
+
+        # GPU device picker — only meaningful when several GPUs are present
+        # (e.g. integrated iGPU + discrete NVIDIA). "Auto" pins the discrete
+        # NVIDIA card so whisper.cpp doesn't fall back to the slow iGPU.
+        gpu_combo = QComboBox()
+        self._populate_gpu_devices(gpu_combo)
+        form.addRow("GPU device", gpu_combo)
+        self._widgets["whisper_gpu_device"] = gpu_combo
 
         # ------------------------------------------------------------------
         #  Fin
@@ -326,6 +335,39 @@ class SettingsDialog(QDialog):
         else:
             combo.setCurrentIndex(0)
 
+    def _populate_gpu_devices(self, combo: QComboBox):
+        """Fill ``combo`` with the installed Vulkan GPU drivers.
+
+        Selection works at the driver level (VK_DRIVER_FILES), so the persisted
+        ``whisper_gpu_device`` value is a vendor keyword: ``"auto"`` (discrete
+        NVIDIA) or ``nvidia`` / ``amd`` / ``intel``. A previously-configured
+        value that no longer enumerates is kept so saving never drops the choice.
+        """
+        combo.clear()
+        combo.addItem("Auto (discrete NVIDIA)", "auto")
+
+        current = str(self.cfg.data.get("whisper_gpu_device", "auto") or "auto")
+        labels = {"nvidia": "NVIDIA", "amd": "AMD", "intel": "Intel"}
+        try:
+            from voxd.core.transcriber import _list_vulkan_icd_files, _icd_vendor
+            seen: list[str] = []
+            for p in _list_vulkan_icd_files():
+                v = _icd_vendor(p)
+                if v in labels and v not in seen:
+                    seen.append(v)
+                    combo.addItem(labels[v], v)
+        except Exception:
+            pass
+
+        if current and current != "auto":
+            idx = combo.findData(current)
+            if idx < 0:
+                combo.addItem(f"{current} (configured)", current)
+                idx = combo.findData(current)
+            combo.setCurrentIndex(max(0, idx))
+        else:
+            combo.setCurrentIndex(0)
+
     def _populate_models(self, combo: QComboBox, provider: str):
         combo.clear()
         models = self.cfg.get_aipp_models(provider)
@@ -361,6 +403,9 @@ class SettingsDialog(QDialog):
                 elif key == "audio_input_device":
                     data = widget.currentData()
                     val = "" if data is None else str(data)
+                elif key == "whisper_gpu_device":
+                    data = widget.currentData()
+                    val = "auto" if data is None else str(data)
                 else:
                     val = widget.currentText()
             else:

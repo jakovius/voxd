@@ -23,6 +23,14 @@ mic_autoset_level: 0.45
 whisper_binary: whisper.cpp/build/bin/whisper-cli
 whisper_model_path: whisper.cpp/models/ggml-base.en.bin
 language: en
+# Use the GPU when whisper-cli was built with a GPU backend (CUDA/Vulkan).
+# A CPU-only binary ignores this; set false to force CPU (-ng) on a GPU build.
+whisper_gpu_enabled: true
+# Which GPU to use when several drivers are present (integrated iGPU + discrete
+# NVIDIA on a Vulkan build). voxd restricts the Vulkan loader to the chosen
+# driver (VK_DRIVER_FILES). "auto" picks the discrete NVIDIA driver; or set
+# "nvidia" / "amd" / "intel" to force a vendor. Only affects Vulkan builds.
+whisper_gpu_device: auto
 
 # Drop transcripts that consist solely of a known Whisper hallucination
 # (e.g. the "subscribe to my channel" phrases produced on silence/noise).

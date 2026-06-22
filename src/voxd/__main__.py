@@ -507,6 +507,72 @@ def main():
         except Exception:
             print("[Diagnose] sounddevice not available")
 
+        # Whisper / GPU diagnostics
+        try:
+            from voxd.paths import find_whisper_cli
+            from voxd.core.transcriber import probe_whisper_gpu_capability
+            wc = find_whisper_cli()
+            print(f"[Diagnose] whisper-cli: {wc}")
+            gpu_cfg = bool(cfg.data.get("whisper_gpu_enabled", True))
+            print(f"[Diagnose] config whisper_gpu_enabled: {gpu_cfg}")
+            # Multi-GPU: show the Vulkan GPU drivers and which one gets pinned.
+            try:
+                from voxd.core.transcriber import (
+                    find_gpu_icd, _list_vulkan_icd_files, _icd_vendor,
+                )
+                gpu_icds = [(p, _icd_vendor(p)) for p in _list_vulkan_icd_files()]
+                gpu_icds = [(p, v) for (p, v) in gpu_icds
+                            if v in ("nvidia", "amd", "intel")]
+                if len(gpu_icds) > 1:
+                    pref = str(cfg.data.get("whisper_gpu_device", "auto") or "auto")
+                    icd, vendor = find_gpu_icd(pref)
+                    print(f"[Diagnose] config whisper_gpu_device: {pref}")
+                    print(f"[Diagnose] Vulkan GPU drivers ({len(gpu_icds)}):")
+                    for p, v in gpu_icds:
+                        mark = "  ← pinned" if (icd is not None and p == icd) else ""
+                        print(f"[Diagnose]   {v}: {p}{mark}")
+                    if icd is not None:
+                        print(f"[Diagnose] → restricting Vulkan to {vendor.upper()} via "
+                              "VK_DRIVER_FILES so whisper.cpp avoids the iGPU")
+                    else:
+                        print("[Diagnose] → no preferred discrete GPU driver found; "
+                              "whisper picks Vulkan device 0")
+            except Exception:
+                pass
+            cap = probe_whisper_gpu_capability(wc)
+            if cap["capable"] is True:
+                print(f"[Diagnose] whisper-cli build: ✅ GPU-capable ({cap['backend']})")
+                if not gpu_cfg:
+                    print("[Diagnose] → GPU build present but disabled in config; "
+                          "set whisper_gpu_enabled: true to use it.")
+                else:
+                    print("[Diagnose] → Set 'verbosity: true' to log the live backend per transcription;")
+                    print("[Diagnose]   if it logs 'CPU' the GPU device/driver isn't usable at run time.")
+            elif cap["capable"] is False:
+                print("[Diagnose] whisper-cli build: ⚠️ CPU-only (no GPU backend compiled in)")
+                if gpu_cfg:
+                    print("[Diagnose] → whisper_gpu_enabled is true but this binary has no GPU "
+                          "support, so transcription runs on CPU regardless.")
+                    print("[Diagnose] → To enable GPU: rebuild whisper.cpp with "
+                          "'./setup.sh --gpu' (CUDA/Vulkan), then reboot.")
+            else:
+                print(f"[Diagnose] whisper-cli build: ❓ could not determine ({cap['detail']})")
+        except FileNotFoundError:
+            print("[Diagnose] whisper-cli: ❌ not found (run ./setup.sh)")
+        except Exception as e:
+            print(f"[Diagnose] whisper-cli check failed: {e}")
+
+        # Verbose file-log location
+        try:
+            from voxd.paths import LOG_DIR
+            vfile = LOG_DIR / "voxd.log"
+            if bool(cfg.data.get("verbosity", False)):
+                print(f"[Diagnose] log file: {vfile} (rotating; errors + verbose, verbosity on)")
+            else:
+                print(f"[Diagnose] log file: {vfile} (rotating; errors only — set 'verbosity: true' for full verbose)")
+        except Exception:
+            pass
+
         sys.exit(0)
 
     # Optionally ensure mic is on and set to desired level (best-effort)

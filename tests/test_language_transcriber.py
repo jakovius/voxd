@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 def _stub_run_factory(calls_store):
-    def _run(cmd, capture_output=True, text=True):
+    def _run(cmd, capture_output=True, text=True, env=None, **kwargs):
         calls_store.append(cmd[:])
         # Create expected output file based on -of
         if "-of" in cmd:

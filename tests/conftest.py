@@ -125,7 +125,7 @@ def stub_pyperclip(monkeypatch):
 @pytest.fixture
 def fake_whisper_run(monkeypatch, tmp_path):
     """Patch whisper subprocess.run to simulate success and create expected .txt output."""
-    def _run(cmd, capture_output=True, text=True):
+    def _run(cmd, capture_output=True, text=True, env=None, **kwargs):
         # Find output prefix from '-of'
         if "-of" in cmd:
             of_idx = cmd.index("-of")
