@@ -43,17 +43,17 @@ APPDIR="/opt/voxd"
 
 # Pick a Python >= 3.9 if available; attempt RPM install on openSUSE if too old
 pick_python() {
-  for c in python3.12 python3.11 python3.10 python3.9 python3 python; do
+  for c in python3.14 python3.13 python3.12 python3.11 python3.10 python3.9 python3 python; do
     if command -v "$c" >/dev/null 2>&1; then
       ver="$("$c" - <<'PY'
 import sys
 print(f"{sys.version_info.major}.{sys.version_info.minor}")
 PY
 )"
-      case "$ver" in
-        3.9|3.10|3.11|3.12|3.13) echo "$c"; return 0 ;;
-        *) ;;
-      esac
+      maj="${ver%%.*}"; min="${ver#*.}"
+      if [ "$maj" -gt 3 ] || { [ "$maj" -eq 3 ] && [ "$min" -ge 9 ]; }; then
+        echo "$c"; return 0
+      fi
     fi
   done
   echo ""
