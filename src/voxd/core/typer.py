@@ -5,7 +5,7 @@ import os
 import sys
 import select
 from voxd.utils.libw import verbo
-import pyperclip  # New: clipboard helper for instant paste
+from voxd.core.clipboard import ClipboardManager  # backend-aware clipboard (wl-copy/xclip/xsel)
 from pathlib import Path
 
 def detect_backend():
@@ -301,7 +301,13 @@ class SimulatedTyper:
                     t = t + " "
             except Exception:
                 pass
-            pyperclip.copy(t)
+            # Use VOXD's own ClipboardManager rather than pyperclip directly.
+            # pyperclip may select its `gi`/GTK backend when PyGObject is installed,
+            # which requires a running GTK main loop to own the selection. VOXD has
+            # no such loop, so the copy silently evaporates and the paste shortcut
+            # fires against an empty clipboard. ClipboardManager picks wl-copy on
+            # Wayland (xclip/xsel on X11), which owns the selection correctly.
+            ClipboardManager().copy(t)
         except Exception as e:
             verbo(f"[typer] Clipboard copy failed: {e} – falling back to typing mode.")
             self._type_char_by_char(text)
