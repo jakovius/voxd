@@ -415,8 +415,7 @@ def main():
     # If we're just the hotkey sender, dispatch and exit immediately
     if args.trigger_record:
         from voxd.utils.ipc_client import send_trigger
-        send_trigger()
-        sys.exit(0)
+        sys.exit(0 if send_trigger() else 1)
 
     cfg = AppConfig()
     # Session-only override for language
