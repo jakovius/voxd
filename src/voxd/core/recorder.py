@@ -44,16 +44,14 @@ class AudioRecorder:
         self._chunk_paths = []
         self._chunk_index = 0
         self._chunk_written_frames = 0
-        if self.record_chunked:
-            self._open_new_chunk()
 
-        # Prefer configured device or PulseAudio on Linux
+        # Resolve the input device (configured → pulse if present → default).
         try:
             from voxd.core.config import AppConfig
             cfg = AppConfig()
-            dev_pref = cfg.data.get("audio_input_device") or ("pulse" if cfg.data.get("audio_prefer_pulse", True) else None)
         except Exception:
-            dev_pref = "pulse"
+            cfg = None
+        device = self._resolve_input_device(cfg)
 
         def callback(indata, frames, time, status):
             if status:
@@ -75,51 +73,109 @@ class AudioRecorder:
             else:
                 self.recording.append(indata.copy())
 
-        # Helper to open stream with optional device and samplerate
-        def _open(device, fs):
-            kw = {"samplerate": fs, "channels": self.channels, "callback": callback}
-            if device:
-                kw["device"] = device
-            return sd.InputStream(**kw)
+        # Open the stream at a sample rate the device actually supports. The
+        # capture is resampled to 16 kHz on save (see _save_wav/_stitch_chunks),
+        # so a non-16 kHz capture rate is fine and avoids hammering devices
+        # (bare ALSA) that reject 16 kHz with a noisy paInvalidSampleRate.
+        self.stream, self.fs = self._open_stream(device, callback)
+        self._chunk_target_frames = self.chunk_seconds * self.fs
+        if self.record_chunked:
+            self._open_new_chunk()
+        self.stream.start()
 
-        # Try preferred sample rate on preferred device; then robust fallbacks
-        tried_pulse = False
+    def _resolve_input_device(self, cfg):
+        """Pick the input device: configured value → a real 'pulse' device if
+        preferred and present → system default (None). Avoids requesting a
+        'pulse' device that doesn't exist (noisy 'No input device matching')."""
+        if cfg is None:
+            return None
+        configured = cfg.data.get("audio_input_device")
+        if configured:
+            return configured
+        if cfg.data.get("audio_prefer_pulse", True):
+            try:
+                for d in sd.query_devices():
+                    if d.get("max_input_channels", 0) > 0 and "pulse" in str(d.get("name", "")).lower():
+                        return "pulse"
+            except Exception:
+                pass
+        return None
+
+    def _candidate_rates(self, device):
+        """Ordered sample rates to try for `device`.
+
+        Sound servers (pulse/pipewire/jack) resample internally, so prefer
+        16 kHz to skip an extra resample. Raw ALSA/hardware devices often
+        reject 16 kHz, so try their native default rate first and resample to
+        16 kHz on save."""
+        default_sr = None
         try:
-            self.stream = _open(dev_pref, self.fs)
-            self.stream.start()
-        except Exception as e:
-            verr(f"[recorder] Opening stream at {self.fs} Hz failed ({e}); trying device default rate")
-            # Determine device default samplerate
-            try:
-                indev = dev_pref if dev_pref else (sd.default.device[0] if sd.default.device else None)
-            except Exception:
-                indev = None
-            try:
-                info = sd.query_devices(indev, 'input') if indev is not None else sd.query_devices(kind='input')
-                fallback_fs = int(info.get('default_samplerate') or 48000)
-            except Exception:
-                fallback_fs = 48000
-            self.fs = fallback_fs
-            self._chunk_target_frames = self.chunk_seconds * self.fs
-            if self.record_chunked and self._chunk_wave is not None:
+            info = sd.query_devices(device, 'input') if device is not None else sd.query_devices(kind='input')
+            default_sr = int(info.get('default_samplerate') or 0) or None
+        except Exception:
+            pass
+        server_like = isinstance(device, str) and any(
+            k in device.lower() for k in ("pulse", "pipe", "jack", "default")
+        )
+        if server_like or default_sr in (None, WHISPER_FS):
+            order = [WHISPER_FS, default_sr, 48000, 44100]
+        else:
+            order = [default_sr, WHISPER_FS, 48000, 44100]
+        seen: set[int] = set()
+        return [r for r in order if r and not (r in seen or seen.add(r))]
+
+    def _describe_device(self, dev):
+        """Human-readable label for a device handle (index/name/None)."""
+        if dev is None:
+            return "system default"
+        try:
+            info = sd.query_devices(dev, 'input')
+            return f"{info.get('name', dev)!r}"
+        except Exception:
+            return repr(dev)
+
+    def _open_stream(self, device, callback):
+        """Open (but don't start) an InputStream. Returns (stream, samplerate).
+
+        Tries the requested device, then the system default, then every other
+        input-capable device, so a missing/renamed `audio_input_device` (common
+        with raw-ALSA + PipeWire setups where enumeration shifts) degrades to a
+        working mic instead of crashing. Raises a clean RuntimeError with an
+        actionable message only when nothing can be opened."""
+        # Build the device try-order: requested → default → all input devices.
+        order: list = []
+        if device is not None:
+            order.append(device)
+        order.append(None)
+        try:
+            for idx, d in enumerate(sd.query_devices()):
+                if d.get("max_input_channels", 0) > 0 and idx not in order:
+                    order.append(idx)
+        except Exception:
+            pass
+
+        last_err = None
+        for dev in order:
+            for fs in self._candidate_rates(dev):
                 try:
-                    self._chunk_wave.close()
-                except Exception:
-                    pass
-                self._open_new_chunk()
-            # If not yet tried, attempt with pulse explicitly
-            if dev_pref != "pulse":
-                try:
-                    self.stream = _open("pulse", self.fs)
-                    self.stream.start()
-                    tried_pulse = True
-                    return
-                except Exception:
-                    tried_pulse = True
-                    pass
-            # Last resort: open without device hint
-            self.stream = _open(None, self.fs)
-            self.stream.start()
+                    kw = {"samplerate": fs, "channels": self.channels, "callback": callback}
+                    if dev is not None:
+                        kw["device"] = dev
+                    stream = sd.InputStream(**kw)
+                    if device is not None and dev != device:
+                        verr(f"[recorder] Requested input device {device!r} unavailable; "
+                             f"falling back to {self._describe_device(dev)}.")
+                    return stream, fs
+                except Exception as e:
+                    last_err = e
+                    verbo(f"[recorder] open {self._describe_device(dev)} @ {fs} Hz failed: {e}")
+
+        raise RuntimeError(
+            "Could not open any audio input device. Check that a microphone is "
+            "connected and not muted, run 'voxd --diagnose' to list devices, and "
+            "set 'audio_input_device' in the config if the wrong one is picked. "
+            f"(last error: {last_err})"
+        )
 
     def stop_recording(self, preserve=False):
         if not self.is_recording:
