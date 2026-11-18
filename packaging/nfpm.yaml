@@ -61,6 +61,7 @@ overrides:
       - libportaudio2
       - python3-numpy
       - python3-requests
+      - python3-socks
       - python3-yaml
       - python3-psutil
       - python3-pyperclip
@@ -86,6 +87,7 @@ overrides:
       - portaudio
       - python3-numpy
       - python3-requests
+      - python3-pysocks
       - python3-PyYAML
       - python3-psutil
       - python3-pyperclip
@@ -118,6 +120,7 @@ overrides:
       - portaudio
       - python-numpy
       - python-requests
+      - python-pysocks
       - python-yaml
       - python-psutil
       - python-pyperclip

@@ -71,6 +71,27 @@ trap 'tput cnorm 2>/dev/null || true; [[ -n "$SPINNER_PID" ]] && kill "$SPINNER_
 # Current script directory (repo root)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ────────────────── CLI args: GPU build opt-in ────────────────────────────────
+# VOXD_GPU selects the whisper.cpp GPU backend for the source build:
+#   auto   – detect CUDA, else Vulkan, else fall back to CPU
+#   cuda   – NVIDIA CUDA (needs the CUDA toolkit / nvcc)
+#   vulkan – cross-vendor Vulkan (AMD/Intel/NVIDIA)
+#   cpu    – (default) CPU-only build
+# Settable via env (VOXD_GPU=auto ./setup.sh) or flags below.
+VOXD_GPU="${VOXD_GPU:-}"
+for arg in "$@"; do
+  case "$arg" in
+    --gpu)          VOXD_GPU="auto" ;;
+    --gpu=*)        VOXD_GPU="${arg#--gpu=}" ;;
+    --cpu|--no-gpu) VOXD_GPU="cpu" ;;
+  esac
+done
+VOXD_GPU="$(printf '%s' "$VOXD_GPU" | tr '[:upper:]' '[:lower:]')"
+case "$VOXD_GPU" in
+  ""|cpu|auto|cuda|vulkan) ;;
+  *) note "Unknown VOXD_GPU='$VOXD_GPU' – ignoring (building CPU-only)."; VOXD_GPU="" ;;
+esac
+
 # Tell user where logs will be written
 note "VOXD setup started. Log: $(pwd)/$LOG_FILE"
 note "Requesting sudo access (may prompt once)"
@@ -216,6 +237,47 @@ spinner_start "Ensuring build tools"
 need_compiler
 spinner_stop $?
 
+# ────────────────── GPU backend resolution (whisper.cpp) ─────────────────────
+# Resolve VOXD_GPU → GPU_BACKEND ∈ {cuda, vulkan, cpu}. "cpu" ⇒ plain CPU build.
+detect_gpu_backend() {
+  # NVIDIA CUDA needs a working driver (nvidia-smi) AND the toolkit (nvcc).
+  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1 \
+     && command -v nvcc >/dev/null 2>&1; then
+    echo cuda; return 0
+  fi
+  # Vulkan: a usable loader that enumerates a device, or libvulkan present.
+  if command -v vulkaninfo >/dev/null 2>&1 && vulkaninfo >/dev/null 2>&1; then
+    echo vulkan; return 0
+  fi
+  if ldconfig -p 2>/dev/null | grep -q 'libvulkan\.so'; then
+    echo vulkan; return 0
+  fi
+  echo cpu
+}
+
+GPU_BACKEND="cpu"
+case "$VOXD_GPU" in
+  ""|cpu)
+    GPU_BACKEND="cpu" ;;
+  auto)
+    GPU_BACKEND="$(detect_gpu_backend)"
+    if [[ "$GPU_BACKEND" == cpu ]]; then
+      note "${YEL}GPU auto-detect found no usable CUDA/Vulkan backend – building CPU-only.${NC}"
+    else
+      note "GPU auto-detect selected whisper.cpp backend: $GPU_BACKEND"
+    fi ;;
+  cuda)
+    if command -v nvcc >/dev/null 2>&1; then
+      GPU_BACKEND="cuda"
+    else
+      note "${YEL}VOXD_GPU=cuda but no CUDA toolkit (nvcc) on PATH – falling back to CPU.${NC}"
+      GPU_BACKEND="cpu"
+    fi ;;
+  vulkan)
+    # Loader/headers are installed below; cmake validates at configure time.
+    GPU_BACKEND="vulkan" ;;
+esac
+
 # ──────────────────  1. distro-specific dependency list  ────────────────────
 case "$PM" in
   apt)
@@ -239,6 +301,15 @@ esac
 # Append SELinux dev package when needed (Fedora only)
 if [[ $SELINUX_ACTIVE ]]; then
   SYS_DEPS+=(policycoreutils-devel)
+fi
+
+# GPU (Vulkan) build dependencies – loader + shader compiler
+if [[ "$GPU_BACKEND" == vulkan ]]; then
+  case "$PM" in
+    apt)      SYS_DEPS+=( libvulkan-dev glslang-tools ) ;;
+    dnf|dnf5) SYS_DEPS+=( vulkan-loader-devel glslc ) ;;
+    pacman)   SYS_DEPS+=( vulkan-icd-loader shaderc ) ;;
+  esac
 fi
 
 # Helper – install a package, trying an alternate name if provided
@@ -313,7 +384,8 @@ ensure_ydotool() {
   [[ ${XDG_SESSION_TYPE:-} != wayland* ]] && return 0
   
   # Check if everything is already properly set up
-  if ydotool_complete && [[ -f ~/.config/systemd/user/ydotoold.service ]] && (systemctl --user is-active --quiet ydotoold.service || pgrep -x ydotoold >/dev/null); then
+  # systemd may be absent (OpenRC/runit) – fall back to a plain process check.
+  if ydotool_complete && [[ -f ~/.config/systemd/user/ydotoold.service ]] && ({ command -v systemctl >/dev/null && systemctl --user is-active --quiet ydotoold.service; } || pgrep -x ydotoold >/dev/null); then
     msg "ydotool already configured and running"
     return 0
   fi
@@ -775,8 +847,14 @@ fetch_prebuilt_binary() {
 spinner_start "Setting up Whisper engine (whisper-cli)"
 WHISPER_BIN=""
 
+# For GPU builds we must build whisper.cpp from source with the right backend, so
+# skip reusing an on-PATH binary and skip the (CPU-only) prebuilt download.
+if [[ "$GPU_BACKEND" != cpu ]]; then
+  msg "GPU backend '$GPU_BACKEND' requested – forcing whisper.cpp source build (skipping prebuilt)."
+fi
+
 # a) If whisper-cli already on PATH and valid, reuse (keeps your current behavior)
-if command -v whisper-cli >/dev/null; then
+if [[ "$GPU_BACKEND" == cpu ]] && command -v whisper-cli >/dev/null; then
   WHISPER_BIN="$(command -v whisper-cli)"
   RESOLVED_BIN="$(readlink -f "$WHISPER_BIN" 2>/dev/null || true)"
   if [[ -n "$RESOLVED_BIN" && "$RESOLVED_BIN" != "$HOME/.local/bin/whisper-cli" ]]; then
@@ -789,8 +867,8 @@ if command -v whisper-cli >/dev/null; then
   fi
 fi
 
-# b) Try downloading a prebuilt from GitHub Releases
-if [[ -z "$WHISPER_BIN" ]]; then
+# b) Try downloading a prebuilt from GitHub Releases (CPU-only assets)
+if [[ -z "$WHISPER_BIN" && "$GPU_BACKEND" == cpu ]]; then
   msg "Attempting to fetch prebuilt whisper-cli from $VOXD_BIN_REPO ${VOXD_BIN_TAG:+(tag $VOXD_BIN_TAG)} …"
   if prebuilt="$(fetch_prebuilt_binary "whisper-cli")"; then
     WHISPER_BIN="$prebuilt"
@@ -804,17 +882,80 @@ if [[ -z "$WHISPER_BIN" ]]; then
   if [[ $OFFLINE ]]; then
     msg "Offline mode – skipping whisper.cpp git clone. Assuming sources are present."
   else
-    if [[ ! -d whisper.cpp ]]; then
+    # Key off CMakeLists.txt, not the directory: whisper.cpp/ may exist without
+    # sources (e.g. only models/ inside it, when a previous install used the
+    # prebuilt CPU binary) and cmake would fail on such an empty shell.
+    if [[ ! -f whisper.cpp/CMakeLists.txt ]]; then
+        if [[ -d whisper.cpp ]]; then
+            msg "whisper.cpp/ exists but has no sources – re-cloning (keeping its contents)."
+            rm -rf whisper.cpp.stale
+            mv whisper.cpp whisper.cpp.stale
+        fi
         msg "Cloning whisper.cpp…"
         git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+        if [[ -d whisper.cpp.stale ]]; then
+            # Restore what was there before (downloaded models, old build)
+            # without overwriting the fresh sources.
+            rm -rf whisper.cpp.stale/.git
+            cp -an whisper.cpp.stale/. whisper.cpp/ 2>/dev/null || true
+            rm -rf whisper.cpp.stale
+        fi
     fi
   fi
+  # An existing build may be CPU-only; wipe it so the GPU backend takes effect.
+  if [[ "$GPU_BACKEND" != cpu && -d whisper.cpp/build ]]; then
+      msg "Removing existing whisper.cpp/build to reconfigure for $GPU_BACKEND."
+      rm -rf whisper.cpp/build
+  fi
   if [[ ! -x whisper.cpp/build/bin/whisper-cli ]]; then
+      [[ -f whisper.cpp/CMakeLists.txt ]] || die "whisper.cpp sources are missing (no whisper.cpp/CMakeLists.txt). Re-run setup.sh with network access, or clone https://github.com/ggml-org/whisper.cpp into whisper.cpp/ manually."
       msg "Building whisper.cpp (this may take a while)…"
-      cmake -S whisper.cpp -B whisper.cpp/build -DBUILD_SHARED_LIBS=OFF
+      WHISPER_CMAKE_FLAGS=( -DBUILD_SHARED_LIBS=OFF )
+      case "$GPU_BACKEND" in
+        cuda)   WHISPER_CMAKE_FLAGS+=( -DGGML_CUDA=1 );   msg "whisper.cpp GPU backend: CUDA" ;;
+        vulkan) WHISPER_CMAKE_FLAGS+=( -DGGML_VULKAN=1 ); msg "whisper.cpp GPU backend: Vulkan" ;;
+      esac
+      configure_whisper() {
+        cmake -S whisper.cpp -B whisper.cpp/build "${WHISPER_CMAKE_FLAGS[@]}" "$@"
+      }
+      if [[ "$GPU_BACKEND" == cuda ]]; then
+        if ! configure_whisper; then
+          # nvcc caps the host compiler version (e.g. CUDA 12.9 rejects
+          # gcc 15). Retry with an older g++ when one is installed
+          # (Debian/Arch name them g++-NN, Gentoo ${CHOST}-g++-NN), and as a
+          # last resort with nvcc's own version-check override.
+          msg "CUDA configure failed – trying alternative host compilers for nvcc…"
+          CUDA_HOST_OK=""
+          for _v in 14 13 12; do
+            for _cand in "g++-${_v}" "x86_64-pc-linux-gnu-g++-${_v}"; do
+              command -v "$_cand" >/dev/null 2>&1 || continue
+              msg "Retrying CUDA configure with host compiler: $_cand"
+              rm -rf whisper.cpp/build
+              if configure_whisper -DCMAKE_CUDA_HOST_COMPILER="$(command -v "$_cand")"; then
+                CUDA_HOST_OK="$_cand"
+                break 2
+              fi
+            done
+          done
+          if [[ -z "$CUDA_HOST_OK" ]]; then
+            note "No CUDA-compatible g++ found – forcing -allow-unsupported-compiler (host gcc is newer than this CUDA toolkit supports; install e.g. gcc-14 if the build fails)."
+            rm -rf whisper.cpp/build
+            configure_whisper -DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler
+          fi
+        fi
+      else
+        configure_whisper
+      fi
       cmake --build whisper.cpp/build -j"$(nproc)"
   else
       msg "whisper.cpp already built."
+  fi
+  # parakeet-cli (asr_engine: parakeet) comes from the same build; an older
+  # build dir may predate it, so build just that target when it's missing.
+  if [[ ! -x whisper.cpp/build/bin/parakeet-cli && -d whisper.cpp/examples/parakeet-cli ]]; then
+      msg "Building parakeet-cli…"
+      cmake --build whisper.cpp/build --target parakeet-cli -j"$(nproc)" \
+        || note "parakeet-cli build failed – asr_engine: parakeet won't be available."
   fi
   WHISPER_BIN="$PWD/whisper.cpp/build/bin/whisper-cli"
 fi
@@ -1033,7 +1174,14 @@ model_path = DATA_DIR / "models" / "ggml-base.en.bin"
 
 cfg = AppConfig()
 cfg.set("whisper_binary", str(whisper_bin))
-cfg.set("whisper_model_path", str(model_path))
+# Don't clobber a model the user selected earlier (e.g. a multilingual or
+# quantized one) – only point to the default when the configured model is
+# missing on disk.
+cur_model = str(cfg.data.get("whisper_model_path", "") or "")
+if not cur_model or not Path(cur_model).is_file():
+    cfg.set("whisper_model_path", str(model_path))
+else:
+    print(f"[setup] Keeping configured whisper model: {cur_model}")
 
 # Update llama.cpp server path: prefer prebuilt path from env, fallback to repo build
 env_llama = os.environ.get("LLAMA_SERVER_BIN")
@@ -1083,16 +1231,22 @@ fi
 spinner_start "Setting up global 'voxd' command (pipx)"
 # Offer to install pipx (if missing) and register voxd command globally.
 if ! command -v pipx >/dev/null; then
-  msg "pipx not detected – installing pipx for global 'voxd' command"
-  case "$PM" in
-    apt)   sudo apt install -y pipx ;;
-    dnf|dnf5)   sudo $PM install -y pipx ;;
-    pacman)
-      if ! sudo pacman -S --noconfirm pipx; then
-        sudo pacman -S --noconfirm python-pipx || true
-      fi ;;
-  esac
-  pipx ensurepath
+  if command -v sudo >/dev/null; then
+    msg "pipx not detected – installing pipx for global 'voxd' command"
+    case "$PM" in
+      apt)   sudo apt install -y pipx || true ;;
+      dnf|dnf5)   sudo $PM install -y pipx || true ;;
+      pacman)
+        if ! sudo pacman -S --noconfirm pipx; then
+          sudo pacman -S --noconfirm python-pipx || true
+        fi ;;
+    esac
+  else
+    msg "pipx not detected and sudo unavailable – skipping automatic pipx install. Install pipx manually to get a global 'voxd' command."
+  fi
+  if command -v pipx >/dev/null; then
+    pipx ensurepath || true
+  fi
   export PATH="$HOME/.local/bin:$PATH"
   # Refresh current shell PATH for the remainder of this script
   # Handle Fedora bashrc unbound variable issue

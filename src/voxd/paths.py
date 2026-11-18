@@ -79,6 +79,11 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 RECORDINGS_DIR: Final = DATA_DIR / "recordings"
 RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Verbose file-logging directory. Defined here for a single source of truth, but
+# *not* created at import time – it is made lazily only when verbosity (and thus
+# file logging) is actually enabled, so a default install leaves no log footprint.
+LOG_DIR: Final = DATA_DIR / "logs"
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Convenience helper for packaged resources
 # ---------------------------------------------------------------------------
@@ -303,6 +308,62 @@ def find_base_model() -> str:  # noqa: N802
 def find_whisper_cli() -> str:  # noqa: N802
     """Return *whisper-cli* path as *str* (legacy API)."""
     return str(whisper_cli())
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Parakeet (NVIDIA parakeet-tdt via whisper.cpp's parakeet-cli)
+# ---------------------------------------------------------------------------
+
+# Preferred model files, best quality first. All live on
+# huggingface.co/ggml-org/parakeet-GGUF; see voxd.models.CATALOGUE.
+PARAKEET_MODEL_NAMES: Final = (
+    "ggml-parakeet-tdt-0.6b-v3-f16.bin",
+    "ggml-parakeet-tdt-0.6b-v3-q8_0.bin",
+    "ggml-parakeet-tdt-0.6b-v3-q4_k.bin",
+)
+
+
+def find_parakeet_cli() -> str:
+    """Return the *parakeet-cli* path.
+
+    Order: ``$VOXD_PARAKEET_BIN`` → repo-local ``whisper.cpp/build/bin`` → ``$PATH``.
+    Raises ``FileNotFoundError`` if nothing is found.
+    """
+    env = os.getenv("VOXD_PARAKEET_BIN")
+    if env:
+        p = Path(env).expanduser().resolve()
+        if p.is_file():
+            return str(p)
+    repo_candidate = Path(__file__).parents[2] / "whisper.cpp" / "build" / "bin" / "parakeet-cli"
+    if repo_candidate.is_file():
+        return str(repo_candidate)
+    which = shutil.which("parakeet-cli")
+    if which:
+        return str(Path(which).resolve())
+    raise FileNotFoundError(
+        "Could not locate *parakeet-cli*. Checked $VOXD_PARAKEET_BIN, repo-local build and $PATH. "
+        "Build it with: cmake --build whisper.cpp/build --target parakeet-cli"
+    )
+
+
+def find_parakeet_model() -> str:
+    """Return a Parakeet model path.
+
+    Order: ``$VOXD_PARAKEET_MODEL_PATH`` → XDG data dir → repo-local
+    ``whisper.cpp/models``; within a directory f16 is preferred over quantized.
+    Raises ``FileNotFoundError`` if nothing is found.
+    """
+    env = os.getenv("VOXD_PARAKEET_MODEL_PATH")
+    if env:
+        p = Path(env).expanduser().resolve()
+        if p.is_file():
+            return str(p)
+    for d in (DATA_DIR / "models", Path(__file__).parents[2] / "whisper.cpp" / "models"):
+        for name in PARAKEET_MODEL_NAMES:
+            if (d / name).is_file():
+                return str((d / name).resolve())
+    raise FileNotFoundError(
+        "Could not locate a Parakeet model. Install one with: voxd-model install parakeet-tdt-0.6b-v3"
+    )
 
 # ---------------------------------------------------------------------------
 #  Public utility helpers

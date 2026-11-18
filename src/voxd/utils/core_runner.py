@@ -145,7 +145,7 @@ def run_core_process(cfg: AppConfig, *, preserve_audio=False, typing=False, appl
             "trans_eff": (trans_end - trans_start) / max(len(tscript), 1),
             "transcript": tscript,
             "usr_trans_acc": usr_trans_acc,
-            "trans_model": Path(cfg.whisper_model_path).name,
+            "trans_model": Path(transcriber.model_path).name,
             "aipp_start_time": datetime.fromtimestamp(aipp_start).strftime("%H:%M:%S") if aipp_start else None,
             "aipp_end_time": datetime.fromtimestamp(aipp_end).strftime("%H:%M:%S") if aipp_end else None,
             "aipp_dur": (aipp_end - aipp_start) if aipp_start and aipp_end else None,

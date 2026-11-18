@@ -74,7 +74,13 @@ QScrollArea, QScrollArea > QWidget > QWidget {
 class CoreProcessThread(QThread):
     finished = pyqtSignal(str)
     status_changed = pyqtSignal(str)
-    
+    # Emitted once per transcription: a human-readable reason when the GPU was
+    # enabled but the run fell back to CPU (VRAM exhausted), or "" when there
+    # is nothing to report — the empty emit lets the UI re-arm its
+    # "already notified" state once the GPU works again.
+    gpu_note = pyqtSignal(str)
+
+
     def __init__(self, cfg, logger):
         super().__init__()
         self.cfg = cfg
@@ -93,6 +99,9 @@ class CoreProcessThread(QThread):
         import psutil
 
         recorder = AudioRecorder()
+        # Keep the audio in RECORDINGS_DIR (and don't let the transcriber
+        # delete it) when save_recordings is on — same behaviour as the CLI.
+        preserve = bool(getattr(self.cfg, "data", {}).get("save_recordings", False))
 
         # Ensure whisper-cli exists – attempt auto-build when missing
         from voxd.utils.whisper_auto import ensure_whisper_cli  # local import to avoid GUI deps in headless tests
@@ -102,8 +111,16 @@ class CoreProcessThread(QThread):
                 model_path=self.cfg.whisper_model_path,
                 binary_path=self.cfg.whisper_binary,
                 language=getattr(self.cfg, "language", "en"),
+                delete_input=not preserve,
             )
-        except FileNotFoundError:
+        except FileNotFoundError as e:
+            # Building whisper-cli can't help a missing parakeet-cli/model.
+            if str(self.cfg.data.get("asr_engine", "whisper")).strip().lower() == "parakeet":
+                from voxd.utils.libw import verr
+                verr(f"[voxd_core] {e}")
+                self.status_changed.emit("No model")
+                self.finished.emit("")
+                return
             # Try to build on the fly (GUI prompt)
             if ensure_whisper_cli("gui") is None:
                 # User declined or build failed – abort gracefully
@@ -114,24 +131,42 @@ class CoreProcessThread(QThread):
                 model_path=self.cfg.whisper_model_path,
                 binary_path=self.cfg.whisper_binary,
                 language=getattr(self.cfg, "language", "en"),
+                delete_input=not preserve,
             )
         typer = SimulatedTyper(delay=self.cfg.typing_delay, start_delay=self.cfg.typing_start_delay, cfg=self.cfg)
         clipboard = ClipboardManager()
 
         # ── Recording ---------------------------------------------------
         rec_start_dt = datetime.now()
-        recorder.start_recording()
+        try:
+            recorder.start_recording()
+        except Exception as e:
+            # No usable audio input device — report and abort gracefully
+            # instead of letting the exception crash the whole app.
+            from voxd.utils.libw import verr
+            verr(f"[voxd_core] Recording failed: {e}")
+            self.status_changed.emit("No mic")
+            self.finished.emit("")
+            return
         while not self.should_stop:
             self.msleep(100)
         rec_end_dt = datetime.now()
 
         self.status_changed.emit("Transcribing")
-        rec_path = recorder.stop_recording(preserve=False)
+        try:
+            rec_path = recorder.stop_recording(preserve=preserve)
+        except Exception as e:
+            from voxd.utils.libw import verr
+            verr(f"[voxd_core] Could not finalize recording: {e}")
+            self.status_changed.emit("VOXD")
+            self.finished.emit("")
+            return
 
         # ── Transcription ----------------------------------------------
         trans_start_ts = time()
         tscript, _ = transcriber.transcribe(rec_path)
         trans_end_ts = time()
+        self.gpu_note.emit(getattr(transcriber, "last_gpu_note", None) or "")
         if not tscript:
             self.finished.emit("")
             return
@@ -193,7 +228,7 @@ class CoreProcessThread(QThread):
                 "trans_eff": (trans_end_ts - trans_start_ts) / max(len(tscript), 1),
                 "transcript": tscript,
                 "usr_trans_acc": usr_trans_acc,
-                "trans_model": _P(self.cfg.whisper_model_path).name,
+                "trans_model": _P(transcriber.model_path).name,
                 "aipp_start_time": datetime.fromtimestamp(aipp_start_ts).strftime("%H:%M:%S") if aipp_start_ts else None,
                 "aipp_end_time": datetime.fromtimestamp(aipp_end_ts).strftime("%H:%M:%S") if aipp_end_ts else None,
                 "aipp_dur": (aipp_end_ts - aipp_start_ts) if aipp_start_ts and aipp_end_ts else None,
@@ -227,7 +262,8 @@ def show_options_dialog(parent, logger, cfg=None, modal=True, hide_aipp=False):
     # ------------------------------------------------------------------
 
     def _show_whisper_models():
-        show_model_manager(dialog)
+        from voxd.gui.settings_window import show_settings_window
+        show_settings_window(cfg, dialog, "models")
 
     def _show_aipp_dialog():
         show_aipp_dialog(dialog, cfg)
@@ -270,9 +306,8 @@ def show_options_dialog(parent, logger, cfg=None, modal=True, hide_aipp=False):
 
     def edit_config():
         """Open the Settings form dialog."""
-        from voxd.gui.settings_dialog import SettingsDialog
-        editor = SettingsDialog(cfg, parent=dialog)
-        editor.exec()
+        from voxd.gui.settings_window import show_settings_window
+        show_settings_window(cfg, dialog)
 
     # ------------------------------------------------------------------
     # Performance dialog ------------------------------------------------
@@ -375,85 +410,15 @@ def show_manage_prompts(parent, cfg, after_save_cb=None, modal=True):
         Whether to run the dialog modally (exec) or modeless (show).
     """
 
-    prompt_keys = ["default", "prompt1", "prompt2", "prompt3"]
-    prompts = cfg.data.get("aipp_prompts", {})
-    active_key = cfg.data.get("aipp_active_prompt", "default")
+    # The prompts live on the "AI processing" page of the settings window.
+    from voxd.gui.settings_window import show_settings_window
+    win = show_settings_window(cfg, parent, "aipp")
 
-    dlg = QDialog(parent)
-    dlg.setWindowTitle("Manage AIPP Prompts")
-    dlg.setMinimumWidth(300)
-    dlg.setStyleSheet(DARK_DIALOG_QSS)
-
-    grid = QGridLayout(dlg)
-
-    radio_buttons = []
-    text_edits = []
-
-    for i, key in enumerate(prompt_keys):
-        rb = QRadioButton()
-        rb.setChecked(active_key == key)
-        radio_buttons.append(rb)
-
-        te = QTextEdit(prompts.get(key, ""))
-        text_edits.append(te)
-
-        grid.addWidget(rb, i, 0)
-        grid.addWidget(QLabel(key), i, 1)
-        grid.addWidget(te, i, 2)
-
-    button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Save |
-                                  QDialogButtonBox.StandardButton.Cancel)
-    grid.addWidget(button_box, len(prompt_keys), 0, 1, 3)
-
-    # ------------------------------------------------------------------
-    # Button actions
-    # ------------------------------------------------------------------
-
-    def _save_and_close():
-        # Determine selected radio
-        for i, rb in enumerate(radio_buttons):
-            if rb.isChecked():
-                selected_key = prompt_keys[i]
-                break
-        else:
-            selected_key = "default"
-
-        # Update prompts in config
-        for i, key in enumerate(prompt_keys):
-            cfg.data["aipp_prompts"][key] = text_edits[i].toPlainText()
-
-        cfg.data["aipp_active_prompt"] = selected_key
-        cfg.aipp_active_prompt = selected_key  # type: ignore[attr-defined]
-
-        # Persist changes
-        cfg.save()
-
-        # Reload the global singleton so every running component sees
-        # up-to-date data immediately.
-        from voxd.core.config import get_config
-        get_config().load()
-
-        if after_save_cb is not None:
-            after_save_cb()
-
-        dlg.accept()
-
-    def _cancel():
-        dlg.reject()
-
-    button_box.accepted.connect(_save_and_close)
-    button_box.rejected.connect(_cancel)
-
-    if modal:
-        dlg.exec()
-    else:
-        dlg.show()
-
-    return dlg
-
-# ----------------------------------------------------------------------------
-#   Shared session-log viewer
-# ----------------------------------------------------------------------------
+    from voxd.core.config import get_config
+    get_config().load()
+    if after_save_cb is not None:
+        after_save_cb()
+    return win
 
 def session_log_dialog(parent, logger):
     """Open a (modal) window that shows the current session log and offers

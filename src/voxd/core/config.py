@@ -46,6 +46,17 @@ DEFAULT_CONFIG = {
     # Mic autoset (best-effort; uses wpctl/pactl/amixer if present)
     "mic_autoset_enabled": True,
     "mic_autoset_level": 0.45,
+    # Speech-recognition engine:
+    #   "whisper"  – whisper-cli + whisper_model_path (multilingual, slowest);
+    #   "parakeet" – parakeet-cli from the same whisper.cpp build + NVIDIA
+    #                parakeet-tdt-0.6b-v3 (25 European languages incl. Russian,
+    #                language auto-detected; several times faster, less VRAM,
+    #                fast enough on CPU). The whisper_gpu_* / vram_check keys
+    #                apply to both engines.
+    "asr_engine": "whisper",
+    # Empty → auto-detect (see voxd.paths.find_parakeet_cli / find_parakeet_model).
+    "parakeet_binary": "",
+    "parakeet_model_path": "",
     "whisper_binary": "whisper.cpp/build/bin/whisper-cli",
     "whisper_model_path": "whisper.cpp/models/ggml-base.en.bin",
     "language": "en",
@@ -59,6 +70,16 @@ DEFAULT_CONFIG = {
     # NVIDIA driver; "nvidia"/"amd"/"intel" force a specific vendor. Only affects
     # Vulkan builds.
     "whisper_gpu_device": "auto",
+    # Just before each transcription, check free VRAM via nvidia-smi and go
+    # straight to CPU (-ng) when the model clearly cannot fit — a long desktop
+    # session (browser, compositor) can exhaust the card, and the doomed GPU
+    # attempt costs extra seconds. No effect when nvidia-smi is unavailable.
+    "whisper_vram_check": True,
+    # Pass -fa (flash attention) to whisper-cli: faster and smaller compute
+    # buffers, which helps on VRAM-tight cards. Auto-disabled for the session
+    # when the installed whisper-cli rejects the flag. Off by default because
+    # some Vulkan driver/device combos handle flash attention poorly.
+    "whisper_flash_attn": False,
 
     # Drop transcripts that consist solely of a known Whisper hallucination
     # (the "subscribe to my channel" boilerplate it emits on silence/noise).
@@ -142,6 +163,7 @@ DEFAULT_CONFIG = {
 
     "aipp_openai_compatible_base_url": "",
     "aipp_openai_compatible_api_key": "",
+    "aipp_proxy": "",                              # proxy for cloud providers: http://host:port, socks5://host:port
 
     # GigaChat (Sber) settings
     "gigachat_scope": "GIGACHAT_API_PERS",         # GIGACHAT_API_PERS | GIGACHAT_API_CORP
@@ -275,8 +297,23 @@ class AppConfig:
             else:
                 print(f"  ✅ {label} found: {path}")
 
-        check_file(self.whisper_model_path, "Model file")
-        check_file(self.whisper_binary, "Whisper binary")
+        engine = str(self.data.get("asr_engine", "whisper")).strip().lower()
+        if engine not in ("whisper", "parakeet"):
+            print(f"  ⚠️ Invalid asr_engine: {engine} (allowed: whisper, parakeet)")
+        if engine == "parakeet":
+            from voxd.paths import find_parakeet_cli, find_parakeet_model
+            for key, finder, label in (("parakeet_model_path", find_parakeet_model, "Parakeet model"),
+                                       ("parakeet_binary", find_parakeet_cli, "parakeet-cli")):
+                path = self.data.get(key) or ""
+                if not path:
+                    try:
+                        path = finder()
+                    except FileNotFoundError:
+                        path = "(not found)"
+                check_file(path, label)
+        else:
+            check_file(self.whisper_model_path, "Model file")
+            check_file(self.whisper_binary, "Whisper binary")
 
         if self.aipp_provider not in ("ollama", "openai", "openrouter", "anthropic", "xai", "gigachat", "llamacpp_server", "openai_compatible"):
             print(f"  ⚠️ Invalid AIPP provider: {self.aipp_provider}")

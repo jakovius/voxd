@@ -77,7 +77,7 @@ PY
           log "Upgrading pip in user venv"
           "$PY" -m pip install --disable-pip-version-check -q --upgrade pip || true
           log "Installing runtime deps in user venv"
-          "$PY" -m pip install --disable-pip-version-check -q platformdirs importlib-resources PyQt6 pyqtgraph sounddevice psutil numpy requests pyyaml tqdm pyperclip || true
+          "$PY" -m pip install --disable-pip-version-check -q platformdirs importlib-resources PyQt6 pyqtgraph sounddevice psutil numpy requests PySocks pyyaml tqdm pyperclip || true
         else
           echo "[voxd] System Python $ver is unsupported and user venv creation failed. Use 'bash packaging/install_voxd.sh <rpm>' or create $APPDIR/.venv with Python >= 3.9." >&2
           exit 1

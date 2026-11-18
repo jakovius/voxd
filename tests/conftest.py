@@ -144,3 +144,15 @@ def fake_whisper_run(monkeypatch, tmp_path):
     return _run
 
 
+_QAPP = None  # keep the QApplication alive: an unreferenced one is garbage-collected
+
+
+@pytest.fixture
+def qapp(isolate_xdg_dirs):
+    """A live QApplication (offscreen) for tests that build Qt widgets."""
+    global _QAPP
+    pytest.importorskip("PyQt6")
+    from PyQt6.QtWidgets import QApplication
+    _QAPP = QApplication.instance() or _QAPP or QApplication(sys.argv)
+    return _QAPP
+

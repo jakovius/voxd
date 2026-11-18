@@ -14,8 +14,6 @@ from voxd.core.voxd_core import (
     CoreProcessThread, _create_styled_checkbox,
     show_manage_prompts, session_log_dialog, show_performance_dialog
 )
-from voxd.core.model_manager import show_model_manager
-from voxd.gui.settings_dialog import SettingsDialog
 from voxd.utils.performance import update_last_perf_entry
 
 ASSETS_DIR = (Path(__file__).resolve().parent / ".." / "assets").resolve()
@@ -428,11 +426,10 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
         dialog.exec()
 
     def show_whisper_models(self):
-        show_model_manager(self)
+        self.show_settings(page="models")
 
     def show_aipp_settings(self):
-        from voxd.core.voxd_core import show_aipp_dialog
-        show_aipp_dialog(self, self.cfg)
+        self.show_settings(page="aipp")
         self._refresh_aipp_toggle_from_cfg()
 
     def show_language_dialog(self):
@@ -442,9 +439,10 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
     def show_session_log(self):
         session_log_dialog(self, self.logger)
 
-    def show_settings(self):
-        editor = SettingsDialog(self.cfg, parent=self)
-        editor.exec()
+    def show_settings(self, page: str = "recognition"):
+        from voxd.gui.settings_window import show_settings_window
+        show_settings_window(self.cfg, self, page)
+        self.cfg.load()
 
     def show_performance(self):
         show_performance_dialog(self, self.cfg)
@@ -470,7 +468,7 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
         """)
         
         # Add menu actions for each option
-        whisper_action = menu.addAction("Whisper Models")
+        whisper_action = menu.addAction("Speech Models")
         whisper_action.triggered.connect(self.show_whisper_models)
         
         # Language selector
@@ -484,7 +482,7 @@ Create a global <b>HOTKEY</b> shortcut in your system (e.g. <b>Super+Z</b>) that
         log_action.triggered.connect(self.show_session_log)
         
         settings_action = menu.addAction("Settings")
-        settings_action.triggered.connect(self.show_settings)
+        settings_action.triggered.connect(lambda _=False: self.show_settings())
         
         perf_action = menu.addAction("Performance")
         perf_action.triggered.connect(self.show_performance)

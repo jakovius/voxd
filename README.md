@@ -5,7 +5,7 @@
 
 Running in background, provides fast **voice-to-text typing** in any Linux app.  
 Using <span style="color:#FF4500">**LOCAL** (offline)</span> voice processing, with optional <span style="color:#FF4500">**LOCAL**</span> (offline) AI text post-processing.  
-Runs fine even on older CPUs. No GPU required.
+Runs fine even on older CPUs. No GPU required — but optional GPU acceleration is available (see *GPU acceleration* below).
 
 Hit your <span style="color:#FF4500">**hotkey shortcut**</span> -> speak -> hotkey again -> watch your words appear wherever the cursor currently is, even AI-rewritten as a poem or a C++ code.  
   
@@ -113,6 +113,20 @@ cd voxd && ./setup.sh
 ```
 
 Setup is non-interactive with minimal console output; a detailed setup log is saved in the repo directory (e.g. `2025-09-18-setup-log.txt`).
+
+##### GPU acceleration (optional)
+
+By default `setup.sh` builds a CPU-only `whisper-cli` (and may reuse a prebuilt CPU binary). To build whisper.cpp with GPU support, opt in:
+
+```bash
+VOXD_GPU=auto ./setup.sh        # or: ./setup.sh --gpu
+```
+
+`auto` picks **CUDA** when an NVIDIA GPU and the CUDA toolkit (`nvcc`) are present, otherwise **Vulkan** (AMD/Intel/NVIDIA), otherwise it falls back to CPU. You can force a backend with `VOXD_GPU=cuda` / `VOXD_GPU=vulkan` (or `--gpu=cuda` / `--gpu=vulkan`). A GPU build forces a from-source build (prebuilt binaries are CPU-only) and installs the Vulkan loader/shader compiler when needed. CUDA requires the toolkit to be installed already.
+
+At runtime the GPU is used automatically. To force CPU on a GPU build without rebuilding, uncheck **Use GPU when available** in the GUI settings, or set `whisper_gpu_enabled: false` in `~/.config/voxd/config.yaml` (this passes `-ng` to whisper-cli).
+
+When a long desktop session exhausts VRAM (browser, compositor, …), VOXD degrades gracefully instead of failing: just before each transcription it checks free VRAM via `nvidia-smi` and goes straight to CPU when the model clearly cannot fit (`whisper_vram_check: true`), and if a GPU run still hits out-of-memory it retries that dictation on CPU. Tray mode shows a desktop notification when this happens. The GPU is re-tried on every dictation, so speed recovers automatically once VRAM frees up — for a permanently tight card, switch to a smaller/quantized model (e.g. `voxd-model install large-v3-turbo-q5_0`). Setting `whisper_flash_attn: true` additionally passes `-fa` to whisper-cli (faster, smaller compute buffers; auto-disabled if the binary doesn't support it).
 
 #### Or via Python sdist (`voxd-<version>.tar.gz` from a release)
 
@@ -253,12 +267,28 @@ Models for download (size MB):
 | large-v3-turbo | 1500 | ggml-large-v3-turbo.bin |
 | large-v3-turbo-q5_0 | 547 | ggml-large-v3-turbo-q5_0.bin |
 | large-v3-turbo-q8_0 | 834 | ggml-large-v3-turbo-q8_0.bin |
+| parakeet-tdt-0.6b-v3 | 1256 | ggml-parakeet-tdt-0.6b-v3-f16.bin |
+| parakeet-tdt-0.6b-v3-q8_0 | 669 | ggml-parakeet-tdt-0.6b-v3-q8_0.bin |
+| parakeet-tdt-0.6b-v3-q4_k | 416 | ggml-parakeet-tdt-0.6b-v3-q4_k.bin |
+
+#### Parakeet engine (faster alternative to Whisper)
+
+[NVIDIA parakeet-tdt-0.6b-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) runs through `parakeet-cli` from the same `whisper.cpp` build (`setup.sh` builds it). It covers 25 European languages including Russian, detects the language itself (the `language` setting is ignored), writes punctuation and capitalization, and does not invent text on silence. Unlike Whisper it does not pad every clip to a 30-second window, so a short dictation is several times faster, needs less VRAM, and stays usable on CPU when the GPU is busy.
+
+```bash
+voxd-model install parakeet-tdt-0.6b-v3   # f16, best quality; -q8_0 / -q4_k are smaller
+voxd-model use parakeet-tdt-0.6b-v3       # sets asr_engine: parakeet
+voxd-model use large-v3-q5_0              # any Whisper model switches back to asr_engine: whisper
+```
+
+The engine is the `asr_engine` key (`whisper` | `parakeet`) in `config.yaml`; `parakeet_model_path` / `parakeet_binary` are auto-detected when empty (env overrides: `VOXD_PARAKEET_MODEL_PATH`, `VOXD_PARAKEET_BIN`). GPU settings (`whisper_gpu_enabled`, `whisper_gpu_device`, `whisper_vram_check`) apply to both engines. To compare engines on your own recordings, see `tools/bench_asr.py`.
 
 #### Custom / HuggingFace models
 
 Anything that is a valid `whisper.cpp` GGML file (`ggml-<name>.bin`) and lives in `~/.local/share/voxd/models/` is auto-detected:
-- The CLI is silent about it, but the **GUI Model Manager** lists every such file at the bottom of the table with status `Custom` and the usual *Activate* / *Remove* buttons.
-- `voxd-model use` only knows the curated catalogue; for custom files use the GUI, or set `whisper_model_path` directly in `~/.config/voxd/config.yaml`.
+- The **Models** page of the settings window (GUI *Options → Speech Models*, tray *Speech Model → Manage models…*) shows every model on disk under "On this computer" with its engine, size and the total space used, with *Use* / *Delete* per model; real files dropped into `whisper.cpp/models/` are listed too. Deleting the model in use switches to another installed one. The catalogue below it has an engine filter, a search box and a single *Download and use* action.
+- The tray's *Speech Model* submenu lists the installed models; one click switches model and engine.
+- `voxd-model use` accepts a catalogue key, a local `.bin` path or a URL.
 
 For HuggingFace checkpoints (PyTorch / safetensors — e.g. fine-tuned models like `antony66/whisper-large-v3-russian`) there is a converter helper at the repo root:
 
@@ -276,6 +306,8 @@ Requirements: `.venv` populated (run `./dev-gui.sh --no-run` once), `whisper.cpp
 ---
 
 ## ⚙️ User Config
+
+*Settings* (tray menu or GUI *Options*) opens one window with a sidebar: **Recognition** (engine, model, language, GPU, VRAM check, phantom-phrase filter; rows that don't apply to the active engine are hidden), **Models**, **Typing**, **Audio**, **AI processing** and **Application** (autostart, logging, metrics, the global-shortcut command). Every change applies immediately.
 
 Available in GUI and TRAY modes ("Settings"), but directly here:
 `~/.config/voxd/config.yaml`
@@ -387,6 +419,29 @@ export ANTHROPIC_API_KEY="..."
 # For xAI
 export XAI_API_KEY="..."
 ```
+
+OpenRouter reads `OPENROUTER_API_KEY`, GigaChat reads `GIGACHAT_CREDENTIALS`.
+
+A tray or GUI started from the desktop (autostart, launcher) usually does not see variables exported in a shell profile.
+For that case paste the key in **Settings → AI processing → API key**: it is saved to `~/.config/voxd/keys.env`
+(plain text, readable only by you) and takes precedence over the environment variable. The same page shows where the
+current key comes from, or that none was found.
+
+### 🌐 Proxy for the cloud providers
+
+Requests to a cloud AIPP provider can go through a proxy: **Settings → AI processing → Proxy server**
+(config key `aipp_proxy`). HTTP and SOCKS are supported:
+
+```yaml
+aipp_proxy: "socks5://127.0.0.1:1080"          # or socks5://user:password@host:1080
+aipp_proxy: "http://user:password@host:3128"
+```
+
+- With `socks5://` host names are resolved by the proxy, not by the local DNS.
+- SOCKS needs the `PySocks` Python package (a dependency of VOXD; `pip install PySocks` on an older install).
+- Local providers (`llamacpp_server`, `ollama`, an `openai_compatible` server on localhost) are never proxied.
+  GigaChat does not use this setting.
+- **Test connection** on the same page shows whether the provider is reachable with the current setting.
 
 **Note:**  
 If an API key is missing, the respective cloud-based AIPP provider will (surprise, surprise) not work.

@@ -3,9 +3,14 @@ import sys
 import pytest
 
 
+_APP = None  # held at module level: an unreferenced QApplication is garbage-collected
+
+
 def _make_app():
+    global _APP
     from PyQt6.QtWidgets import QApplication
-    return QApplication.instance() or QApplication(sys.argv)
+    _APP = QApplication.instance() or _APP or QApplication(sys.argv)
+    return _APP
 
 
 def _patch_devices(monkeypatch, names):

@@ -20,6 +20,14 @@ audio_input_device: ""
 # Mic autoset (best-effort; uses wpctl/pactl/amixer if present)
 mic_autoset_enabled: true
 mic_autoset_level: 0.45
+# Speech-recognition engine: "whisper" (whisper-cli) or "parakeet" (parakeet-cli
+# from the same whisper.cpp build, NVIDIA parakeet-tdt-0.6b-v3: 25 European
+# languages incl. Russian, auto-detected; much faster, less VRAM, usable on CPU).
+# Switch with: voxd-model use parakeet-tdt-0.6b-v3   (or any whisper model key).
+asr_engine: whisper
+# Empty → auto-detect parakeet-cli / model (whisper.cpp/build/bin, ~/.local/share/voxd/models).
+parakeet_binary: ""
+parakeet_model_path: ""
 whisper_binary: whisper.cpp/build/bin/whisper-cli
 whisper_model_path: whisper.cpp/models/ggml-base.en.bin
 language: en
@@ -31,6 +39,13 @@ whisper_gpu_enabled: true
 # driver (VK_DRIVER_FILES). "auto" picks the discrete NVIDIA driver; or set
 # "nvidia" / "amd" / "intel" to force a vendor. Only affects Vulkan builds.
 whisper_gpu_device: auto
+# Just before each transcription, check free VRAM (nvidia-smi) and go straight
+# to CPU when the model clearly cannot fit — avoids a doomed GPU attempt when a
+# long desktop session has exhausted VRAM. No effect without nvidia-smi.
+whisper_vram_check: true
+# Pass -fa (flash attention) to whisper-cli: faster, smaller compute buffers
+# (helps VRAM-tight cards). Auto-disabled if the binary rejects the flag.
+whisper_flash_attn: false
 
 # Drop transcripts that consist solely of a known Whisper hallucination
 # (e.g. the "subscribe to my channel" phrases produced on silence/noise).
@@ -105,6 +120,9 @@ aipp_selected_models:
 
 aipp_openai_compatible_base_url: ""
 aipp_openai_compatible_api_key: ""
+# Proxy for requests to cloud AIPP providers (not used for local ones):
+#   http://host:port, socks5://host:port, socks5://user:password@host:port
+aipp_proxy: ""
 
 # GigaChat (Sber) settings
 gigachat_scope: GIGACHAT_API_PERS    # or GIGACHAT_API_CORP

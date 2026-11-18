@@ -5,6 +5,120 @@ import sys
 import time
 from voxd.utils.libw import verbo, verr
 from pathlib import Path
+from urllib.parse import urlsplit
+
+# ---------------------------------------------------------------------------
+#   Proxy for the cloud providers (config key ``aipp_proxy``)
+# ---------------------------------------------------------------------------
+PROXY_SCHEMES = ("http", "https", "socks5", "socks5h", "socks4", "socks4a")
+
+# where each cloud provider is reached (used for the connection test)
+PROVIDER_URLS = {
+    "openai": "https://api.openai.com/v1/models",
+    "anthropic": "https://api.anthropic.com/v1/models",
+    "xai": "https://api.x.ai/v1/models",
+    "openrouter": "https://openrouter.ai/api/v1/models",
+}
+
+_proxy = ""   # normalized proxy URL for the request in progress (set by run_aipp)
+
+
+def normalize_proxy(value) -> str:
+    """Return a proxy URL usable by requests, or "" when none is configured.
+
+    ``host:port`` is taken as an HTTP proxy. ``socks5://`` becomes ``socks5h://``
+    (``socks4://`` → ``socks4a://``) so host names are resolved by the proxy and
+    not by the local DNS. Raises ValueError for an unusable value.
+    """
+    value = str(value or "").strip()
+    if not value:
+        return ""
+    if "://" not in value:
+        value = "http://" + value
+    parts = urlsplit(value)
+    scheme = parts.scheme.lower()
+    if scheme not in PROXY_SCHEMES:
+        raise ValueError(f"unsupported proxy scheme '{scheme}' (use http, https, socks5 or socks4)")
+    try:
+        host, port = parts.hostname, parts.port
+    except ValueError as e:
+        raise ValueError(f"bad proxy address: {e}") from e
+    if not host:
+        raise ValueError("proxy address has no host")
+    if scheme.startswith("socks") and port is None:
+        raise ValueError("a SOCKS proxy needs a port, e.g. socks5://127.0.0.1:1080")
+    scheme = {"socks5": "socks5h", "socks4": "socks4a"}.get(scheme, scheme)
+    return f"{scheme}://{parts.netloc}"
+
+
+def socks_supported() -> bool:
+    try:
+        import socks  # noqa: F401  (PySocks)
+        return True
+    except ImportError:
+        return False
+
+
+def _is_local(url: str) -> bool:
+    host = (urlsplit(url).hostname or "").lower()
+    return host in ("localhost", "::1") or host.startswith("127.")
+
+
+def proxies_for(url: str, proxy: str) -> dict | None:
+    """``proxies`` argument for requests: the proxy for remote hosts, none for local ones."""
+    if not proxy or _is_local(url):
+        return None
+    return {"http": proxy, "https": proxy}
+
+
+def _cloud_post(url: str, **kwargs):
+    """requests.post through the configured proxy (if any)."""
+    proxies = proxies_for(url, _proxy)
+    if proxies:
+        if _proxy.startswith("socks") and not socks_supported():
+            raise RuntimeError("SOCKS proxy needs the PySocks package (pip install PySocks)")
+        kwargs["proxies"] = proxies
+    return requests.post(url, **kwargs)
+
+
+def _short_error(e: Exception, timeout: float) -> str:
+    """The human part of a requests/urllib3 error chain."""
+    if isinstance(e, requests.Timeout):
+        return f"no answer in {timeout:g} s"
+    text = str(e)
+    if "Caused by" in text:                      # urllib3 wraps the real reason
+        text = text.split("Caused by")[-1]
+        text = text.split(": ", 1)[-1] if ": " in text else text
+    return text.strip(" ()'\"")[:160] or type(e).__name__
+
+
+def check_connection(cfg, provider: str | None = None, timeout: float = 8.0) -> tuple[bool, str]:
+    """Try to reach the provider (through the proxy, if set). Any HTTP answer counts."""
+    provider = provider or cfg.data.get("aipp_provider", "")
+    if provider == "openai_compatible":
+        url = str(cfg.data.get("aipp_openai_compatible_base_url", "") or "").rstrip("/")
+        if not url:
+            return False, "Server address is not set."
+        url += "/models"
+    else:
+        url = PROVIDER_URLS.get(provider, "")
+    if not url:
+        return False, f"{provider} does not use the proxy."
+    try:
+        proxy = normalize_proxy(cfg.data.get("aipp_proxy", ""))
+    except ValueError as e:
+        return False, f"Proxy: {e}"
+    proxies = proxies_for(url, proxy)
+    if proxies and proxy.startswith("socks") and not socks_supported():
+        return False, "SOCKS proxy needs the PySocks package (pip install PySocks)."
+    host = urlsplit(url).hostname
+    via = f"through {urlsplit(proxy).scheme} proxy {urlsplit(proxy).hostname}" if proxies else "directly"
+    start = time.time()
+    try:
+        requests.get(url, timeout=timeout, **({"proxies": proxies} if proxies else {}))
+    except requests.RequestException as e:
+        return False, f"Cannot reach {host} {via}: {_short_error(e, timeout)}"
+    return True, f"Reached {host} {via} in {time.time() - start:.1f} s."
 
 
 def run_aipp(text: str, cfg, prompt_key: str = None) -> str:
@@ -21,6 +135,17 @@ def run_aipp(text: str, cfg, prompt_key: str = None) -> str:
     full_prompt = f"{prompt}\n{text.strip()}"
 
     provider = cfg.data.get("aipp_provider", "local")
+    global _proxy
+    try:
+        _proxy = normalize_proxy(cfg.data.get("aipp_proxy", ""))
+    except ValueError as e:
+        verr(f"[aipp] aipp_proxy ignored: {e}")
+        _proxy = ""
+    try:
+        from voxd.core.api_keys import load_into_env
+        load_into_env()          # keys saved from the settings window
+    except Exception:
+        pass
     # Use the selected model for the current provider
     model = cfg.get_aipp_selected_model(provider) if hasattr(cfg, "get_aipp_selected_model") else cfg.data.get("aipp_model", "llama3.2:latest")
 
@@ -84,7 +209,7 @@ def run_openai_aipp(prompt: str, model: str = "gpt-3.5-turbo", base_url: str = N
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.7
     }
-    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=20)
+    response = _cloud_post(url, headers=headers, data=json.dumps(payload), timeout=20)
     if response.ok:
         return response.json()["choices"][0]["message"]["content"].strip()
     else:
@@ -103,7 +228,7 @@ def run_anthropic_aipp(prompt: str, model: str = "claude-3-opus-20240229") -> st
         "max_tokens": 1024,
         "messages": [{"role": "user", "content": prompt}]
     }
-    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=20)
+    response = _cloud_post(url, headers=headers, data=json.dumps(payload), timeout=20)
     if response.ok:
         return response.json()["content"][0]["text"].strip()
     else:
@@ -121,7 +246,7 @@ def run_xai_aipp(prompt: str, model: str = "grok-3") -> str:
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.7
     }
-    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=20)
+    response = _cloud_post(url, headers=headers, data=json.dumps(payload), timeout=20)
     if response.ok:
         return response.json()["choices"][0]["message"]["content"].strip()
     else:
@@ -146,7 +271,7 @@ def run_openrouter_aipp(prompt: str, model: str = "openai/gpt-4o-mini") -> str:
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.7
     }
-    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=20)
+    response = _cloud_post(url, headers=headers, data=json.dumps(payload), timeout=20)
     if response.ok:
         return response.json()["choices"][0]["message"]["content"].strip()
     else:

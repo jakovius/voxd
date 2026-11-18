@@ -507,6 +507,18 @@ def main():
         except Exception:
             print("[Diagnose] sounddevice not available")
 
+        # ASR engine (whisper | parakeet)
+        engine = str(cfg.data.get("asr_engine", "whisper"))
+        print(f"[Diagnose] config asr_engine: {engine}")
+        if engine == "parakeet":
+            from voxd.paths import find_parakeet_cli, find_parakeet_model
+            for label, key, finder in (("parakeet-cli", "parakeet_binary", find_parakeet_cli),
+                                       ("parakeet model", "parakeet_model_path", find_parakeet_model)):
+                try:
+                    print(f"[Diagnose] {label}: {cfg.data.get(key) or finder()}")
+                except FileNotFoundError as e:
+                    print(f"[Diagnose] {label}: ❌ {e}")
+
         # Whisper / GPU diagnostics
         try:
             from voxd.paths import find_whisper_cli

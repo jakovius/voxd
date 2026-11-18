@@ -1,12 +1,15 @@
 # src/voxd/models.py
 """
-Download, list, remove and activate Whisper GGML models.
+Download, list, remove and activate Whisper and Parakeet GGML models.
+`use` also switches asr_engine: Parakeet models → parakeet, any other → whisper.
 
 CLI usage:
     python -m voxd.models list
-    python -m voxd.models install  tiny.en      # or base   / medium.en / large
+    python -m voxd.models install  tiny.en              # catalogue key (base / medium.en / large …)
+    python -m voxd.models install  https://…/ggml-x.bin # or a direct URL (community models)
     python -m voxd.models remove   tiny.en
-    python -m voxd.models use      tiny.en      # marks it active in config.yaml
+    python -m voxd.models use      tiny.en              # catalogue key → marks it active
+    python -m voxd.models use      ~/models/ggml-x.bin  # or a local .bin path / URL
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from voxd.utils.setup_utils import print_section
 # 0.  Model catalogue – keep in sync with whisper.cpp/download-ggml-model.sh
 # --------------------------------------------------------------------------- #
 HF = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"
+PK = "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/main/"
 # key            size-MB  sha1-digest                                          url
 CATALOGUE = {
     # tiny ───────────────────────────────────────────────────────────
@@ -29,6 +33,10 @@ CATALOGUE = {
     "tiny.en"        : (  75, "c78c86eb1a8faa21b369bcd33207cc90d64ae9df", HF+"ggml-tiny.en.bin"),
     "tiny.en-q5_1"   : (  31, "3fb92ec865cbbc769f08137f22470d6b66e071b6", HF+"ggml-tiny.en-q5_1.bin"),
     "tiny.en-q8_0"   : (  42, "802d6668e7d411123e672abe4cb6c18f12306abb", HF+"ggml-tiny.en-q8_0.bin"),
+    # Russian community fine-tune of multilingual tiny — small enough to run on a
+    # nearly-full GPU where large-v3 (~3 GB) hits ErrorOutOfDeviceMemory.
+    "tiny-ru"        : (  75, "d624a17fe80a250dcfca9937d622f92a1c783f3b",
+                        "https://huggingface.co/wabisabisocial/whisper-tiny-russian-ggml/resolve/main/ggml-tiny-ru.bin"),
 
     # base ───────────────────────────────────────────────────────────
     "base"           : ( 142, "465707469ff3a37a2b9b8d8f89f2f99de7299dac", HF+"ggml-base.bin"),
@@ -65,6 +73,13 @@ CATALOGUE = {
     "large-v3-turbo" : (1500, "4af2b29d7ec73d781377bfd1758ca957a807e941", HF+"ggml-large-v3-turbo.bin"),
     "large-v3-turbo-q5_0":( 547,"e050f7970618a659205450ad97eb95a18d69c9ee",HF+"ggml-large-v3-turbo-q5_0.bin"),
     "large-v3-turbo-q8_0":( 834,"01bf15bedffe9f39d65c1b6ff9b687ea91f59e0e",HF+"ggml-large-v3-turbo-q8_0.bin"),
+
+    # Parakeet (NVIDIA parakeet-tdt-0.6b-v3) — run by parakeet-cli, selecting
+    # one sets asr_engine: parakeet. Cache filenames keep the upstream names
+    # (see _pretty_name); paths.find_parakeet_model() looks for exactly these.
+    "parakeet-tdt-0.6b-v3"      : (1256, "dee7f3a15ed28d0ab4dc28d55ce9f864a122d30b", PK+"ggml-parakeet-tdt-0.6b-v3-f16.bin"),
+    "parakeet-tdt-0.6b-v3-q8_0" : ( 669, "0271fffe0d96faa791d97348837857c9a0092b33", PK+"ggml-parakeet-tdt-0.6b-v3-q8_0.bin"),
+    "parakeet-tdt-0.6b-v3-q4_k" : ( 416, "cbabbb0bebca8cdcf621f5871d394fe01fcc3baa", PK+"ggml-parakeet-tdt-0.6b-v3-q4_k.bin"),
 }
 
 # ~/.local/share/voxd/models (or $XDG_DATA_HOME/voxd/models)
@@ -79,7 +94,16 @@ def _human(n_mb: int) -> str:      # 142 → '142 MB'
     return f"{n_mb:,} MB".replace(",", " ")
 
 def _pretty_name(key: str) -> str:
+    """Cache filename for *key*: the catalogue URL's basename (e.g. Parakeet's
+    ``…-f16.bin``), else ``ggml-<key>.bin``."""
+    if key in CATALOGUE:
+        return CATALOGUE[key][2].rsplit("/", 1)[-1]
     return f"ggml-{key}.bin"
+
+
+def is_parakeet_model(path_or_key) -> bool:
+    """True for Parakeet models (run by parakeet-cli, not whisper-cli)."""
+    return "parakeet" in Path(str(path_or_key)).name.lower()
 
 def _download(url: str, dest: Path, *, progress_cb=None):
     """Download *url* to *dest*.
@@ -124,6 +148,24 @@ def _verify_sha1(path: Path, sha_ref: str) -> bool:
     return h.hexdigest() == sha_ref.lower()
 
 
+def _looks_like_url(s: str) -> bool:
+    return str(s).startswith(("http://", "https://"))
+
+
+def _filename_from_url(url: str) -> str:
+    """Cache filename for a direct model URL.
+
+    list_local() only shows ``ggml-*.bin``, so normalise the basename to keep the
+    cache discoverable by the rest of the tooling.
+    """
+    name = url.split("?")[0].rstrip("/").split("/")[-1]
+    if not name.endswith(".bin"):
+        raise ValueError(f"URL does not point to a .bin model file: {url}")
+    if not name.startswith("ggml-"):
+        name = "ggml-" + name
+    return name
+
+
 # --------------------------------------------------------------------------- #
 # 2.  Public API
 # --------------------------------------------------------------------------- #
@@ -151,11 +193,41 @@ def ensure(key: str, quiet=False, *, no_check=False, progress_cb=None) -> Path:
         raise RuntimeError("Checksum mismatch – download corrupted, retried later.")
 
     # keep a symlink inside whisper.cpp/models for people who call the CLI manually
-    REPO_MODELS.mkdir(parents=True, exist_ok=True)
-    link = REPO_MODELS / dest.name
-    if not link.exists():
-        link.symlink_to(dest)
+    _symlink_into_repo(dest)
     return dest
+
+
+def install_url(url: str, *, progress_cb=None) -> Path:
+    """Download a ggml model from a direct *url* into the model cache.
+
+    For community models that aren't in CATALOGUE. The filename is derived from
+    the URL; there is no reference digest, so the checksum is not verified.
+    Returns the local Path (re-using an existing download if present).
+    """
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    dest = CACHE_DIR / _filename_from_url(url)
+    if dest.exists():
+        return dest
+    print(f"Downloading {dest.name} from {url} …")
+    print("  (custom URL → no checksum to verify)")
+    _download(url, dest, progress_cb=progress_cb)
+    _symlink_into_repo(dest)
+    return dest
+
+
+def _symlink_into_repo(dest: Path):
+    """Mirror a cached model into whisper.cpp/models for manual CLI callers.
+
+    Best effort: a packaged install lives in /opt/voxd, which the user cannot
+    write to.  The model in the cache is all voxd itself needs.
+    """
+    try:
+        REPO_MODELS.mkdir(parents=True, exist_ok=True)
+        link = REPO_MODELS / dest.name
+        if not link.exists():
+            link.symlink_to(dest)
+    except OSError:
+        pass
 
 
 def list_local() -> list[str]:
@@ -165,22 +237,150 @@ def list_local() -> list[str]:
 def remove(key: str):
     path = CACHE_DIR / _pretty_name(key)
     if path.exists():
-        path.unlink()
+        remove_file(path)
         print(f"🗑️  Removed {key}")
     else:
         print(f"{key} not found.")
+
+
+# --------------------------------------------------------------------------- #
+# 2b.  Inventory of models on disk (used by the GUI models page and the tray)
+# --------------------------------------------------------------------------- #
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class InstalledModel:
+    path: Path          # real file
+    key: str | None     # catalogue key, None for custom files
+    engine: str         # "whisper" | "parakeet"
+    size_bytes: int
+
+    @property
+    def name(self) -> str:
+        return self.path.name
+
+
+def human_size(n_bytes: int) -> str:
+    """1536 MiB → '1.5 GB'; below 1 GiB in whole MB."""
+    mb = n_bytes / (1024 * 1024)
+    return f"{mb / 1024:.1f} GB" if mb >= 1024 else f"{max(1, round(mb))} MB"
+
+
+def _key_for_filename(fname: str) -> str | None:
+    for key in CATALOGUE:
+        if _pretty_name(key) == fname:
+            return key
+    return None
+
+
+def installed_models() -> list[InstalledModel]:
+    """Every ggml model on disk: the model cache plus real files dropped into
+    whisper.cpp/models (symlinks back into the cache and whisper.cpp's
+    ``for-tests-*`` fixtures are skipped). Sorted by name."""
+    seen: dict[Path, InstalledModel] = {}
+    for d in (CACHE_DIR, REPO_MODELS):
+        if not d.is_dir():
+            continue
+        for p in d.glob("ggml-*.bin"):
+            try:
+                real = p.resolve(strict=True)
+                size = real.stat().st_size
+            except OSError:
+                continue  # dangling symlink
+            if real not in seen:
+                seen[real] = InstalledModel(
+                    path=real, key=_key_for_filename(real.name),
+                    engine="parakeet" if is_parakeet_model(real) else "whisper",
+                    size_bytes=size)
+    return sorted(seen.values(), key=lambda m: m.name)
+
+
+def active_model_path(cfg_data: dict) -> Path | None:
+    """Resolved path of the model the configured asr_engine will use."""
+    if cfg_data.get("asr_engine") == "parakeet":
+        p = cfg_data.get("parakeet_model_path") or ""
+        if not p:  # empty → the transcriber auto-detects
+            try:
+                from voxd.paths import find_parakeet_model
+                p = find_parakeet_model()
+            except FileNotFoundError:
+                return None
+    else:
+        p = cfg_data.get("whisper_model_path") or ""
+    if not p:
+        return None
+    try:
+        return Path(p).expanduser().resolve()
+    except OSError:
+        return None
+
+
+def remove_file(path: Path):
+    """Delete a model file and any whisper.cpp/models symlink pointing at it."""
+    real = Path(path).resolve()
+    if REPO_MODELS.is_dir():
+        for link in REPO_MODELS.glob("*.bin"):
+            if link.is_symlink() and link.resolve() == real:
+                try:
+                    link.unlink()
+                except OSError:
+                    pass          # read-only install dir; a dangling link is ignored
+    real.unlink(missing_ok=True)
+
+
+def replacement_for(removed: InstalledModel, models: list[InstalledModel]) -> InstalledModel | None:
+    """Model to activate after the active one is removed: the largest remaining
+    model of the same engine, else the largest of the other engine."""
+    rest = [m for m in models if m.path != removed.path]
+    same = [m for m in rest if m.engine == removed.engine]
+    pool = same or rest
+    return max(pool, key=lambda m: m.size_bytes) if pool else None
+
+
+def describe(key_or_name: str) -> str:
+    """One-line hint for a model row."""
+    n = str(key_or_name).lower()
+    if "parakeet" in n:
+        base = "Fast · 25 European languages incl. Russian"
+    elif ".en" in n:
+        base = "English only"
+    elif "-ru" in n or "russian" in n:
+        base = "Russian fine-tune"
+    else:
+        base = "Multilingual"
+    if "-q" in n:
+        base += " · quantized (smaller)"
+    return base
 
 
 def set_active(key: str | None):
     cfg = AppConfig()
     if key is None:
         # Using cfg.data avoids static analysis complaining about dynamic attrs
-        print(f"Current model: {cfg.data.get('whisper_model_path')}")
+        engine = cfg.data.get("asr_engine", "whisper")
+        model_key = "parakeet_model_path" if engine == "parakeet" else "whisper_model_path"
+        print(f"Current engine: {engine}")
+        print(f"Current model: {cfg.data.get(model_key) or '(auto-detect)'}")
         return
-    path = ensure(key, quiet=True)
-    cfg.set("whisper_model_path", str(path))
+    # Accept a catalogue key, a local .bin path, or a direct URL — so community
+    # models that aren't in CATALOGUE can be activated too.
+    candidate = Path(key).expanduser()
+    if candidate.suffix == ".bin" and candidate.is_file():
+        path = candidate.resolve()
+    elif _looks_like_url(key):
+        path = install_url(key)
+    else:
+        path = ensure(key, quiet=True)
+    # The model decides the engine: Parakeet models run on parakeet-cli.
+    if is_parakeet_model(path):
+        cfg.set("parakeet_model_path", str(path))
+        cfg.set("asr_engine", "parakeet")
+    else:
+        cfg.set("whisper_model_path", str(path))
+        cfg.set("asr_engine", "whisper")
     cfg.save()
-    print(f"✅ Now using: {path}")
+    print(f"✅ Now using: {path} (engine: {cfg.data.get('asr_engine')})")
 
 
 # --------------------------------------------------------------------------- #
@@ -189,17 +389,17 @@ def set_active(key: str | None):
 def _cli(argv=None):
     p = argparse.ArgumentParser(
         prog="voxd models",
-        description="Manage ggml Whisper models"
+        description="Manage ggml Whisper and Parakeet models"
     )
     p.add_argument("--no-check", action="store_true",
                    help="Skip SHA-1 verification")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("list",   help="show installed models")
-    sp = sub.add_parser("install", help="download a model"); sp.add_argument("name")
+    sp = sub.add_parser("install", help="download a model (catalogue key or direct URL)"); sp.add_argument("name")
     sp = sub.add_parser("fetch",   help="alias for install"); sp.add_argument("name")
     sp = sub.add_parser("remove",  help="delete a model");   sp.add_argument("name")
-    sp = sub.add_parser("use",     help="set active model"); sp.add_argument("name", nargs="?")
+    sp = sub.add_parser("use",     help="set active model (catalogue key, local .bin path, or URL)"); sp.add_argument("name", nargs="?")
 
     args = p.parse_args(argv)
 
@@ -212,7 +412,10 @@ def _cli(argv=None):
             print(" (none)")
 
     elif args.cmd in ("install", "fetch"):
-        ensure(args.name, no_check=args.no_check)
+        if _looks_like_url(args.name):
+            install_url(args.name)
+        else:
+            ensure(args.name, no_check=args.no_check)
 
     elif args.cmd == "remove":
         remove(args.name)

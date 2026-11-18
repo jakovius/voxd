@@ -259,6 +259,264 @@ def test_ineffective_driver_pin_disables_pinning(tmp_path, monkeypatch):
     assert state["env"] is None
 
 
+_STDERR_GPU_OOM = (
+    "ggml_vulkan: Found 1 Vulkan devices:\n"
+    "ggml_vulkan: 0 = NVIDIA GeForce RTX 3050 (NVIDIA) | uma: 0\n"
+    "whisper_backend_init_gpu: using Vulkan0 backend\n"
+    "ggml_vulkan: Device memory allocation of size 587202560 failed.\n"
+    "ggml_vulkan: vk::Device::allocateMemory: ErrorOutOfDeviceMemory\n"
+    "whisper_kv_cache_init: failed to allocate memory for the kv cache\n"
+    "/usr/bin/whisper-cli: failed to process audio\n"
+)
+
+
+def test_gpu_oom_falls_back_to_cpu(tmp_path, monkeypatch):
+    from voxd.core import transcriber as tr
+    from voxd.core.transcriber import WhisperTranscriber
+
+    # Keep the call count hermetic on hosts that have nvidia-smi installed.
+    monkeypatch.setattr(tr, "_query_free_vram_mb", lambda: None)
+    calls = []
+
+    def _run(cmd, capture_output=True, text=True, env=None, **kwargs):
+        calls.append(list(cmd))
+
+        class CP:
+            stdout = ""
+
+        cp = CP()
+        if "-ng" in cmd:
+            # CPU retry succeeds and writes the expected .txt.
+            of_idx = cmd.index("-of")
+            out_txt = f"{cmd[of_idx + 1]}.txt"
+            Path(out_txt).parent.mkdir(parents=True, exist_ok=True)
+            Path(out_txt).write_text("[00:00.000] Recovered\n", encoding="utf-8")
+            cp.returncode = 0
+            cp.stderr = "whisper : CPU\n"
+        else:
+            # First (GPU) attempt fails because the card is out of VRAM.
+            cp.returncode = 1
+            cp.stderr = _STDERR_GPU_OOM
+        return cp
+
+    monkeypatch.setattr("voxd.core.transcriber.subprocess.run", _run)
+
+    audio = tmp_path / "a.wav"; audio.write_bytes(b"\x00\x00")
+    model = tmp_path / "m.bin"; model.write_bytes(b"x")
+    binary = tmp_path / "whisper-cli"; binary.write_text("#!/bin/sh\n"); binary.chmod(0o755)
+
+    t = WhisperTranscriber(str(model), str(binary), gpu_enabled=True)
+    text, _ = t.transcribe(str(audio))
+
+    assert len(calls) == 2            # GPU attempt, then CPU retry
+    assert "-ng" not in calls[0]
+    assert "-ng" in calls[1]
+    assert text == "Recovered"
+    assert t.last_backend == "CPU (GPU OOM fallback)"
+    assert t.last_gpu_note and "GPU ran out of memory" in t.last_gpu_note
+
+
+def test_non_oom_failure_is_not_retried(tmp_path, monkeypatch):
+    from voxd.core import transcriber as tr
+    from voxd.core.transcriber import WhisperTranscriber
+
+    monkeypatch.setattr(tr, "_query_free_vram_mb", lambda: None)
+    calls = []
+
+    def _run(cmd, capture_output=True, text=True, env=None, **kwargs):
+        calls.append(list(cmd))
+
+        class CP:
+            returncode = 1
+            stdout = ""
+            stderr = "error: failed to read WAV file 'x.wav'\n"
+
+        return CP()
+
+    monkeypatch.setattr("voxd.core.transcriber.subprocess.run", _run)
+
+    audio = tmp_path / "a.wav"; audio.write_bytes(b"\x00\x00")
+    model = tmp_path / "m.bin"; model.write_bytes(b"x")
+    binary = tmp_path / "whisper-cli"; binary.write_text("#!/bin/sh\n"); binary.chmod(0o755)
+
+    t = WhisperTranscriber(str(model), str(binary), gpu_enabled=True)
+    text, _ = t.transcribe(str(audio))
+
+    assert text is None
+    assert len(calls) == 1            # a non-VRAM error must not trigger a CPU retry
+
+
+# --- VRAM pre-flight ---------------------------------------------------------
+
+def _make_transcriber_files(tmp_path, model_mb=2):
+    audio = tmp_path / "a.wav"; audio.write_bytes(b"\x00\x00")
+    model = tmp_path / "m.bin"; model.write_bytes(b"x" * (model_mb * 1024 * 1024))
+    binary = tmp_path / "whisper-cli"; binary.write_text("#!/bin/sh\n"); binary.chmod(0o755)
+    return audio, model, binary
+
+
+def test_parse_nvidia_smi_free_mb():
+    from voxd.core import transcriber as tr
+    assert tr._parse_nvidia_smi_free_mb("3383\n") == 3383
+    assert tr._parse_nvidia_smi_free_mb("512\n8192\n") == 8192  # max across GPUs
+    assert tr._parse_nvidia_smi_free_mb("1024 MiB\n") == 1024
+    assert tr._parse_nvidia_smi_free_mb("") is None
+    assert tr._parse_nvidia_smi_free_mb("garbage\n") is None
+
+
+def test_estimate_min_vram_mb(tmp_path):
+    from voxd.core import transcriber as tr
+    model = tmp_path / "m.bin"
+    model.write_bytes(b"\x00" * (5 * 1024 * 1024))
+    assert tr._estimate_min_vram_mb(model) == 5 + tr._VRAM_MARGIN_MB
+    assert tr._estimate_min_vram_mb(tmp_path / "missing.bin") is None
+
+
+def test_vram_preflight_low_memory_forces_cpu(tmp_path, monkeypatch):
+    from voxd.core import transcriber as tr
+    from voxd.core.transcriber import WhisperTranscriber
+
+    captured = _capture_whisper_cmd(monkeypatch)
+    monkeypatch.setattr(tr, "_query_free_vram_mb", lambda: 64)  # nearly exhausted
+    audio, model, binary = _make_transcriber_files(tmp_path)
+
+    t = WhisperTranscriber(str(model), str(binary), gpu_enabled=True, vram_check=True)
+    text, _ = t.transcribe(str(audio))
+
+    assert "-ng" in captured["cmd"]
+    assert text == "Hello world"
+    assert t.last_backend == "CPU (low VRAM pre-flight)"
+    assert t.last_gpu_note and "VRAM" in t.last_gpu_note
+
+
+def test_vram_preflight_enough_memory_keeps_gpu(tmp_path, monkeypatch):
+    from voxd.core import transcriber as tr
+    from voxd.core.transcriber import WhisperTranscriber
+
+    captured = _capture_whisper_cmd(monkeypatch)
+    monkeypatch.setattr(tr, "_query_free_vram_mb", lambda: 4096)
+    audio, model, binary = _make_transcriber_files(tmp_path)
+
+    t = WhisperTranscriber(str(model), str(binary), gpu_enabled=True, vram_check=True)
+    t.transcribe(str(audio))
+
+    assert "-ng" not in captured["cmd"]
+    assert t.last_gpu_note is None
+
+
+def test_vram_preflight_unknown_free_memory_keeps_gpu(tmp_path, monkeypatch):
+    from voxd.core import transcriber as tr
+    from voxd.core.transcriber import WhisperTranscriber
+
+    captured = _capture_whisper_cmd(monkeypatch)
+    # No nvidia-smi (non-NVIDIA system) → the check must not force CPU.
+    monkeypatch.setattr(tr, "_query_free_vram_mb", lambda: None)
+    audio, model, binary = _make_transcriber_files(tmp_path)
+
+    t = WhisperTranscriber(str(model), str(binary), gpu_enabled=True, vram_check=True)
+    t.transcribe(str(audio))
+
+    assert "-ng" not in captured["cmd"]
+
+
+def test_vram_preflight_disabled_never_queries(tmp_path, monkeypatch):
+    from voxd.core import transcriber as tr
+    from voxd.core.transcriber import WhisperTranscriber
+
+    captured = _capture_whisper_cmd(monkeypatch)
+
+    def _boom():
+        raise AssertionError("VRAM query must not run when whisper_vram_check is off")
+
+    monkeypatch.setattr(tr, "_query_free_vram_mb", _boom)
+    audio, model, binary = _make_transcriber_files(tmp_path)
+
+    t = WhisperTranscriber(str(model), str(binary), gpu_enabled=True, vram_check=False)
+    t.transcribe(str(audio))
+
+    assert "-ng" not in captured["cmd"]
+
+
+# --- Flash attention (-fa) -----------------------------------------------------
+
+def test_flash_attn_adds_flag(tmp_path, monkeypatch):
+    from voxd.core import transcriber as tr
+    from voxd.core.transcriber import WhisperTranscriber
+
+    captured = _capture_whisper_cmd(monkeypatch)
+    monkeypatch.setattr(tr, "_FA_UNSUPPORTED_BINS", set())
+    monkeypatch.setattr(tr, "_query_free_vram_mb", lambda: None)
+    audio, model, binary = _make_transcriber_files(tmp_path)
+
+    t = WhisperTranscriber(str(model), str(binary), gpu_enabled=True, flash_attn=True)
+    t.transcribe(str(audio))
+
+    assert "-fa" in captured["cmd"]
+
+
+def test_flash_attn_off_by_default(tmp_path, monkeypatch):
+    from voxd.core import transcriber as tr
+    from voxd.core.transcriber import WhisperTranscriber
+
+    captured = _capture_whisper_cmd(monkeypatch)
+    monkeypatch.setattr(tr, "_query_free_vram_mb", lambda: None)
+    audio, model, binary = _make_transcriber_files(tmp_path)
+
+    t = WhisperTranscriber(str(model), str(binary), gpu_enabled=True)
+    t.transcribe(str(audio))
+
+    assert "-fa" not in captured["cmd"]
+
+
+def test_flash_attn_unknown_arg_retries_and_remembers(tmp_path, monkeypatch):
+    from voxd.core import transcriber as tr
+    from voxd.core.transcriber import WhisperTranscriber
+
+    monkeypatch.setattr(tr, "_FA_UNSUPPORTED_BINS", set())
+    monkeypatch.setattr(tr, "_query_free_vram_mb", lambda: None)
+    calls = []
+
+    def _run(cmd, capture_output=True, text=True, env=None, **kwargs):
+        calls.append(list(cmd))
+
+        class CP:
+            stdout = ""
+
+        cp = CP()
+        if "-fa" in cmd:
+            # An old binary rejects the flag before loading the model.
+            cp.returncode = 1
+            cp.stderr = "error: unknown argument: -fa\n"
+        else:
+            of_idx = cmd.index("-of")
+            out_txt = f"{cmd[of_idx + 1]}.txt"
+            Path(out_txt).parent.mkdir(parents=True, exist_ok=True)
+            Path(out_txt).write_text("[00:00.000] Hello world\n", encoding="utf-8")
+            cp.returncode = 0
+            cp.stderr = ""
+        return cp
+
+    monkeypatch.setattr("voxd.core.transcriber.subprocess.run", _run)
+    audio, model, binary = _make_transcriber_files(tmp_path)
+
+    t = WhisperTranscriber(str(model), str(binary), gpu_enabled=True,
+                           flash_attn=True, delete_input=False)
+    text, _ = t.transcribe(str(audio))
+
+    assert text == "Hello world"
+    assert len(calls) == 2
+    assert "-fa" in calls[0] and "-fa" not in calls[1]
+
+    # The binary is remembered as -fa-incapable for the whole session: the next
+    # run — even from a fresh instance, as GUI/tray construct one per dictation
+    # — skips the flag outright instead of failing again.
+    t2 = WhisperTranscriber(str(model), str(binary), gpu_enabled=True,
+                            flash_attn=True, delete_input=False)
+    t2.transcribe(str(audio))
+    assert len(calls) == 3
+    assert "-fa" not in calls[2]
+
+
 def test_transcriber_missing_input_raises(tmp_path):
     from voxd.core.transcriber import WhisperTranscriber
 
